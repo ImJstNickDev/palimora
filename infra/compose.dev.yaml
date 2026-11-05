@@ -1,0 +1,45 @@
+# UI review: apply after compose.yaml with --env-file .local/dev.env.
+name: palimora-dev
+services:
+  gateway:
+    container_name: palimora-dev-gateway
+    environment:
+      DEV_HOST: ${DEV_HOST:?Set review hostname}
+    volumes:
+      - type: bind
+        source: ./nginx/gateway.dev.conf.template
+        target: /etc/nginx/templates/default.conf.template
+        read_only: true
+    networks:
+      frontend:
+        aliases: !override [palimora-dev-gateway]
+  api:
+    networks:
+      app:
+        aliases: [palimora-dev-api]
+  web:
+    build:
+      target: build
+    command: [npm, run, dev, -w, '@palimora/web']
+    environment:
+      PALIMORA_REVIEW_ORIGIN: ${APP_ORIGIN}
+      VITE_CACHE_DIR: /tmp/palimora-vite
+    volumes:
+      - ../apps/web/src:/app/apps/web/src:ro
+      - ../apps/web/index.html:/app/apps/web/index.html:ro
+      - ../apps/web/vite.config.ts:/app/apps/web/vite.config.ts:ro
+      - ../packages/ui/src:/app/packages/ui/src:ro
+      - ../packages/contracts/src:/app/packages/contracts/src:ro
+    networks:
+      app:
+        aliases: [palimora-dev-web]
+    mem_limit: 512m
+    cpus: 1
+    init: true
+  redis:
+    profiles: [full]
+  opensearch:
+    profiles: [full]
+networks:
+  app:
+    name: palimora-dev-app

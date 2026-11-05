@@ -1,0 +1,14 @@
+# Istruzioni di implementazione — Palimora
+
+1. **Fonte autorevole:** leggi `README.md` e i documenti in `docs/` pertinenti prima di modificare un dominio. Una decisione nuova si aggiunge al documento corrispondente, non a una nota duplicata.
+2. **Obiettivo:** realizzare la prima release completa secondo `docs/09-milestone.md`, per vertical slice. Nessuna UI «da rifinire», endpoint fittizio, placeholder di prodotto, messaggio «beta», scaffold non integrato o funzionalità incompleta spacciata per finita.
+3. **AO3:** studia il comportamento upstream prima di implementare feature equivalenti; usa un solo modello/logica per bookmark, cronologia, tag, collezioni ecc. Nuova implementazione, non fork Rails. Non copiare codice GPL senza esaminare gli obblighi di licenza.
+4. **Dati:** invarianti immutabili in `03`, `04`, `05`, `08`, `10`. Mai perdere versioni storiche; niente merge speculativi; nessuna sorgente originale richiesta dopo il commit dell'ingest. ZIP incompleti/mancanti non devono fermare il batch.
+5. **Docker:** soltanto bind mounts persistenti; dump `:ro`; rete `prod-frontend` soltanto al gateway; nessuna porta host pubblicata; Nginx Proxy Manager esterno termina TLS; non modificare servizi Docker estranei.
+6. **Web:** React/Vite/TypeScript; componenti accessibili personalizzati, densi e sobri. Evita dashboard finte, card e testi accessori. La UX finale nasce insieme alla funzione, non in una successiva fase cosmetica.
+7. **API e jobs:** contratti tipizzati e versionati, processi idempotenti, coda persistente, controllo concorrenza, segnali di arresto, checkpoint, migrazioni dati e osservabilità proporzionata.
+8. **Sicurezza:** autorizzazione lato server per ogni operazione, protezione HTML/CSS importati, fetch media SSRF-safe, segreti esclusi dai log; wizard Owner atomico e disponibile solo prima dell'ownership. Le sessioni impersonate mantengono traccia dell'operatore.
+9. **Verifica:** scrivi i test necessari per il comportamento rischioso (storage, transazioni, dedup, parsing, ACL, sync, export/restore) e pochi test integrazione per i percorsi critici. Non moltiplicare test di accettazione ripetitivi o mock di ogni componente visivo.
+10. **Prestazioni:** misura memoria, throughput ingest, latenza p95 ricerca/lettura, dimensione indici e comportamento sotto carico. Non dichiarare garantiti tempi non misurati. Ottimizza col profiling, non aggiungendo microservizi arbitrari.
+11. **Documentazione:** precisa, concisa, aggiornata insieme al codice; niente blocchi di disclaimer generici. Usa gli stessi nomi e stati in backend, UI e documenti.
+12. **Sviluppo autonomo:** implementa integralmente la milestone assegnata senza interromperti per approvazioni intermedie non necessarie. Se una dipendenza tecnica reale impedisce di completarla, rendi esplicito il vincolo nel risultato, non nasconderlo con funzioni finte.

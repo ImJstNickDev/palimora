@@ -34,14 +34,16 @@
 - Se AO3 cancella un capitolo, esso sparisce dal current ma rimane negli snapshot storici. Riconoscere spostamenti mediante `ChapterIdentity`; casi di split/merge incerti non devono falsificare la continuità.
 - Le revisioni storiche e i media storici si conservano **indefinitamente**; niente retention distruttiva di revisioni valide.
 
-## Formato canonico — contratto preimplementazione
+## Formato canonico v1
 
 Il formato proprietario di Palimora è **documentato e leggibile autonomamente**; non è un lock-in verso PostgreSQL né un contenitore EPUB mascherato. Due livelli:
 
 1. **Formato logico** (`palimora-canonical-v1`): documento/opera con ID, capitoli, ordine, metadati tipizzati, note, media, stili, provenance e link alle revisioni. Testo rappresentato tramite HTML UTF-8 preservato (non un nuovo markup), con rappresentazione di rendering sicura separata/derivata. Conservare sorgente HTML e semantica fino a quanto effettivamente presente nell'acquisizione.
-2. **Formato fisico** (`palimora-pack-v1`, estensione proposta `.pmpack`): contenitore append-only di record indipendenti, ognuno con `kind`, hash SHA-256 dei **byte canonici non compressi**, codec, offset, lunghezza compressa/originale, checksum, versione schema; indice ricostruibile dai record/metadata del pack. Ogni oggetto può essere letto e decompresso **senza** decomprimere altri record.
+2. **Formato fisico** (`palimora-pack-v1`, estensione `.pmpack`): contenitore append-only di record indipendenti, ognuno con `kind`, hash SHA-256 dei **byte canonici non compressi**, codec, offset, lunghezza compressa/originale, checksum, versione schema; indice ricostruibile dai record/metadata del pack. Ogni oggetto può essere letto e decompresso **senza** decomprimere altri record.
 
-I dettagli binari finali (magic bytes, endianness, struttura header/footer, segmentazione oggetti molto grandi e schema esatto del manifest) sono un **deliverable obbligatorio all'inizio della milestone Archive Engine, prima del primo ingest permanente**. Definirli con prove di round-trip e compatibilità, non lasciarli impliciti nell'implementazione. Dopo la prima scrittura di produzione la versione v1 è stabile.
+Il layout binario e i manifest v1 sono definiti sotto. I lettori rifiutano versioni
+sconosciute e record troncati; le estensioni JSON opzionali non cambiano i byte degli
+oggetti esistenti. Le migrazioni aggiungono tabelle/colonne senza riscrivere snapshot.
 
 ### Oggetti e codec
 
@@ -67,3 +69,147 @@ Dedup **esatta** globale: hash SHA-256 + dimensione/tipo coerenti, nessun accorp
 ## Export e interoperabilità
 
 I dati possono essere resi in EPUB/HTML/PDF **su richiesta**, generando temporanei cancellabili. Export archivistico v1 è distinto dai pack operativi: manifest autosufficiente con volumi max 2 GiB, hash, collegamenti e record versionati. Reader CLI standalone usa librerie del formato, non richiede DB/app. Vedi `08-backup-export.md`.
+
+## Contratto binario `palimora-pack-v1`
+
+`apps/api/src/pack.ts` implementa scrittura, lettura verificata e ricostruzione
+indici senza PostgreSQL. Header file: otto byte ASCII `PMPACK01`. Seguono record
+indipendenti fino a EOF: lunghezza header JSON uint32 little-endian, header UTF-8,
+payload. L'header contiene `schema:1`, `kind`, `hash` (SHA-256 originale), `size`,
+`length` (payload), `codec` (`zstd` o `raw`), `checksum` (SHA-256 payload). Nessun
+padding/footer; EOF interno a un record è corruzione. Locator: offset del uint32 e
+lunghezza dell'intero record. Header limitato a 65.536 byte dal reader.
+
+JSON canonico: albero JSON con numeri finiti, chiavi ordinate ricorsivamente,
+array nell'ordine originale, serializzazione JSON ECMAScript, UTF-8 senza BOM.
+Le chiavi indice valide seguono l’ordine numerico ECMAScript; le altre l’ordine
+lessicografico UTF-16. Il compilatore N-API preserva le rappresentazioni scalari
+di `JSON.stringify`, senza conversioni dei numeri o normalizzazioni Unicode.
+Compila insieme metadati e manifest sullo stato riconciliato; result hash e
+osservazioni sono preparati in batch asincroni. Il limite è 256 livelli per i
+documenti interni; numeri non finiti sono rifiutati prima della serializzazione.
+I byte e gli schemi canonici v1 restano invariati.
+SHA-256 riguarda sempre questi byte prima della compressione. Zstandard livello 3
+per testi e JSON; asset binari `raw`. Gli asset XML riconoscibili (inclusa la
+navigazione NCX già importata) sono comprimibili senza cambiarne tipo o byte.
+Si usa `raw` quando Zstd non riduce la taglia. Il livello è una scelta misurabile, non una
+promessa di ottimalità per ogni corpus.
+
+Manifest `palimora-canonical-v1`: `work_id`, `external_id`, metadati,
+`metadata_hash`, capitoli ordinati, riferimenti `{name,kind,hash}` e stato.
+Ogni capitolo contiene identità/revisione, hash HTML e locator AO3 quando noto.
+Revisioni capitolo e metadati sono immutabili e condivise; un ritorno A→B→A
+riutilizza il blob A conservando il nuovo snapshot/osservazione.
+
+Le note HTML riconoscibili sono oggetti indipendenti: il capitolo conserva note,
+offset nei byte HTML originali e `source_html_sha256`. Reinserendo i frammenti alle
+posizioni originali si ricostruisce l'HTML sorgente. Il testo restante non viene
+riscritto da un serializer HTML. CSS, OPF e container metadata sono oggetti propri.
+Gli HTML riconosciuti separano i blocchi capitolo, le note e il CSS dal documento.
+`document` nel manifest descrive `palimora-html-layout-v1`: `shell` è il nome
+nell’elenco oggetti della struttura HTML residua, `source_html_sha256` verifica il
+file intero, `fragments:[{name,kind,offset,length}]` conserva posizioni e lunghezze
+in byte originali. Ricostruire prima i capitoli reinserendo le note, poi inserire i
+frammenti ordinati nella shell: si ottengono esattamente i byte sorgente. Modificare
+un metadato HTML non duplica il testo dei capitoli.
+I TXT senza delimitatori affidabili producono un documento `scope: entire_work`,
+con numero capitoli dichiarato dalla fonte separato dall’unità fisica conservata.
+
+Asset oltre 8 MiB: chunk indipendenti più manifest `palimora-chunks-v1` con `size`,
+`sha256` dell'intero file e `chunks:[{hash,size}]` ordinati. La soglia segmenta,
+non limita la dimensione del file. Download admin ricompone in streaming e verifica
+hash e lunghezze; il browser non accumula l'intero media in una Blob JavaScript.
+Gli URL esterni osservati restano risorse `unfetched`; il downloader AO3/media
+appartiene alle milestone successive, senza richieste esterne durante l'ingest.
+
+Oggetti `palimora-observation-v1` preservano snapshot/manifest, sorgente,
+fingerprint, locator, parser e metadati originali. Lettura ed ispezione tecnica non
+accedono ai dump. HTML/CSS sono restituiti come testo escapato o attachment, senza
+esecuzione né fetch dal browser nell'admin.
+
+Seal: staging sullo stesso filesystem, scrittura completa, verifica SHA-256 di
+ogni record, fsync file, rename e fsync delle directory; poi commit di locator,
+componenti, snapshot, head, outbox e checkpoint. Il writer condivide il pack tra
+le preservazioni della stessa transazione. Ruota prima di superare il target di
+**64 MiB fisici**, inclusi header (`ARCHIVE_PACK_MIB`: 32, 64 o 128); un singolo
+record oltre il target resta ammesso. Il commit sigilla anche il residuo più
+piccolo: il target non è una dimensione minima e writer di transazioni distinte
+non condividono pack incompleti. Nessun file è aperto per un append vuoto.
+La verifica rilegge finestre limitate a 256 record/16 MiB originali, con eccezione
+per un singolo oggetto più grande; la RAM non cresce con il target del pack. Scritture e codec
+scrivono a gruppi di 64 frame indipendenti; verifica e preparazione elaborano
+fino a 256 frame con quattro task paralleli. I task di compressione
+riutilizzano contesti Zstandard distinti. N-API mantiene vivi i buffer durante
+il lavoro asincrono. Livello configurabile `ARCHIVE_ZSTD_LEVEL` (default 3,
+1 nel dev). Checksum dei frame e SHA-256 dei contenuti sono ricontrollati sui
+byte riletti dopo fsync. Gli hash già calcolati sui buffer immutati vengono
+riutilizzati solo durante la preparazione, non nella verifica finale.
+
+L’ingest accumula al massimo 16 MiB di oggetti canonici prima di deduplicare e
+scrivere i pack; un singolo oggetto più grande resta ammesso. I locator sono
+registrati in un unico inserimento ordinato per hash dopo il seal di tutti i pack,
+prima del checkpoint. Scrittori concorrenti usano l’unicità del catalogo; una
+corsa sugli stessi byte può lasciare record fisici non referenziati, recuperabili
+con compattazione/GC, senza duplicare oggetti logici. La
+migrazione `015` rende differibili al commit i tre vincoli dai componenti agli
+oggetti: il buffer deve essere scaricato e ogni pack sigillato prima del commit,
+che continua a rifiutare qualsiasi riferimento mancante. Nessun locator non
+sigillato è visibile ad altre transazioni. Un errore annulla l’intero gruppo e il
+checkpoint; può lasciare pack sigillati orfani, mai una head incompleta.
+
+Il catalogo fisico `020` conserva SHA-256 completi in `bytea` (32 byte),
+con riferimenti numerici condivisi a pack, tipo, parser, percorso, entry e
+origine/fingerprint. `archive_record_data` registra una sola acquisizione;
+`ingest_result_data` associa il batch alla sua identità, senza ripeterne i campi.
+Gli ID pubblici delle opere, degli snapshot e delle evidenze restano stabili.
+
+`archive_payloads` condivide i metadati fra head, osservazioni, acquisizioni e
+cache. Il suo hash riguarda il JSON canonico del valore, distinto dai documenti
+con schema nei pack. Payload e corpi della cache usano Zstandard livello 3 o raw
+quando più piccolo, con taglia originale, codec e dizionario espliciti.
+`archive_dictionaries` conserva byte e SHA-256 verificato dei dizionari immutabili:
+uno per metadati e uno per cache, addestrati durante l’ingest su al massimo
+256 documenti/2 MiB, con massimo 64 KiB per dizionario. Prima della loro
+pubblicazione è valido Zstd senza dizionario; il training non blocca gli altri
+scrittori. Nessun dizionario dipende dal dump originale o viene distribuito nel
+repository. La lettura verifica taglia e SHA-256 dopo decompressione. I byte già
+compressi usano `STORAGE EXTERNAL`, evitando una seconda compressione TOAST.
+
+`archive_work_heads` conserva il riferimento corrente e la proiezione testuale
+esatta del titolo per la ricerca tecnica; il resto dei metadati è decompresso
+soltanto per le righe restituite. Le evidenze conservano gli ID per campo in
+array tipizzati; provenienze, affidabilità e motivazioni delle selezioni usano
+dizionari condivisi. Anche i valori storici non più selezionati restano
+immutabili. Le viste ricostruiscono hash esadecimali e provenienze; il livello
+catalogo idrata metadati, evidenze e cache prima delle risposte API. I contratti
+API restano invariati; le viste SQL interne non espongono JSON già decompresso.
+I lock sulle opere riguardano le head, non i payload condivisi.
+
+`020` richiede un archivio vuoto e interrompe la migrazione prima di modificare
+un catalogo popolato. Non cancella dati per soddisfare il requisito e non tocca
+utenti, sessioni o audit. Sostituisce il formato fisico di `019`, senza cambiare
+byte canonici o pack v1. Il reset dev svuota atomicamente tutte le tabelle
+archivistiche, inclusi cache e dizionari; elimina anche gli indici SQLite derivati
+in `storage/cache`.
+
+Compattazione copy-on-write: accumula locator fra pagine SQL fino al target
+fisico o a 65.536 oggetti, senza chiudere il pack al termine di ogni pagina.
+Lettura e riscrittura avvengono a finestre di 256 record/16 MiB originali;
+handle e intervalli adiacenti sono riusati, senza una query per oggetto.
+Pubblicazione dei locator in blocco e checkpoint del job condividono il commit;
+un riavvio non ripete i gruppi già pubblicati. La copia/verifica mantiene un lock
+condiviso contro GC, compatibile con le letture e l’ingest; il lock esclusivo
+copre soltanto la pubblicazione dei locator. Un lock dedicato (70210407)
+serializza i compattatori prima del lock archivistico, evitando upgrade
+concorrenti. Una compattazione esplicita consolida
+anche piccoli pack validi di commit precedenti, preservando tutti gli hash. Il recupero spazio elimina solo pack
+senza oggetti indicizzati e senza lease attive, sotto lock esclusivo coordinato
+con writer/reader, in gruppi di 64 file. Staging pack e directory adapter
+abbandonati da oltre un’ora possono essere rimossi. Snapshot, revisioni e
+osservazioni hanno trigger SQL che impediscono UPDATE/DELETE.
+
+Le decisioni amministrative sono eventi immutabili con stato precedente/successivo.
+Il consumatore outbox le preserva come `palimora-admin-decision-v1` e registra le
+revisioni dei metadati selezionati prima di confermare la consegna. L’API mantiene
+lo storage in sola lettura. Le anteprime testuali sono limitate a 64 KiB; il download
+verificato rimane completo e in streaming per i media segmentati.

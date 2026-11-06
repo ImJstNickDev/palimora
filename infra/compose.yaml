@@ -51,6 +51,11 @@ services:
         target: /run/secrets/auth
         read_only: true
         bind: { create_host_path: false }
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/storage
+        target: /storage
+        read_only: true
+        bind: { create_host_path: false }
     networks: [app]
     depends_on:
       postgres: { condition: service_healthy }
@@ -74,6 +79,46 @@ services:
     stop_grace_period: 30s
     mem_limit: 768m
     cpus: 2
+    logging: *logging
+  ingest:
+    build: { context: .., dockerfile: infra/Dockerfile, target: api }
+    command: [node, apps/api/dist/ingest-worker.js]
+    restart: unless-stopped
+    environment:
+      DB_PASSWORD_FILE: /run/secrets/database
+      ARCHIVE_RESERVE_BYTES: ${ARCHIVE_RESERVE_BYTES:-268435456}
+      INGEST_GROUP_RECORDS: ${INGEST_GROUP_RECORDS:-256}
+      INGEST_PARSER_WORKERS: ${INGEST_PARSER_WORKERS:-2}
+      INGEST_COMMIT_CONCURRENCY: ${INGEST_COMMIT_CONCURRENCY:-2}
+      UV_THREADPOOL_SIZE: ${INGEST_IO_THREADS:-8}
+      ARCHIVE_ZSTD_LEVEL: ${ARCHIVE_ZSTD_LEVEL:-3}
+      ARCHIVE_PACK_MIB: ${ARCHIVE_PACK_MIB:-64}
+    volumes:
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/database
+        target: /run/secrets/database
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/storage
+        target: /storage
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${AO3_DUMP_ROOT:-/mnt/teratron_data/AO3_dumper/ao3_dump/data/ao3_stories}
+        target: /dumps/ao3_stories
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [app]
+    depends_on:
+      api: { condition: service_healthy }
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    mem_limit: ${INGEST_MEMORY:-1g}
+    cpus: ${INGEST_CPUS:-2}
     logging: *logging
   postgres:
     image: postgres:17.6-bookworm

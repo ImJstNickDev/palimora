@@ -1,7 +1,12 @@
 # UI review: apply after compose.yaml with --env-file .local/dev.env.
 name: palimora-dev
+x-dev-resources: &dev-resources
+  cpus: 0
+  mem_limit: 0
+  memswap_limit: 0
 services:
   gateway:
+    <<: *dev-resources
     container_name: palimora-dev-gateway
     environment:
       DEV_HOST: ${DEV_HOST:?Set review hostname}
@@ -14,10 +19,14 @@ services:
       frontend:
         aliases: !override [palimora-dev-gateway]
   api:
+    <<: *dev-resources
+    environment:
+      PALIMORA_DEV: "1"
     networks:
       app:
         aliases: [palimora-dev-api]
   web:
+    <<: *dev-resources
     build:
       target: build
     command: [npm, run, dev, -w, '@palimora/web']
@@ -33,13 +42,28 @@ services:
     networks:
       app:
         aliases: [palimora-dev-web]
-    mem_limit: 512m
-    cpus: 1
     init: true
   redis:
-    profiles: [full]
+    <<: *dev-resources
+    profiles: !reset []
+    command: [redis-server, --appendonly, "yes", --appendfsync, everysec, --maxmemory, "0", --maxmemory-policy, noeviction]
+  ingest:
+    <<: *dev-resources
+    environment:
+      PALIMORA_DEV: "1"
+      INGEST_PARSER_WORKERS: ${DEV_INGEST_PARSER_WORKERS:-6}
+      INGEST_COMMIT_CONCURRENCY: ${DEV_INGEST_COMMIT_CONCURRENCY:-4}
+      UV_THREADPOOL_SIZE: ${DEV_INGEST_IO_THREADS:-8}
+      ARCHIVE_ZSTD_LEVEL: ${DEV_ARCHIVE_ZSTD_LEVEL:-1}
+    depends_on:
+      redis: { condition: service_healthy }
   opensearch:
+    <<: *dev-resources
     profiles: [full]
+  postgres:
+    <<: *dev-resources
+    shm_size: 1g
+    command: [postgres, -c, shared_buffers=4GB, -c, effective_cache_size=24GB, -c, work_mem=16MB, -c, maintenance_work_mem=512MB, -c, max_wal_size=8GB, -c, checkpoint_timeout=15min, -c, wal_compression=lz4, -c, default_toast_compression=lz4, -c, track_io_timing=on]
 networks:
   app:
     name: palimora-dev-app

@@ -1,6 +1,6 @@
 # Palimora — documentazione autorevole
 
-**Stato:** Milestone 1 — Foundation implementata; milestone successive specificate · **Data:** 2026-11-05 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
+**Stato:** Milestone 1 — Foundation e Milestone 2 — Archive Engine implementate · **Data:** 2026-11-06 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
 
 Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moderna e privata. Importa i dump disponibili, normalizza e conserva contenuti, media e versioni in un formato proprio, e in seguito si sincronizza responsabilmente con AO3. Non è un fork Rails, non è un servizio ufficiale AO3 e non pubblica opere per conto degli utenti.
 
@@ -31,9 +31,14 @@ Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moder
 - **Qualità:** UI completa e curata al primo passaggio, niente placeholder/WIP e niente batterie di test ridondanti. Verifiche mirate sui percorsi in cui si possono perdere dati o privilegi.
 - **Prima release:** tutto il perimetro concordato; sincronizzazione degli **account personali AO3** e supporto a piattaforme diverse da AO3 sono esplicitamente futuri, non schermate fittizie nella v1.
 
-## Cosa resta dipendente dall'analisi del corpus
+## Archive Engine
 
-L'architettura e gli invarianti sono stabiliti. Il layout binario byte-per-byte del formato v1, le definizioni finali degli adapter ZIP/SQLite, la classificazione dei file e i livelli ottimali di compressione saranno finalizzati **prima di importare il primo corpus**, usando campioni e benchmark reali. Questo non autorizza a cambiare i requisiti o a improvvisare un formato durante l'ingest.
+Formato canonico e pack v1 definiti in [03](docs/03-dati-storage.md), adapter e
+operazioni in [04](docs/04-ingest.md). L’admin gestisce inventario, ingest
+incrementale/ripetuto, pause, lacune, riconciliazione, snapshot e storage. SQLite,
+ZIP e CSV vengono elaborati in sola lettura; i contenuti acquisiti sono autonomi.
+Verifica completa su uno ZIP reale e relativi SQLite in
+[09](docs/09-milestone.md#verifica-archive-engine--2026-11-06).
 
 ## Fonti tecniche primarie
 
@@ -42,14 +47,14 @@ L'architettura e gli invarianti sono stabiliti. Il layout binario byte-per-byte 
 
 **Non mettere nel repository pubblico dump, opere, account reali, segreti, file di backup o dati di sessione.**
 
-## Foundation: utilizzo e verifica
+## Utilizzo e verifica
 
-Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. Le funzionalità di archivio iniziano dalla milestone 2; non sono esposte voci di navigazione prive di implementazione.
+Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. L’Archive Engine è disponibile agli amministratori. La Milestone 3 non è avviata.
 
 - **Deployment e aggiornamenti:** [procedura autorevole in 02](docs/02-architettura.md#avvio-della-produzione).
 - **Regole di sicurezza e recupero:** [contratto operativo in 07](docs/07-identita-admin.md#contratto-operativo-foundation).
-- **Build:** `npm ci && npm run build`.
-- **Verifica completa:** `npx playwright install --with-deps chromium` e `./scripts/verify.sh` su Linux con Docker. Crea un PostgreSQL di test temporaneo, esegue contratti/integrazione/browser/audit e rimuove il container.
+- **Build:** `npm ci && npm run build`; su Linux servono g++, header Node, libzstd-dev e libssl-dev per codec e preparazione nativa N-API. Il Dockerfile installa le dipendenze di build.
+- **Verifica completa:** `npx playwright install --with-deps chromium` e `./scripts/verify.sh` su Linux con Docker. Crea PostgreSQL e Redis di test temporanei, esegue contratti/integrazione/browser/audit e rimuove i container.
 - **API:** OpenAPI generato su `/api/v1/openapi.json`; tipi condivisi in `packages/contracts`.
 
 Risultati e limiti delle misure sono in [09](docs/09-milestone.md#verifica-foundation--2026-11-05). La pipeline GitHub Actions esegue gli stessi controlli e costruisce entrambe le immagini.

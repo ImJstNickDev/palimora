@@ -11,19 +11,46 @@ Questa specifica definisce **comportamenti obbligatori**, non un OpenAPI generat
 - SSE preferiti per feed di stato ingest/sync e notifiche: gli eventi devono avere ID riprendibile; UI non deve dipendere da WebSocket per mostrare dati fondamentali.
 - Le API sono implementate **per client Palimora**, non una API pubblica da stabilizzare per terzi nella v1. Contratti interni non sono una promessa di compatibilità per plugin esterni.
 
-## Envelope ingest (schematico)
+## Envelope ingest eseguibile
 
-```json
-{
-  "schema": "palimora.ingest.v1",
-  "source": {"kind": "ao3_dump", "dump": "initial", "file": "queue01.zip", "entry": "..."},
-  "identity": {"source": "ao3", "workId": "123456"},
-  "observation": {"capturedAt": null, "confidence": "unknown"},
-  "payload": {"metadata": {}, "chapters": [], "assets": []}
-}
-```
+NDJSON `palimora.ingest.v1`: ogni record contiene `schema`, `parser`, `cursor` e
+`locator`. Il worker associa sorgente e fingerprint dall’inventario; conferma il
+record o il gruppo solo dopo la persistenza. `checkpoint_detail.row` aggiunge il cursore interno
+per i CSV. La riga contiene una delle seguenti forme:
 
-I `...` e gli oggetti vuoti sono **schema illustrativo**, non valori di runtime, né autorizzano a compilare campi ignoti con placeholder nei dati di produzione. Ogni elemento realmente importato porta una provenance verificabile e un contract version. Date non presenti non vengono inventate.
+- `record`: `external_id` nullable, `metadata` originali, `chapters`, `objects`,
+  `state`, `observed_at` nullable; opzionali `source_entry`, `source_hash`,
+  `media_urls`, `issues`, `document` per il layout HTML reversibile.
+- `record.objects` (e `artifacts`): descrittori `{name,kind,path,size,hash}` nello staging locale; hash e
+  confinamento del path vengono verificati prima del commit. L’adapter senza
+  staging usa `data` base64 per le verifiche isolate.
+- `total`, `tag`, `artifacts` o `skip`: inventario, evidenza tassonomica, artefatti
+  tecnici o avanzamento su un membro senza contenuto bibliografico.
+- `gap` con dettaglio recuperabile, `blocked` con codice/traceback strutturale,
+  oppure `io_error` con errno per la policy I/O del worker.
+
+Trasporto raggruppato `palimora.ingest.group.v1`: `{schema, parser, records}`,
+con 1–1024 envelope `palimora.ingest.v1` omogenei (`record` oppure `tag`),
+nello stesso ordine sorgente. I gruppi di opere possono committare fuori ordine;
+`ingest_progress` conserva per record il predecessore, cursore/row e contatori.
+L’aggiornamento della sorgente usa `FOR NO KEY UPDATE`, compatibile con i vincoli
+FK delle altre transazioni, e consuma soltanto la catena contigua di ricevute.
+Ack FIFO dopo commit, nessun ack oltre un errore. Massimo concorrenza+1 gruppi
+in anticipo; i segmenti condivisi restano disponibili fino all’ultimo utilizzatore.
+Controlli, tag, lacune e artefatti attendono lo scaricamento della pipeline.
+Un errore asincrono interrompe anche un produttore fermo in attesa dell’ack.
+La cache usa risposte su FD 3 quando `PALIMORA_CACHE_FD` è impostato; senza tale
+canale resta disponibile il protocollo seriale. Questa ottimizzazione non cambia
+result hash, versione del parser, byte canonici o identità delle acquisizioni.
+
+Date e identità mancanti restano nulle; nessuna cronologia viene inferita dal nome
+ZIP. Source record, result hash, associazione al batch e checkpoint sono registrati
+insieme. Il trasporto binario verso lo staging è interno e transazionale;
+condivide valori dei metadati, senza fondere identità o provenienze. Il formato fisico `020` usa riferimenti compatti e valori compressi; il livello
+catalogo li decodifica mantenendo contratti API, ID delle evidenze e valori
+originali. La migrazione richiede un archivio vuoto, senza cancellare dati
+automaticamente; utenti e sessioni sono esclusi dal suo perimetro.
+Contratto canonico e oggetti/layout sono definiti in 03.
 
 ## Macchina a stati
 
@@ -44,7 +71,7 @@ Non mescolare «assenza da dump», «assenza da AO3», «mancanza di dati su kud
 
 - Eventi esemplificativi: `work.snapshot.published`, `work.availability.changed`, `media.revision.acquired`, `ingest.source.completed`, `ingest.parser.blocked`, `sync.batch.completed`, `archive.object.verified`, `backup.completed`, `notification.created`.
 - Produttore scrive **DB + outbox in una transazione**. Un dispatcher porta eventi a Redis/BullMQ e ad eventuali subscriber; delivery può essere almeno una volta, consumatori idempotenti, replay senza effetti duplicati.
-- Concorrenza: lock logico per `(source,work_id)` durante merge+publish; pack writes possono essere parallele ma indici e head update seguono commit atomico; single-writer/leader per tick globale e reconciliation cursors.
+- Concorrenza: ordinamento per identità/provenienza nel produttore e lock logici DB durante merge+publish; pack e transazioni di opere indipendenti possono procedere in parallelo. Il lease delle identità (70210405) è distinto dal lock archivistico (70210402): la riconciliazione li acquisisce in questo ordine, la pausa acquisisce solo il secondo. Il leader del tick rimane unico; checkpoint solo sul prefisso committato. La compattazione acquisisce 70210407 prima di 70210402 condiviso; soltanto la pubblicazione aggiorna il lock archivistico a esclusivo (03).
 - Quando un job è già in corso, non creare un nuovo current o una seconda notifica per lo stesso evento/versione; per sync in arrivo si può mantenere un solo follow-up consolidato.
 
 ## Invarianti cross-cutting
@@ -68,7 +95,7 @@ Il repository ufficiale [OTW Archive](https://github.com/otwcode/otwarchive) è 
 
 `packages/contracts/src/index.ts` è l'unica definizione di metodo, path, accesso, input/output ed errori delle operazioni implementate. Il backend monta queste route e valida entrambe le direzioni; `apps/web/src/api.ts` deriva input/output TypeScript dallo stesso registro. `GET /api/v1/openapi.json` genera OpenAPI 3.1 da questi schemi, senza una copia manuale divergente. Errori: `{code, requestId}`; i client traducono il codice, non il testo del server. I campi aggiuntivi delle risposte DB, inclusi hash e segreti, sono esclusi dagli schemi di output.
 
-Endpoint attuali: `/auth/status`, `/auth/setup`, `/auth/login`, `/auth/logout`, `/auth/register`, `/auth/invite`, `/auth/passkey/*`, `/me`, `/me/password`, `/me/sessions/*`, `/me/totp/*`, `/me/recovery`, `/me/passkeys/*`, `/admin/users` e relative azioni, `/invites`. Le liste utenti/inviti usano cursore UUID stabile e pagine di 50 elementi; gli stati eliminato/disabilitato e gli inviti revocati restano consultabili. Setup e consumo inviti sono protetti da lock/vincoli; creazione inviti deduplicata tramite `requestId`. Nessun contratto di ingest/pack viene dichiarato congelato in questa milestone.
+Endpoint attuali: `/auth/status`, `/auth/setup`, `/auth/login`, `/auth/logout`, `/auth/register`, `/auth/invite`, `/auth/passkey/*`, `/me`, `/me/password`, `/me/sessions/*`, `/me/totp/*`, `/me/recovery`, `/me/passkeys/*`, `/admin/users` e relative azioni, `/invites`. Le liste utenti/inviti usano cursore UUID stabile e pagine di 50 elementi; gli stati eliminato/disabilitato e gli inviti revocati restano consultabili. Setup e consumo inviti sono protetti da lock/vincoli; creazione inviti deduplicata tramite `requestId`. Il contratto pack v1 è definito in 03; gli endpoint Archive Engine sono nello stesso registro eseguibile.
 
 ### Conferma TOTP
 
@@ -77,3 +104,47 @@ Il client usa in sequenza `totpStart` (password → QR/chiave), `totpVerify` (se
 ### Login progressivo e recovery
 
 `POST /auth/login` mantiene `{username, password, code?}`. `SECOND_FACTOR_REQUIRED` viene emesso solo dopo password corretta se TOTP è attivo; il client invia quindi le stesse credenziali con il codice a sei cifre. Il campo `password` accetta in alternativa un recovery code monouso: con codice valido non serve `code`. Errori per account inesistente, disabilitato, eliminato, password errata o recovery non valido restano `CREDENTIALS_INVALID`. Le operazioni di sicurezza autenticate continuano a richiedere la password reale. Le route WebAuthn mantengono il contratto precedente, compatibile con conditional mediation.
+
+## Contratti Archive Engine
+
+Operazioni amministrative versionate nello stesso registro Zod: inventario, batch,
+report/diagnostica, controllo pausa/resume, opere/snapshot/oggetti, decisioni di
+riconciliazione, storage/job. `requestId` deduplica creazioni e decisioni; paginazione
+UUID/ID durevole per liste ed evidenze. Il download blob è `application/octet-stream`
+con attachment e autenticazione admin, distinto dalle risposte JSON di ispezione
+(`kind`, `size`, `base64` opzionale, `truncated`; anteprima massima 64 KiB).
+
+Le liste batch usano ordine `(created_at DESC, id DESC)` e filtri server
+`all/active/attention/finished`; ogni riga include sorgenti concluse, record e
+lacune. Le opere usano `all/current/missing/conflicts` e conteggi di snapshot e
+conflitti aperti. Gli snapshot sono ordinati per acquisizione
+`(imported_at DESC, id DESC)`: ciò non risolve la cronologia incerta della sorgente.
+Il cursore resta l’UUID dell’ultimo elemento. Il report accetta `path` per filtrare
+le anomalie, mantenendo il riepilogo dell’intero batch. Storage restituisce totali
+catalogati, aggregati per tipo, capacità/disponibilità del filesystem, riserva
+configurata e data di creazione dei job. Gli input/output sono validati dal registro
+condiviso; UI e API devono essere aggiornate insieme.
+
+`POST /admin/archive/dev-reset` richiede Owner, CSRF, `requestId` UUID e
+`confirmation: "RESET"`; senza `PALIMORA_DEV=1` restituisce 404. Storage espone
+`dev_reset_available` soltanto all’Owner del dev. Il job `reset_dev` conserva la
+fase `catalog_cleared` prima della pulizia ripetibile di code/file; un errore
+mantiene il blocco delle mutazioni Archive/Ingest fino al retry. Il reset usa un
+elenco esplicito di tabelle, senza `CASCADE` verso identità o futuri dati utente.
+Il worker verifica il flag indipendentemente dall’API.
+
+L'outbox contiene eventi di preservazione/pubblicazione snapshot, acquisizione
+artefatti, rivalidazione e decisioni amministrative. BullMQ consegna almeno una
+volta; `archive_dispatch.event_id` rende idempotente il consumatore. Le decisioni
+amministrative vengono preservate nei pack prima dell’ack; gli eventi snapshot
+restano disponibili come feed durevole per i consumatori successivi. PostgreSQL
+rimane autorità anche se Redis viene perso. Consegne eventi esaurite vengono
+rimesse in coda dopo un minuto, mantenendo lo stesso ID; un guasto di storage
+non perde la decisione amministrativa né produce un ack prematuro. I nuovi moduli useranno queste identità
+e revisioni, senza duplicare la logica di importazione o riconciliazione.
+
+Il trasporto interno ingest accetta gruppi omogenei di record o tag (massimo
+1.024); `palimora.ingest.cache.v1` scambia SHA-256 e risultati parser già
+committati. Gli oggetti in staging includono offset e taglia del segmento.
+`index_progress` nel dettaglio sorgente indica le righe dell’indice SQLite
+derivato durante la costruzione, senza avanzare il checkpoint di acquisizione.

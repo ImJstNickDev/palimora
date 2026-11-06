@@ -1,3 +1,4 @@
+import { archiveOperation } from "./archive-admin";
 import { Injectable } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -291,6 +292,35 @@ export class Identity {
     c: Context,
   ): Promise<unknown> {
     switch (op) {
+      case "archiveDownload":
+      case "archiveInventory":
+      case "ingestReport":
+      case "archiveConflicts":
+      case "archiveResolve":
+      case "archiveMaintenance":
+      case "archiveDevReset":
+      case "archiveStorage":
+      case "ingestBatches":
+      case "ingestCreate":
+      case "ingestDetail":
+      case "ingestControl":
+      case "archiveWorks":
+      case "archiveWork":
+      case "archiveSnapshot":
+      case "archiveObject": {
+        const result = await archiveOperation(db, op, x);
+        if (op === "archiveStorage")
+          result.dev_reset_available &&= c.user.role === "Owner";
+        if (api[op].method !== "get")
+          await this.audit(db, c, op, x.id ?? x.requestId, {
+            requestId: x.requestId,
+            kind: x.kind,
+            target: x.target,
+            reason: x.reason,
+            action: x.action,
+          });
+        return result;
+      }
       case "status": {
         const r = (await db.query("SELECT state,name FROM instance")).rows[0];
         return r;

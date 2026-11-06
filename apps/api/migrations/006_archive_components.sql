@@ -1,0 +1,10 @@
+CREATE TABLE archive_chapters(id uuid PRIMARY KEY, work_id uuid NOT NULL REFERENCES archive_works, source_key text NOT NULL, UNIQUE(work_id,source_key));
+CREATE TABLE archive_chapter_revisions(id uuid PRIMARY KEY, chapter_id uuid NOT NULL REFERENCES archive_chapters, object_hash text NOT NULL REFERENCES archive_objects, UNIQUE(chapter_id,object_hash));
+CREATE TABLE archive_snapshot_chapters(snapshot_id uuid NOT NULL REFERENCES archive_snapshots, position integer NOT NULL, revision_id uuid NOT NULL REFERENCES archive_chapter_revisions, PRIMARY KEY(snapshot_id,position));
+CREATE TABLE archive_metadata_revisions(hash text PRIMARY KEY REFERENCES archive_objects);
+ALTER TABLE archive_snapshots ADD COLUMN metadata_hash text REFERENCES archive_metadata_revisions;
+CREATE TRIGGER chapter_revision_immutable BEFORE UPDATE OR DELETE ON archive_chapter_revisions FOR EACH ROW EXECUTE FUNCTION archive_immutable();
+CREATE TRIGGER snapshot_chapter_immutable BEFORE UPDATE OR DELETE ON archive_snapshot_chapters FOR EACH ROW EXECUTE FUNCTION archive_immutable();
+CREATE TRIGGER metadata_revision_immutable BEFORE UPDATE OR DELETE ON archive_metadata_revisions FOR EACH ROW EXECUTE FUNCTION archive_immutable();
+CREATE TABLE archive_evidence_observations(id bigserial PRIMARY KEY,work_id uuid NOT NULL REFERENCES archive_works,field text NOT NULL,value jsonb NOT NULL,source_path text NOT NULL,locator text NOT NULL,parser text NOT NULL,fingerprint text NOT NULL,UNIQUE(work_id,field,source_path,locator,parser,fingerprint));
+CREATE TRIGGER evidence_observation_immutable BEFORE UPDATE OR DELETE ON archive_evidence_observations FOR EACH ROW EXECUTE FUNCTION archive_immutable();

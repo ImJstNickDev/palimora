@@ -60,3 +60,23 @@ Le sole destinazioni Foundation sono Account, Sicurezza, Dispositivi, Utenti e I
 La panoramica `/security` contiene tre card interamente cliccabili, con icona, descrizione breve e stato reale: Password, 2FA e Passkeys. Aprono viste dedicate (`/security/password`, `/security/2fa`, `/security/passkeys`), raggiungibili direttamente e compatibili con cronologia e ricarica. Il ritorno alla panoramica è sempre visibile; la navigazione aggiorna il focus al titolo e smonta i moduli precedenti. Transizioni direzionali con View Transitions nei browser compatibili, ingresso CSS come fallback e rispetto di reduced-motion. Il cambio password richiede conferma della nuova password e mantiene la revoca delle sessioni, spiegata nel testo del campo; il pulsante è «Cambia password». L'aggiunta passkey si apre dal pulsante «+»: nome e credenziali compaiono solo nel dialogo. Il wizard 2FA si svolge inline nella pagina dedicata, senza card contenitore né dialogo, con una sola freccia indietro senza bordo per tornare al passaggio precedente. QR e sei caselle OTP sono centrati; la chiave manuale ha un’icona copia senza bordo sulla destra, con label accessibile e conferma discreta. Tornando dal backup al QR si conserva la verifica già effettuata e il codice è in sola lettura; tornando alla password si ricomincia la verifica. I tre passaggi sono: password attuale, QR/chiave copiabile e codice a sei cifre, download dei codici di backup e conferma finale. Il campo OTP è un unico input accessibile con sei caselle visive, supporta incolla/autofill e animazioni disattivate con reduced-motion. Lasciare il wizard prima della conferma non attiva il fattore. Nessun segreto del wizard viene salvato nel browser storage.
 
 Login progressivo: inizialmente soltanto username e password, con indicazione che il campo password accetta anche un codice di backup monouso. Il secondo passaggio compare dopo la verifica della password soltanto per account con TOTP; riusa `OtpInput`, lo stesso componente a sei caselle delle impostazioni, e una freccia indietro permette di tornare alle credenziali. Le passkey disponibili sono proposte dal browser nell’autofill del campo username tramite [conditional mediation SimpleWebAuthn](https://simplewebauthn.dev/docs/packages/browser#browser-autofill); nessun pulsante passkey permanente e nessuna interrogazione pubblica per username. La richiesta WebAuthn pendente viene annullata quando si invia la password o si lascia il login e rinnovata prima della scadenza della challenge.
+
+## Interfaccia operativa Archive Engine
+
+Importazioni, archivio tecnico e storage riusano token, controlli e dialoghi
+Foundation. Elenchi densi e azioni contestuali; stato tradotto distinto dai codici
+tecnici, diagnostica espandibile, stati vuoti operativi e nessun contenuto importato
+eseguito nel browser. Le viste non costituiscono il catalogo/reader della milestone 3.
+
+Filtri e cursori delle liste batch/opere sono nell’URL, con navigazione precedente/successiva;
+la selezione dello snapshot e la sezione dell’opera sopravvivono al reload.
+L’ispettore affianca versioni e componenti su desktop e li dispone in sequenza su
+mobile. La ricerca di componenti e le anteprime restano entro la versione scelta.
+La correzione di current, metadati o identità richiede una decisione motivata nel
+dialogo con focus gestito. Per i flussi amministrativi dettagliati vedere 04.
+
+Polling: batch 2–3 s, storage 5 s, lista opere 15 s; richieste sospese in background
+da React Query e refetch al ritorno. Le viste operative mostrano ora dell’ultimo
+aggiornamento, refresh manuale e fallimento di aggiornamento; nessun avanzamento
+inventato quando il totale è ignoto. I dettagli immutabili si caricano alla
+selezione, senza polling dei contenuti.

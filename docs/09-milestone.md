@@ -88,3 +88,583 @@ Riproduzione: `./scripts/verify.sh` richiede Node, Docker Linux e Chromium Playw
 Review Sicurezza: verificati anche conferma password, aggiunta passkey da dialogo e wizard 2FA su viewport mobile. La suite HTTP copre attivazione differita, scadenza e vincolo di sessione della conferma, hash dei codici pendenti e recovery monouso; lo smoke browser esegue navigazione dalle card alle viste dedicate, Indietro del browser e ricarica del dettaglio, download dei codici, attivazione e disattivazione con recovery. Verifica completa: 15 test contratti/integrazione e uno smoke browser passati; audit npm senza vulnerabilità segnalate.
 
 Review login: 15 test contratti/integrazione e smoke browser passati con TOTP progressivo, componente OTP condiviso, accesso passkey tramite conditional mediation con autenticatore CTAP2 virtuale e recovery nel campo password. Verificati consumo concorrente monouso, rifiuto del replay, account disabilitati/eliminati e audit del metodo di recupero. API di review aggiornata; audit npm senza vulnerabilità segnalate.
+
+## Verifica Archive Engine — 2026-11-06
+
+Milestone 2 implementata: formato v1, Zstandard/SHA-256, dedup globale, revisioni e
+snapshot immutabili, catalogo PostgreSQL, adapter ZIP/SQLite/CSV, BullMQ/outbox,
+checkpoint e resume, riconciliazione amministrativa, media segmentati, controllo
+spazio, compattazione/GC e pannello tecnico. I contratti operativi sono in 03, 04 e
+10. Reader, ricerca AO3/full-text e sincronizzazione restano nelle milestone 3–4.
+
+Verifica su database, Redis e storage dedicati sotto `/tmp/palimora-m2-verify`,
+senza modificare produzione o dump:
+
+- **ZIP completo reale:** `queue119_archive05.zip`, 228.622.123 byte; tre passaggi
+  completi, ognuno con **11.040 membri, 11.032 opere, zero lacune**. Ultimo passaggio
+  18 min 20,93 s, media 10,02 record/s sul presente host condiviso, durante build,
+  test e campionamento concorrenti. Non è una previsione per tutto il dump.
+- **SQLite reali:** riconciliazione degli ID acquisiti con `ao3.sqlite3` (11 record),
+  `ao3_deduped.sqlite3` (2) e `ao3_old_files.sqlite3` (2), completata anche con
+  l’adapter finale. I percorsi degli indici non coincidevano con il prefisso dello
+  ZIP: selezione per identità AO3, senza modificare o copiare i database sorgente.
+- **Incrementale:** nuova scansione dello stesso ZIP, zero record rielaborati;
+  oggetti, snapshot e acquisizioni rimasti rispettivamente 175.553, 33.098 e 33.111
+  nel confronto prima/dopo. La rielaborazione conserva le revisioni precedenti.
+- **Campioni:** schemi dei tre SQLite, central directory di 139 ZIP e 417 opere
+  distribuite tra inizio/centro/fine; tutte riconosciute. Ricostruiti e verificati
+  1.576 capitoli e 1.384 frammenti di note. Letti integralmente i cinque CSV:
+  968.750 righe, zero anomalie strutturali. Verificato il contenitore 7z vuoto
+  presente nel corpus. Verifica aggiuntiva su otto HTML reali, inclusi documenti
+  lunghi: ingest di 831 capitoli e sette note, con ricostruzione byte per byte degli
+  otto file. Questo campionamento non certifica ogni membro dei 139 ZIP.
+- **Ripresa reale:** SIGTERM/riavvio, sospensione per errore parser e ripresa dal
+  checkpoint dopo correzione; perdita delle code Redis di verifica e recupero
+  tramite PostgreSQL. Nessun current incompleto; 11.032 opere con head valida.
+- **Compattazione reale dall’admin:** 175.570 oggetti riscritti, 107.482 pack
+  obsoleti rimossi, 487.361.856 byte recuperati. Verifica successiva di tutti gli
+  oggetti in 1.372 pack: hash corretti e nessun oggetto mancante. Catalogo misurato:
+  1.392.717.917 byte canonici, 492.149.681 byte nei record pack e 368.001.024 byte
+  di indici PostgreSQL Archive/Ingest; outbox interamente consegnata.
+- **Indipendenza:** API senza dump; letti 100 manifest correnti, 730 capitoli e 192
+  note dai soli pack, verificando hash e ricostruzione HTML. Nessun accesso ai
+  sorgenti necessario per consultazione o download.
+
+Misure HTTP dirette all’API, Node 20/PostgreSQL 17, 200 richieste per percorso,
+concorrenza 8, ingest e campionamento attivi, senza gateway/TLS: lettura blob p50
+**68,05 ms**, p95 **106,28 ms**, 132 richieste/s; ricerca tecnica per ID p50
+**16,28 ms**, p95 **30,52 ms**, 450 richieste/s. Zero errori e hash dei download
+verificati. La ricerca per ID usa il relativo indice; il filtro testuale riguarda
+il titolo. Queste misure non riguardano la futura ricerca full-text. Campione di
+memoria durante ingest: Node RSS 156,57 MiB, Python 38,37 MiB; non sono limiti
+massimi garantiti. Lettura diretta dei 100 manifest: p95 38,61 ms, RSS 78,22 MiB.
+
+**19 test contratti/integrazione** verificano integrità/corruzione pack, ENOSPC,
+rollback e checkpoint atomici, dedup, A→B→A, metadati senza revisioni testuali finte,
+ACL/CSRF, parser sconosciuto e ripresa anche con cambio versione, CSV, assenze e
+`.part`, EPUB parziale, segmentazione/ricomposizione di media oltre 16 MiB,
+riconciliazione, compattazione e lease/GC. Uno smoke Chromium copre Foundation e
+admin ingest/storage su desktop e mobile; verifica aggiuntiva sul catalogo reale
+per snapshot, oggetti, report completo e download, senza errori JavaScript.
+Dipendenze Chromium risolte localmente tramite pacchetti Debian estratti, senza
+modificare i servizi esistenti (`LD_LIBRARY_PATH=/tmp/palimora-browser-deps/root/usr/lib/x86_64-linux-gnu`
+nella sessione di verifica). Build TypeScript/Vite e immagini API/web, Compose e
+`npm audit` verificati; zero vulnerabilità segnalate.
+
+Riproduzione: `./scripts/verify.sh` per build/test/browser; per il corpus,
+`python3 scripts/verify-archive-corpus.py ROOT --all-zips --csv` oppure `--zip FILE.zip`.
+L’importazione completa si avvia dall’admin selezionando uno ZIP in un ambiente
+isolato; il dettaglio permette la riconciliazione con gli SQLite disponibili.
+I report contengono checkpoint, fingerprint e associazioni immutabili dei record
+al batch: ingest successivi degli stessi indici non alterano i conteggi dei batch
+precedenti. Nessun dato o contenuto del corpus viene aggiunto al repository.
+
+### Revisione UI operativa — 2026-11-06
+
+Importazioni, storage e archivio tecnico rilavorati secondo i flussi documentati
+in 04/06: selezione esplicita, filtri server, avanzamento e diagnostica per sorgente,
+ispettore versioni/componenti, riconciliazione contestuale e manutenzione leggibile.
+Verificati build, 19 test contratti/integrazione e lo smoke Chromium esteso con
+selezione file, pausa/ripresa, filtro lacune, download report, anteprima HTML
+inerte, scelta current/evidenze e accodamento manutenzione. Ispezione visuale
+390 px/desktop, tema scuro forest, assenza di overflow della pagina. Fixture e
+pack di browser isolati; nessun import automatico nel dev o modifica dei dump.
+
+Profilo delle operazioni amministrative sul catalogo reale di verifica: 11.032
+opere, 33.100 snapshot, 175.570 oggetti; 20 campioni dopo due warm-up, connessione
+PostgreSQL diretta in transazione read-only, host condiviso. p95 lista opere
+155 ms, filtro conflitti 186 ms, dettaglio versioni 5 ms, lista batch 2,4 ms,
+storage 90 ms dopo aggregazione senza ordinamenti DISTINCT ripetuti (prima
+610 ms). Sono tempi backend locali senza HTTP/TLS, non SLO sul dump completo.
+
+### Profilo e ottimizzazione ingest — 2026-11-06
+
+Il percorso precedente serializzava parser, singole query e circa quattro seal
+pack per opera. Sul campione iniziale di 1.000 opere di `queue119_archive05.zip`:
+78,18 s, 12,79 opere/s, 4.000 pack; 28,43 s nelle scritture/seal/verifiche pack.
+Con commit raggruppati, SQL in blocco, prefetch e singola scansione HTML:
+24,43 s, **40,93 opere/s**, 32 pack. Stesso host e limiti, schemi vuoti separati;
+la cache dei sorgenti era più calda nelle prove successive.
+
+Importazione completa con BullMQ e consumatore eventi attivi, sorgente originale
+montata `:ro`, PostgreSQL/Redis/storage isolati su `/mnt/sdb`: **11.032 opere in
+246,73 s di ingest** (247,92 s includendo chiusura worker, **44,50 opere/s**),
+checkpoint 11.040, zero lacune. Il batch precedente nel dev registrava 688,23 s;
+è un confronto operativo, non una prova simultanea nelle stesse condizioni.
+Worker e PostgreSQL limitati ciascuno a 2 CPU/1 GiB; Redis a 0,5 CPU/256 MiB.
+Worker: 261,19 secondi CPU; picco cgroup 816,05 MiB, inclusa page cache, distinto
+dalla RAM applicativa (campione `docker stats` durante ingest: 200,8 MiB).
+
+Stessi 107.054 oggetti e 11.032 snapshot, pack ridotti da 44.180 a **360**.
+Confronto di tutti gli 11.032 result hash con il batch precedente: nessuna
+differenza. Riletti e verificati tutti gli oggetti senza montare il dump.
+Rielaborazione completa: 11.032 duplicati riconosciuti, zero nuovi oggetti,
+snapshot o pack; scansione incrementale successiva con zero record rielaborati
+e conteggi invariati. Outbox interamente consegnata. Verificati rollback dopo seal,
+vincoli differiti al commit, checkpoint di gruppo, pausa/ripresa e consegna
+concorrente dello stesso evento amministrativo. Build, 19 test di integrazione,
+smoke Chromium desktop/mobile, Compose e audit npm superati.
+
+Seconda ottimizzazione, verificata con **un solo nuovo import completo** dello
+stesso ZIP: COPY e persistenza aggregata del catalogo, metadati per acquisizione,
+6 processi parser, scanner HTML con offset originali, segmenti sequenziali,
+cache parser, codec N-API a gruppi con contesti riutilizzati e Zstd livello 1,
+conferme outbox a gruppi. **11.032 opere in 69,96 s di ingest**, 71,37 s comprese
+code/chiusura (**154,58 opere/s**, 3,47× rispetto ai 44,50 precedenti).
+Il successivo import manuale dev precedente a queste modifiche era stato di
+234,50 s (47,05 opere/s): confronto operativo circa 3,3×. Stesso host condiviso,
+cache sorgenti calda; worker senza cap, PostgreSQL del benchmark ancora
+2 CPU/1 GiB, con i nuovi parametri cache/WAL. Il dev distribuito ha invece
+CPU/memoria senza cap anche su PostgreSQL.
+
+Nuova misura: **2.790 chiamate SQL complessive** (le sole 18 categorie riportate
+nel vecchio profilo sommavano 232.766), 51 gruppi, 66 pack, 305.010.785 byte
+in pack (+2,8% rispetto al livello 3 precedente). Append+seal/verifica passano
+da 53,73 a 12,36 s; CPU worker da 261,19 a **122,14 secondi**. Picco cgroup
+1.050,52 MiB inclusa page cache; campione RAM applicativa `docker stats`
+314,4 MiB. Memoria superiore al vecchio pool singolo, costo CPU per opera
+ridotto di circa il 53%.
+
+Checkpoint 11.040, zero lacune, 22.069/22.069 eventi consegnati. Stessi 107.054
+oggetti, 11.032 opere e snapshot; tutti gli 11.032 result hash coincidono.
+Rilettura indipendente dai dump: **107.054 oggetti verificati in 14,16 s**.
+Migrazione del catalogo popolato in 11,19 s: tutte le 253.012 evidenze mantengono
+ID/valori/provenienza, verificati con hash complessivo prima/dopo. Le tre
+strutture dei metadati passano da circa 336 a **36,4 MiB**; nel nuovo catalogo
+la cache parser aggiunge circa 35 MiB. Lo scanner, su 2.904 documenti di 512
+EPUB letti senza import, mantiene frammenti e URL identici al riferimento:
+2,26 s contro 4,80 s per quel solo passaggio.
+
+Verifiche mirate aggiuntive: A→B→A nello stesso gruppo conserva tre snapshot;
+indici SQLite interrotti riprendono senza ricostruzione e gli indici derivati
+corrotti vengono eliminati e ricreati al retry; i dump restano in sola lettura.
+La verifica dell’indice usa fixture con schema reale, non una ricostruzione
+integrale dei tre SQLite del dump. 19 verifiche di integrazione e browser
+superati; nessun secondo import completo o reprocess del ZIP per queste
+modifiche. Migrazione dev applicata, health HTTPS regolare, hash degli utenti
+e degli snapshot presenti invariati prima/dopo il deploy.
+
+Riproduzione: dopo la build, `node scripts/benchmark-ingest.cjs` con
+`TEST_DATABASE_URL` di un database dedicato contenente `_test` nel nome,
+`BENCH_STORAGE_ROOT` dedicato e `AO3_DUMP_ROOT` in sola lettura. Crea uno schema
+isolato e la relativa directory; `BENCH_SOURCE` sceglie ZIP/SQLite (default
+`queue119_archive05.zip`), `BENCH_LIMIT=1000` limita il campione.
+`BENCH_QUEUE=1` abilita BullMQ e richiede anche un Redis dedicato tramite
+`REDIS_HOST`/`REDIS_PORT`, poiché i nomi delle code sono quelli applicativi.
+Il JSON riporta tempi, query aggregate, CPU/memoria cgroup, checkpoint e conteggi.
+`BENCH_SCHEMA` riutilizza lo schema prodotto: senza altre opzioni verifica
+l’incrementale; `BENCH_REPROCESS=1` rielabora, `BENCH_RESUME=1` riprende l’ultimo
+batch interrotto ancora in stato `running`; `BENCH_VERIFY_ONLY=1` verifica tutti
+gli oggetti anche senza sorgenti.
+Le misure dipendono da dimensioni/formato delle opere, cache e carico dell’host;
+non vengono estrapolate linearmente all’intero dump.
+
+### Profilo delle fasi e matrice dei batch — 2026-11-06
+
+L’import manuale dev successivo ha acquisito 11.032 opere in **67,10 s**
+(**164,4 opere/s**), senza duplicati/lacune. Non disponeva di span per fase.
+Per la diagnosi sono stati eseguiti 21 import isolati dello stesso campione di
+**2.048 EPUB**, scelti a intervalli regolari fra gli 11.032 membri originali;
+nessun nuovo import completo di `queue119_archive05.zip`. ZIP derivato con nomi,
+contenuti e metodo di compressione originali, 36,4 MB di membri decompressi.
+Ogni prova parte da catalogo/cache vuoti; stesso filesystem, cache OS calda,
+worker e PostgreSQL senza cap, 6 parser salvo confronto esplicito. Il dev non
+è stato modificato. Tempi seguenti del motore, senza coda/chiusura BullMQ.
+
+| Limite record/gruppo | Opere/s | Osservazione |
+|---|---:|---|
+| 64 | 153,5 | 32 gruppi reali |
+| 128 | 166,5 | 16 gruppi reali |
+| 256 | 174,7 | 9 gruppi, riferimento senza profiler CPU |
+| 512 | 173,0–184,0 | Due prove; variazione simile al beneficio |
+| 1.024, soglie normali | 179,6 | Gruppi reali da 188 a 443 record |
+| 1.024, 64 MiB e 500 ms | 177,9 | Gruppi reali da 113 a 669 record |
+| 1.024, 64 MiB e 2 s | 172,8 | Due gruppi reali da 1.024; commit fino a 4,52 s |
+
+Aumentare soltanto il limite record non elimina i limiti byte/tempo. Il gruppo
+reale da 1.024 non migliora il throughput e aumenta durata della transazione
+ed uso memoria (picco cgroup 436,6 MiB contro 354 MiB nel riferimento).
+Con 256 record, 2 parser danno 147,9 opere/s e 10 parser 170,4: aumentare il
+pool oltre 6 non mostra un beneficio convincente per l’ingest completo.
+
+Il riferimento richiede 11,73 s. Ripartizione senza doppio conteggio degli span
+annidati; la misura SQL comprende round trip e trasporto COPY, non solo CPU PG:
+
+| Fase | Secondi | Quota |
+|---|---:|---:|
+| SQL, COPY e COMMIT | 3,99 | 34% |
+| Lettura/verifica oggetti dallo staging | 1,91 | 16% |
+| Pack, codec, verifica e seal | 1,63 | 14% |
+| Preparazione residua nel coordinatore | 1,06 | 9% |
+| Produttore, avvio e protocollo fuori dai gruppi | 3,14 | 27% |
+
+Fsync e COMMIT insieme pesano circa il 4%. Il profilo CPU separato mostra il
+thread principale Node per circa il 70% in attesa; i task nativi e i parser
+hanno CPU propria. Il produttore da solo, con staging e serializzazione ma
+senza persistenza finale, misura 375,6 opere/s con 2 processi, **641,3 con 6**
+e 630,6 con 10. Sono throughput di uno stadio, non import completi.
+
+Esperimenti diagnostici precedenti all’integrazione descritta sotto:
+
+- `default_toast_compression=lz4` riduce SQL da 3,99 a **3,03 s** e COPY da
+  1,26 a **0,71 s**; due prove a 186,2–186,7 opere/s contro 174,7. Catalogo
+  38,21 MB contro 37,83 MB (+1%). È la compressione TOAST, distinta da WAL LZ4
+  e pack Zstd: [parametro PostgreSQL 17](https://www.postgresql.org/docs/17/runtime-config-client.html#GUC-DEFAULT-TOAST-COMPRESSION).
+- Lo staging effettua 17.469 letture di oggetti nel campione. Leggere l’intero
+  segmento con `readFile` asincrono non porta un guadagno significativo.
+  Una prova con letture aggregate sincrone limitate a 8 MiB riduce questo
+  stadio da circa 1,9 a 0,62 s: indica costo delle chiamate/attese, ma richiede
+  un percorso asincrono aggregato che mantenga reattività a stop/pausa e rinnovo
+  dei lock BullMQ prima dell’impiego ordinario.
+- La consultazione della cache fa `flush_records(); drain()` prima della
+  finestra successiva: barriera fra parsing e commit. Saltare la consultazione
+  nel catalogo vuoto misura l’effetto del suo disaccoppiamento; isolatamente il
+  guadagno è variabile e la contesa I/O può peggiorare. Occorre un canale cache
+  indipendente dagli ack, mantenendo cache e backpressure.
+- LZ4 + letture sincrone diagnostiche + assenza della barriera raggiungono
+  **242,2–251,1 opere/s** in due prove (211,1–220,2 con code/chiusura).
+  Non è una configurazione proposta per il dev.
+- Disabilitare la compressione solo della tabella TEMP riduce SQL a 3,54 s,
+  senza un guadagno netto sul tempo totale in questa prova.
+
+Con i costi del riferimento invariati, il coordinatore seriale impiega 8,58 s
+per 2.048 opere: limite circa 239 opere/s anche con produttore istantaneo.
+Per 500/1.000 deve scendere sotto 4,10/2,05 s. Dopo gli interventi precedenti,
+la priorità è ridurre conversioni/copie del catalogo e provare 2–4 flussi di
+commit con ordinamento per opera, dedup atomica e avanzamento del checkpoint
+solo sul prefisso interamente committato. Il lock globale attuale impedisce
+questa concorrenza: avviare semplicemente più worker non la introduce.
+500 è un obiettivo da validare con questa ristrutturazione; 1.000 supera anche
+il produttore misurato e richiede interventi aggiuntivi. Non sono prestazioni
+garantite né stime per il corpus completo.
+
+Tutte le 21 prove conservano 2.048 result hash identici e gli stessi 19.507
+oggetti/2.048 snapshot. Il caso combinato è stato riletto senza dump.
+Profilazione riproducibile con `scripts/benchmark-ingest.cjs`: `BENCH_DETAIL=1`
+aggiunge tempi esclusivi, dimensioni dei gruppi e conteggi I/O;
+`BENCH_CPU_PROFILE=/percorso/file.cpuprofile` abilita il profiler V8;
+`BENCH_GROUP_MIB=16` varia la soglia per i soli benchmark. Il profiler CPU è
+escluso dalla tabella dei confronti. `BENCH_CACHE_LOOKUP=0`, insieme alla soglia
+esplicita, è soltanto un esperimento su cache miss. I tempi nativi paralleli
+non vanno sommati fra loro o agli span che li contengono. I dati server sono
+stati raccolti con pg_stat_statements nel solo database di test.
+
+### Prova del percorso nativo HTML — 2026-11-06
+
+Esperimento isolato in `scripts/bench-native/`, prima dell’integrazione delle
+ottimizzazioni approvate. Uno scanner C++17 sostituisce il ciclo Python sui
+tag, conservando gli offset sul testo originale; per sintassi ambigue torna
+al parser corrente. Estrazione EPUB/XML, metadati e decodifica degli attributi
+media riutilizzano l’adapter esistente. In questa prova preliminare il runtime dev non era stato modificato.
+
+Sul campione precedente di 2.048 EPUB, mediana di tre ripetizioni alternate:
+
+| Stadio | Attuale | Nativo | Rapporto |
+|---|---:|---:|---:|
+| Scansione HTML, 6.031 documenti | 3,899 s | 0,408 s | 9,55× |
+| Parsing EPUB completo, un processo, oggetti inline | 6,208 s | 3,113 s | 1,99× |
+| Produttore con staging, 1 parser | 252 opere/s | 393 opere/s | 1,56× |
+| Produttore con staging, 6 parser | 636 opere/s | 857 opere/s | 1,35× |
+| Produttore con staging, 10 parser | 652 opere/s | 805 opere/s | 1,24× |
+
+Una coppia di passaggi sullo **ZIP intero**, 11.032 opere e 6 parser, misura
+**21,582 → 15,324 s**, ossia **511 → 720 opere/s (+40,8%)**. Tempo CPU
+cumulativo del container **77,08 → 47,13 s (−38,9%)**; picco memoria cgroup
+761 → 755 MiB, comprensivo della cache. Il campione breve sovrastima il
+throughput del corpus completo; 10 parser non migliorano il risultato.
+
+Questi passaggi eseguono il produttore reale con lettura ZIP, CRC/hash,
+staging, serializzazione e protocollo cache/ack; risposte cache vuote e ack
+immediati escludono catalogo e packfile. Non sono nuovi import completi e
+non misurano il throughput end-to-end. I container hanno rete disabilitata,
+sorgenti montate read-only e staging temporaneo separato, rimosso a fine prova.
+
+Parità verificata su note, capitoli, offset e URL dei 6.031 documenti reali
+e 1.018 casi limite; sul corpus reale il fallback interviene in 4 delle
+12.062 scansioni di confronto. Il parsing dei 2.048 EPUB restituisce lo
+stesso hash aggregato di metadati e contenuti; tutti i passaggi del produttore
+coincidono per record e hash degli oggetti, incluse le 11.032 opere complete.
+Il controllo ASan/UBSan passa 300.000 chiamate su input mutati, verificando
+anche i limiti degli offset restituiti. La prova non modifica dedup, versioning
+o commit: la loro verifica end-to-end resta necessaria dopo l’integrazione.
+
+Riproduzione su Linux con C++17, Python 3.11 e immagine `palimora-dev-ingest`:
+
+```sh
+python3 scripts/bench-native/build.py
+PALIMORA_NATIVE_SCAN_LIBRARY="$PWD/.local/native-parser/html_scan.so" \
+PALIMORA_NATIVE_REPORT="$PWD/.local/native-parser/comparison.json" \
+python3 scripts/bench-native/compare.py /mnt/sdb/palimora-ingest-perf/samples/sample2048.zip
+python3 scripts/bench-native/run-producers.py
+```
+
+Il runner accetta `--source`, `--records`, `--workers`, `--repeat`, `--storage`,
+`--image` e `--report` per ripetere una coppia sullo ZIP completo o cambiare
+pool. Richiede un percorso di staging di benchmark scrivibile, separato dai
+dati applicativi. Build, copia isolata degli adapter e report sono sotto
+`.local/native-parser/`, esclusa da Git. Non ricompilare la libreria mentre
+una prova la sta usando. Il probe di memoria si compila con:
+
+```sh
+c++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+  scripts/bench-native/sanitize.cc -o .local/native-parser/sanitize
+.local/native-parser/sanitize
+```
+
+Il percorso nativo riduce sensibilmente CPU e costo del parser, ma da solo
+non porta a 1.000 opere/s neppure il produttore. La prova ha motivato gli interventi approvati su TOAST, letture aggregate asincrone,
+cache/ack disaccoppiati, commit concorrenti ordinati, trasporto interno,
+COPY tipizzato e preparazione hash/compressione fuori dalla transazione,
+integrati nella sezione successiva. Non si moltiplica questo guadagno per il throughput dell’import attuale:
+catalogo e persistenza hanno costi e limiti indipendenti.
+
+### Pipeline ottimizzata integrata — 2026-11-06
+
+Implementati TOAST LZ4, letture aggregate asincrone, risposte cache indipendenti
+dagli ack e 1–4 transazioni concorrenti ordinate per opera. Il percorso nativo
+HTML è integrato nel build; i segmenti sono condivisi per parser/finestra, ogni
+envelope viene serializzato una sola volta, COPY usa colonne tipizzate e i
+contenuti sorgente vengono verificati/compressi prima della transazione.
+Manifest e metadati derivanti dal merge restano preparati sullo stato canonico
+bloccato. Formato archivistico, result hash e versione parser restano invariati.
+
+Due cicli di implementazione/verifica, seguiti da revisione e confronto finale:
+il primo benchmark concorrente ha rilevato un deadlock nell’upgrade del lock
+sulla sorgente. Il secondo usa `FOR NO KEY UPDATE`, inserimento ordinato dei
+locator dopo il seal, ricevute durevoli e checkpoint contiguo. La revisione ha
+separato il lease delle identità dal lock archivistico, verificato la pausa via
+operazione amministrativa e aggiunto l’interruzione del parser quando un task
+asincrono fallisce. Nessun errore può produrre un ack oltre il primo buco.
+
+Sul campione fisso di 2.048 EPUB, cache OS calda e cataloghi vuoti:
+
+| Configurazione | Tempo motore | Opere/s |
+|---|---:|---:|
+| Riferimento precedente, gruppi 256 | 11,73 s | 174,7 |
+| Pipeline concorrente, 2 flussi / gruppi 256 | 6,25 s | 327,6 |
+| Pipeline concorrente, 4 flussi / gruppi 256 | 5,16 s | 396,6 |
+| Pipeline concorrente, 3 flussi / gruppi 512 | 5,75 s | 356,4 |
+| Segmenti condivisi, 4 flussi / gruppi 256 | 4,61 s | 443,9 |
+| Segmenti condivisi, 3 flussi / gruppi 256 | 4,91 s | 417,1 |
+
+La configurazione dev mantiene **256 record, 6 parser, 4 flussi, 8 thread
+I/O/codec e Zstd 1**. Le letture staging scendono da 17.469 a **94** nel campione;
+CPU cumulativa worker da 22,19 a **15,54 s**, memoria cgroup da 354 a **524 MiB**.
+Il maggior working set accompagna la concorrenza; include cache del filesystem.
+Una prova con quattro isolati Node separati non ha mostrato un vantaggio netto
+(4,83 s, CPU 19,80 s e 737 MiB): non è stata integrata. Un profilo V8 separato
+attribuisce circa il 61% del tempo campionato ad attività del thread principale,
+inclusa la preparazione del catalogo, hash, serializzazione e GC.
+
+**Un solo nuovo import completo** di `queue119_archive05.zip`, su PostgreSQL,
+Redis e storage di benchmark separati, con dump read-only:
+
+- **11.032 opere in 28,114 s: 392,4 opere/s**, contro 67,099 s / 164,4 del
+  precedente import dev (**2,39×**, durata ridotta del 58,1%).
+- **29,750 s / 370,8 opere/s** includendo il ciclo coda/chiusura. Stato
+  `completed`, checkpoint 11.040, zero duplicati e zero lacune.
+- 107.054 oggetti, 11.032 snapshot, 60 pack referenziati; CPU cumulativa del
+  worker 85,85 s e picco cgroup 1,087 GiB. La CPU PostgreSQL è separata.
+- Gli 11.032 `(locator, parser, result_hash)` coincidono esattamente con il
+  catalogo dev precedente. Tutti i **107.054 oggetti** sono stati riletti e
+  verificati senza rendere disponibile lo ZIP sorgente.
+
+Nel campione, una rielaborazione da cache termina in 1,91 s nel motore, con
+gli stessi 19.507 oggetti, 2.048 snapshot e 9 pack; l’incrementale successivo
+non importa nuovi record. È riuso di contenuti già acquisiti, distinto dalla
+velocità di un primo import.
+
+Verificati commit fuori ordine, buco durevole con replay a gruppi diversi,
+dedup concorrente, versioning A→B→A, pausa/ripresa, CSV e media grandi. Build,
+21 test, browser desktop/mobile con librerie Chromium locali, audit npm e
+Compose superati. Il profiler distingue intervalli sovrapposti e quote esclusive
+(priorità SQL, pack, preparazione): i tempi delle fasi concorrenti non si sommano
+al wall-clock. Script riproducibili `benchmark-ingest.cjs` / `ingest-profiler.cjs`;
+report locali in `.local/optimization/`, esclusi da Git.
+Distribuito nel solo dev con migrazione `018`: API healthy, frontend HTTP 200,
+scanner nativo caricato e limiti CPU/RAM ancora rimossi. Conservati utenti e
+catalogo esistente; nessuna modifica ai dump o alla produzione.
+
+Il risultato misurato non raggiunge 1.000 opere/s. I costi residui di preparazione
+del catalogo, persistenza e parsing variano con le opere: questi numeri non sono
+una previsione lineare per l’intero dump. Non è stata avviata la Milestone 3.
+
+### Payload condivisi e preparazione nativa — 2026-11-06
+
+Integrati i tre interventi: payload JSONB immutabili condivisi per hash nel
+catalogo (`019`), compilazione N-API di metadati/manifest e batch asincroni per
+result hash/osservazioni, COPY binario con 13 colonne tipizzate riutilizzate.
+Le scritture del catalogo usano un unico scambio SQL ordinato. Contratti in 03–04;
+nessuna variazione di parser, byte canonici o decisioni di riconciliazione.
+
+Il primo ciclo ha evidenziato il costo di molti COPY separati: sostituiti con
+un solo flusso compatto. Il secondo ha eliminato copie dello staging e alberi
+JSON superflui per i valori JSONB. Sul campione fisso, il confronto ravvicinato
+è **5,153 s → 4,675 s** (397,4 → 438,1 opere/s); gruppi da 512 non migliorano
+il risultato. Restano 256 record, 6 parser, 4 flussi, 8 thread e Zstd 1.
+
+Un solo nuovo import completo dello ZIP, su catalogo/storage isolati e dump RO:
+
+| Misura | Pipeline precedente | Tre interventi integrati |
+|---|---:|---:|
+| Motore, 11.032 opere | 28,114 s / 392,4 opere/s | 27,468 s / 401,6 opere/s |
+| Inclusa chiusura coda | 29,750 s / 370,8 opere/s | 29,075 s / 379,4 opere/s |
+| Catalogo, indici e TOAST | 193,90 MiB | 179,13 MiB |
+| CPU cumulativa worker e parser, escluso PG | 85,85 s | 89,32 s |
+| Picco memoria cgroup, inclusa cache filesystem | 1,087 GiB | 1,234 GiB |
+
+Il guadagno sullo ZIP intero è **2,3%**, il catalogo si riduce del **7,6%**;
+CPU e picco RAM crescono del **4,0%** e **13,5%**. Questi interventi non
+realizzano l’accelerazione drastica auspicata e non avvicinano da soli a 1.000/s.
+Le prove sul server condiviso non costituiscono una previsione per 18 milioni
+di opere; il campione non va estrapolato al ZIP completo.
+
+Stato `completed`, checkpoint 11.040, zero lacune/duplicati: 107.054 oggetti,
+11.032 snapshot, 60 pack e 22.065 payload di catalogo. Tutti i result hash
+coincidono con il riferimento. Riletti senza dump tutti gli oggetti, verificando
+anche i byte ECMAScript dei 33.096 documenti canonici e i metadati dei manifest.
+Rielaborazione del campione: stessi 19.507 oggetti, 2.048 snapshot e 9 pack;
+incrementale successivo senza nuovi record.
+
+Migrazione provata su copia delle 11.032 opere: zero differenze in valori,
+ID delle evidenze, provenienze, selezioni, snapshot e locator. Superati 23 test,
+percorso browser desktop/mobile, audit e Compose; ASan/UBSan sul compilatore
+nativo e 2.000 input malformati. Verificati anche microsecondi, interi a 64 bit,
+Unicode, JSON null/SQL NULL, reset dev con utenti preservati e resume.
+Distribuito nel solo dev con `019`, servizi healthy e live reload conservato;
+restano 1 utente e le 11.032 opere preesistenti. Limiti CPU/RAM ancora rimossi.
+Report locali `shared-full-final.json`, `shared-full-integrity.json`,
+`migration019-verification.json` e `shared-verify.log` in `.local/optimization/`.
+
+### Reset dell’archivio dev — 2026-11-06
+
+Reset completo dall’admin Storage, riservato all’Owner con flag server dev.
+Verificati rifiuto fuori dal dev, ACL/CSRF e conferma testuale, blocco delle
+mutazioni durante il reset, retry dopo errore tra svuotamento catalogo e pulizia,
+conservazione di identità/sessioni e azzeramento dei file. Lo smoke Chromium
+esegue il pulsante con PostgreSQL, Redis e worker reali isolati, poi prosegue
+le operazioni sull’account nella stessa sessione. Build, 19 test d’integrazione,
+smoke desktop/mobile, Compose e audit npm superati. Nessun backup automatico;
+procedura e perimetro sono in 02/04/10.
+
+### Catalogo compatto — 2026-11-06
+
+`020` applica hash binari completi, dizionari di provenienza/pack/parser,
+associazioni batch→acquisizione, metadati e cache Zstd con dizionari persistenti,
+evidenze/selezioni in array tipizzati e proiezione del titolo. Contratto fisico
+in 03, ingest in 04. Richiede un archivio vuoto; il test su catalogo popolato
+verifica il rifiuto prima di qualsiasi modifica. Non esegue conversioni distruttive.
+
+Il profiling del primo ciclo ha rilevato attese sul training concorrente e
+scansioni ripetute delle entry della stessa sorgente. Corretti con training
+non bloccante, lookup indicizzati completi e indice/statistiche dello staging.
+La rielaborazione del campione mantiene 19.507 oggetti, 2.048 snapshot e 9 pack;
+ciascuno dei tre batch (iniziale, ripetuto, incrementale) conserva 2.048 risultati.
+L’incrementale non rielabora record. I test coprono anche resume con ricevute
+fuori ordine, A→B→A, selezioni amministrative, corruzione e reset con utenti intatti.
+
+Un solo nuovo import completo di `queue119_archive05.zip`, con dump RO e
+catalogo/storage isolati, stessa configurazione dev (256 record, 6 parser,
+4 flussi, 8 thread, pack Zstd 1):
+
+| Misura | `019` | `020` |
+|---|---:|---:|
+| Catalogo, indici e TOAST, dopo assestamento | 179,13 MiB | **109,06 MiB** |
+| Indici delle tabelle applicative | 51,23 MiB | 33,95 MiB |
+| Motore, 11.032 opere | 27,468 s / 401,6 opere/s | 31,193 s / 353,7 opere/s |
+| Inclusa chiusura coda | 29,075 s / 379,4 opere/s | 32,823 s / 336,1 opere/s |
+| CPU cumulativa worker e parser, escluso PG | 89,32 s | 96,23 s |
+| Picco memoria cgroup, inclusa cache filesystem | 1,234 GiB | 1,210 GiB |
+
+Risparmio del catalogo **39,1%**; in questa misura l’ingest impiega **13,6% più
+tempo**. Non è un aumento di throughput: compressione e riferimenti condivisi
+hanno un costo. WAL, file di servizio PostgreSQL e pack non sono inclusi nel
+risparmio del catalogo; la dimensione della data directory non si riduce nella
+stessa proporzione. Server condiviso e cache OS calda, nessuna estrapolazione
+lineare all’intero dump.
+
+Letture backend locali, senza HTTP/TLS, 100 campioni dopo 3 warm-up sul catalogo
+reale; p95 prima→dopo: lista 52,1→57,8 ms, titolo (`love`) 125,6→58,7 ms,
+ID AO3 3,0→5,1 ms, dettaglio 2,9→3,9 ms, evidenze/conflitti 1,4→3,4 ms.
+
+Import `completed`, checkpoint 11.040, zero lacune/duplicati: 107.054 oggetti,
+11.032 snapshot, 60 pack. Riletti **senza sorgente** tutti gli oggetti, i 33.096
+documenti canonici, 22.065 payload compressi/raw e 11.032 cache. Confronto con
+`019`: stessi valori dei 22.065 payload e delle 11.032 cache, zero differenze
+nei result hash. Build, **24 test**, browser desktop/mobile, audit npm e Compose
+superati; C++ verificato anche con `-Wall -Wextra -Werror`.
+Report locali in `.local/optimization/`: `compact-full-final.json`,
+`compact-full-integrity.json`, `compact-equivalence.json`,
+`catalog-latency-{before,after}.json`, `compact-verify.log`, `compact-browser.log`.
+
+Distribuito nel solo dev con `020`: servizi healthy, endpoint pubblico health
+`ok`, homepage HTTP 200, live reload e assenza di limiti CPU/RAM conservati.
+Il dev resta vuoto (zero opere e oggetti); l’unico utente preesistente è
+preservato. I risultati del benchmark rimangono nello storage isolato. Nessuna
+modifica alla produzione o ai dump originali, nessun avvio della Milestone 3.
+
+### Verifica e consolidamento pack v1 — 2026-11-06
+
+Audit del dev dopo l’import utente di `queue119_archive05.zip`: 11.032 opere,
+107.054 oggetti indicizzati, **61 pack / 290,89 MiB**, sorgente ZIP 218,03 MiB.
+Nessun pack vuoto o totalmente orfano. Il file da **389 byte** contiene un
+artefatto sorgente valido di 180 byte, referenziato. Le corse iniziali fra writer
+hanno lasciato 14 frame non indicizzati (6.231 byte), senza oggetti logici duplicati.
+
+Composizione fisica prima dell’intervento: 223,00 MiB di payload dei componenti
+sorgente, 44,51 MiB di payload canonici aggiuntivi (manifest, metadati e
+osservazioni), 23,38 MiB di header dei record. L’header di file è soltanto 8 byte:
+consolidare pack riduce il numero di file, non l’overhead per oggetto. Le copie
+canoniche dei metadati appartengono al contratto v1 e restano preservate.
+
+Correzioni: target sui byte fisici anziché originali, verifica del seal a finestre,
+compressione degli asset XML/NCX senza riclassificazione, fallback raw se Zstd
+espande il contenuto, controlli completi di locator/tipo/taglia e letture aggregate.
+La compattazione precedente sigillava ogni pagina di 128 oggetti: ora accumula
+fra pagine, legge e scrive in streaming, aggiorna i locator in blocco e committa
+il checkpoint insieme ai locator. Copia/verifica sotto lock condiviso, esclusivo
+soltanto per pubblicare; un lettore concorrente è verificato dal test. Contratto e limiti in 03. Il report admin
+specifica «Byte dei pack rimossi»: è spazio lordo, non risparmio netto.
+
+Confronto mirato su tutti i 107.054 oggetti già importati, output isolati, Zstd 1,
+lettura/verifica originali + riscrittura + seal verificato; un passaggio per target,
+cache filesystem calda, server condiviso. Nessun nuovo ingest completo necessario:
+
+| Target fisico | Pack prodotti | Tempo | Picco RSS del processo |
+|---|---:|---:|---:|
+| 32 MiB | 9 | 15,63 s | 371,6 MiB |
+| **64 MiB** | **5** | **15,29 s** | **365,5 MiB** |
+| 128 MiB | 3 | 16,06 s | 361,5 MiB |
+
+Scelti **64 MiB**, compromesso fra numero di file e dimensione del gruppo
+da pubblicare; la piccola differenza temporale non dimostra una superiorità universale.
+La RAM della verifica resta limitata indipendentemente dal target. Campione di
+3.343 oggetti, 17,11 MiB originali, esclusi oggetti oltre 1 MiB: Zstd 1/3/6 produce
+7,65/7,41/7,16 MiB in 169/214/475 ms di codec. Restano livello 1 nel dev e default
+3 generale; non viene sacrificato alcun byte per ridurre la taglia.
+
+Compattazione eseguita dal worker dev: **5 pack / 285,48 MiB**, minimo **34,19 MiB**;
+risparmio netto **5,41 MiB (1,86%)**, 61 file precedenti rimossi. Tutti gli hash,
+le taglie originali, i tipi, le opere, gli snapshot e le acquisizioni coincidono
+con lo stato precedente; utenti preservati. Zero frame duplicati o non indicizzati
+nei pack risultanti. Ricostruiti tutti i 107.054 locator e riletti tutti gli
+oggetti da un processo nuovo; 256 letture casuali locali, p95 **0,47 ms**.
+Dopo riavvio dei servizi, ripetuta la verifica integrale: p95 casuale **0,60 ms**.
+Cache calda, esclusi API/DB/TLS. Verificata anche lettura opera/snapshot dall’API dev.
+
+Rielaborazione reale del medesimo ZIP su catalogo isolato preesistente: 11.032
+duplicati riconosciuti, zero nuovi oggetti, snapshot o pack. SIGKILL dopo seal ma
+prima del commit: catalogo/checkpoint invariati, unico pack orfano recuperato.
+SIGKILL durante compattazione dopo checkpoint a 23.635 oggetti: processo nuovo
+riprende e termina a 107.054, cinque pack, stesso digest del catalogo.
+Superati sei test mirati su pack, transazioni, worker e pipeline, build API e
+validazione Compose. Dump e produzione invariati; nessuna migrazione di formato.
+
+Il commit continua a sigillare il proprio residuo: artefatti isolati e nuovi
+piccoli import possono ancora produrre pack piccoli validi. La compattazione è
+esplicita dall’admin, non una riscrittura automatica dell’intero archivio dopo
+ogni batch. Non sono state misurate milioni di opere: i limiti di memoria e i
+checkpoint sono verificati, non vengono promessi throughput o latenze a quella scala.
+Report locali in `.local/pack-audit/` (`before.json`, `after.json`, `target*.json`,
+`compression.json`, `crash.json`, `compact-resume.json`, `dev-integrity.json`,
+`dev-after-restart-integrity.json`, `tests.log`, `final-lock-tests.log`); reingest in `.local/optimization/pack-reprocess.json`.

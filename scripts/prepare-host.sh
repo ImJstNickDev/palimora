@@ -12,4 +12,5 @@ for name in database auth postgres; do
  chmod 644 "$root/secrets/$name"
 done
 chown 1000:1000 "$root/opensearch"
+install -d -o 1000 -g 1000 -m 750 "$root/storage" "$root/storage/packs" "$root/storage/staging"
 echo 'Persistent directories and keys prepared. Existing keys preserved.'

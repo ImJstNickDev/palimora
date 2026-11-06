@@ -1,3 +1,6 @@
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { downloadObject } from "./archive-download";
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import {
@@ -43,6 +46,16 @@ for (const op of Object.keys(api) as Operation[]) {
         response: res,
         requestId: res.locals.requestId,
       });
+      if (op === "archiveDownload") {
+        const { hash } = result as { hash: string };
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader(
+          "Content-Disposition",
+          'attachment; filename="' + hash + '"',
+        );
+        await pipeline(Readable.from(downloadObject(hash)), res);
+        return;
+      }
       return e.output.parse(result);
     },
     configurable: true,
@@ -64,6 +77,10 @@ for (const op of Object.keys(api) as Operation[]) {
 class Errors implements ExceptionFilter {
   catch(error: any, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     let status = 500,
       code = "INTERNAL";
     if (error instanceof HttpException) {

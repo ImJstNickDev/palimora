@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { Pool } from "pg";
+import { archiveFlow } from "./archive-flow";
 import { TOTP, Secret } from "otpauth";
 const password = "A secure browser test password 82";
 test.beforeAll(async () => {
@@ -39,6 +40,7 @@ test("Owner setup, invitation registration, account preferences and passkey life
   await expect(
     page.getByRole("heading", { name: "Il tuo account" }),
   ).toBeVisible();
+  await archiveFlow(page);
   await page.getByRole("link", { name: "Inviti", exact: true }).click();
   await page.getByRole("button", { name: "Genera invito" }).click();
   const link = await page.getByLabel("Link", { exact: true }).inputValue();
@@ -131,16 +133,19 @@ test("Owner setup, invitation registration, account preferences and passkey life
   ).toBeVisible();
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("WebAuthn.enable");
-  await cdp.send("WebAuthn.addVirtualAuthenticator", {
-    options: {
-      protocol: "ctap2",
-      transport: "internal",
-      hasResidentKey: true,
-      hasUserVerification: true,
-      isUserVerified: true,
-      automaticPresenceSimulation: true,
+  const { authenticatorId } = await cdp.send(
+    "WebAuthn.addVirtualAuthenticator",
+    {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
     },
-  });
+  );
   await expect(page.getByLabel("Nome della passkey")).toHaveCount(0);
   await page.getByRole("button", { name: "Aggiungi passkey" }).click();
   const keyForm = page
@@ -158,10 +163,11 @@ test("Owner setup, invitation registration, account preferences and passkey life
   const conditionalOptions = page.waitForResponse((response) =>
     response.url().endsWith("/auth/passkey/options"),
   );
+  const loggedOut = page.waitForResponse(
+    (r) => r.url().endsWith("/auth/logout") && r.status() === 200,
+  );
   await page.getByRole("button", { name: "Esci", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Accedi a Palimora" }),
-  ).toBeVisible();
+  await loggedOut;
   // The CTAP2 virtual authenticator supplies user presence to the real
   // conditional WebAuthn request, including signature verification by the API.
   await conditionalOptions;
@@ -175,6 +181,9 @@ test("Owner setup, invitation registration, account preferences and passkey life
   await modal.getByLabel("Password attuale").fill(password);
   await modal.getByRole("button", { name: "Rimuovi", exact: true }).click();
   await expect(page.getByText("Nessuna passkey registrata.")).toBeVisible();
+  // End automatic presence after this device's lifecycle; later password/TOTP
+  // flows must not automatically submit its now-revoked resident credential.
+  await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId });
   await page.locator(".security-back").click();
   await page.getByRole("link", { name: "Password", exact: true }).click();
   const passwordForm = page

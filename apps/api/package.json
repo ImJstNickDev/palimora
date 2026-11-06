@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "bash ../../scripts/build-codec.sh && tsc",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "migrate": "tsx src/migrate.ts"
@@ -15,10 +15,12 @@
     "@palimora/contracts": "*",
     "@simplewebauthn/server": "13.3.3",
     "argon2": "0.44.0",
+    "bullmq": "5.81.5",
     "cookie-parser": "1.4.7",
     "helmet": "8.1.0",
     "otpauth": "9.4.1",
     "pg": "8.16.3",
+    "pg-copy-streams": "7.0.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },

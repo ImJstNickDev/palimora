@@ -1,3 +1,11 @@
+import { ArchiveStorage } from "./archive-operations";
+import {
+  Ingest,
+  IngestDetail,
+  ArchiveWorks,
+  ArchiveWork,
+  ArchiveObject,
+} from "./archive";
 import { useContext, useState, useEffect } from "react";
 import {
   Routes,
@@ -130,6 +138,28 @@ export function App() {
             <Navigation />
             <main id="main">
               <Routes>
+                {me.data.user.role !== "User" && (
+                  <>
+                    <Route
+                      path="/admin/archive/storage"
+                      element={<ArchiveStorage />}
+                    />
+                    <Route path="/admin/ingest" element={<Ingest />} />
+                    <Route
+                      path="/admin/ingest/:id"
+                      element={<IngestDetail />}
+                    />
+                    <Route path="/admin/archive" element={<ArchiveWorks />} />
+                    <Route
+                      path="/admin/archive/objects/:hash"
+                      element={<ArchiveObject />}
+                    />
+                    <Route
+                      path="/admin/archive/:id"
+                      element={<ArchiveWork />}
+                    />
+                  </>
+                )}
                 <Route path="/account" element={<Account />} />
                 <Route path="/security/*" element={<Security />} />
                 <Route path="/sessions" element={<Sessions />} />
@@ -181,6 +211,7 @@ export function App() {
   );
 }
 function Navigation() {
+  const location = useLocation();
   const t = useText(),
     { user } = useContext(Auth);
   return (
@@ -193,6 +224,16 @@ function Navigation() {
           <span className="nav-heading">
             {t("Amministrazione", "Administration")}
           </span>
+          <NavLink to="/admin/ingest">{t("Importazioni", "Imports")}</NavLink>
+          <NavLink to="/admin/archive/storage">
+            {t("Storage", "Storage")}
+          </NavLink>
+          <NavLink
+            to="/admin/archive"
+            end={location.pathname === "/admin/archive/storage"}
+          >
+            {t("Archivio tecnico", "Technical archive")}
+          </NavLink>
           <NavLink to="/admin/users">{t("Utenti", "Users")}</NavLink>
           {user.role === "Owner" && (
             <NavLink to="/admin/invites">{t("Inviti", "Invitations")}</NavLink>

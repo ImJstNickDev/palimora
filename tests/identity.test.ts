@@ -666,6 +666,106 @@ test(
           );
         },
       );
+      await t.test(
+        "archive administration applies server ACL, CSRF and idempotent batch creation",
+        async () => {
+          const anonymous = new Client();
+          assert.equal((await anonymous.request("/admin/ingest")).status, 401);
+          const token = (await invite()).token;
+          const { c: reader } = await register("archiveReader", token);
+          assert.equal((await reader.request("/admin/ingest")).status, 403);
+          assert.equal(
+            (await reader.request("/admin/archive/works")).status,
+            403,
+          );
+          const requestId = randomUUID();
+          const first = await owner.request("/admin/ingest", {
+            requestId,
+            reprocess: false,
+          });
+          assert.equal(first.status, 200);
+          const again = await owner.request("/admin/ingest", {
+            requestId,
+            reprocess: false,
+          });
+          assert.equal(again.data.id, first.data.id);
+          assert.equal(
+            (
+              await owner.request(
+                "/admin/ingest/" + first.data.id + "/control",
+                { action: "pause" },
+                "POST",
+                { "x-csrf-token": "wrong" },
+              )
+            ).status,
+            403,
+          );
+          assert.equal(
+            (
+              await owner.request(
+                "/admin/ingest/" + first.data.id + "/control",
+                { action: "pause" },
+              )
+            ).status,
+            200,
+          );
+          assert.equal(
+            (await owner.request("/admin/ingest/" + first.data.id)).data.batch
+              .state,
+            "paused",
+          );
+          const reset = { requestId: randomUUID(), confirmation: "RESET" };
+          assert.equal(
+            (await owner.request("/admin/archive/dev-reset", reset)).status,
+            404,
+          );
+          assert.equal(
+            (await owner.request("/admin/archive/storage")).data
+              .dev_reset_available,
+            false,
+          );
+          process.env.PALIMORA_DEV = "1";
+          try {
+            assert.equal(
+              (await reader.request("/admin/archive/dev-reset", reset)).status,
+              403,
+            );
+            assert.equal(
+              (
+                await owner.request("/admin/archive/dev-reset", reset, "POST", {
+                  "x-csrf-token": "wrong",
+                })
+              ).status,
+              403,
+            );
+            assert.equal(
+              (
+                await owner.request("/admin/archive/dev-reset", {
+                  ...reset,
+                  confirmation: "wrong",
+                })
+              ).status,
+              400,
+            );
+            assert.equal(
+              (await owner.request("/admin/archive/storage")).data
+                .dev_reset_available,
+              true,
+            );
+            assert.equal(
+              (await owner.request("/admin/archive/dev-reset", reset)).status,
+              200,
+            );
+            assert.equal(
+              (await owner.request("/admin/archive/dev-reset", reset)).status,
+              200,
+            );
+            assert.equal((await owner.request("/me")).status, 200);
+          } finally {
+            delete process.env.PALIMORA_DEV;
+          }
+        },
+      );
     } finally {
       await runtime.close();
       await setupPool.query(`DROP SCHEMA ${schema} CASCADE`);

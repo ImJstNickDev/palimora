@@ -1,0 +1,15 @@
+ALTER TABLE ingest_batches ADD COLUMN selection text[] NOT NULL DEFAULT '{}', ADD COLUMN metadata_scope text[] NOT NULL DEFAULT '{}', ADD COLUMN started_at timestamptz, ADD COLUMN finished_at timestamptz, ADD COLUMN generation integer NOT NULL DEFAULT 0;
+ALTER TABLE ingest_sources ADD COLUMN total bigint, ADD COLUMN bytes bigint NOT NULL DEFAULT 0, ADD COLUMN duplicates bigint NOT NULL DEFAULT 0, ADD COLUMN attempts integer NOT NULL DEFAULT 0, ADD COLUMN next_retry_at timestamptz, ADD COLUMN parser text NOT NULL DEFAULT 'ao3-dump-2';
+CREATE TABLE archive_field_evidence(work_id uuid NOT NULL REFERENCES archive_works, field text NOT NULL, value jsonb NOT NULL, source_path text NOT NULL, locator text NOT NULL, confidence text NOT NULL, PRIMARY KEY(work_id,field,source_path,locator));
+CREATE TABLE archive_reconciliations(id uuid PRIMARY KEY, work_id uuid NOT NULL REFERENCES archive_works, kind text NOT NULL, detail jsonb NOT NULL, resolved_at timestamptz, resolution jsonb);
+CREATE INDEX archive_unresolved ON archive_reconciliations(work_id) WHERE resolved_at IS NULL;
+CREATE TABLE archive_identity_links(work_id uuid PRIMARY KEY REFERENCES archive_works, canonical_work_id uuid NOT NULL REFERENCES archive_works, CHECK(work_id<>canonical_work_id));
+CREATE TABLE archive_media_references(work_id uuid NOT NULL REFERENCES archive_works, url text NOT NULL, status text NOT NULL DEFAULT 'unfetched', PRIMARY KEY(work_id,url));
+CREATE TABLE archive_tags(source_id text PRIMARY KEY, evidence jsonb NOT NULL);
+CREATE TABLE archive_dispatch(event_id bigint PRIMARY KEY REFERENCES archive_outbox, delivered_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE archive_jobs(id uuid PRIMARY KEY, kind text NOT NULL CHECK(kind IN ('compact','collect')), state text NOT NULL DEFAULT 'pending', result jsonb, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE archive_pack_leases(id uuid PRIMARY KEY, pack text NOT NULL, expires_at timestamptz NOT NULL);
+CREATE INDEX archive_lease_pack ON archive_pack_leases(pack,expires_at);
+CREATE INDEX ingest_batch_state ON ingest_batches(state,created_at);
+CREATE INDEX ingest_source_resume ON ingest_sources(batch_id,state);
+CREATE INDEX archive_snapshot_manifest ON archive_snapshots(work_id,manifest_hash);

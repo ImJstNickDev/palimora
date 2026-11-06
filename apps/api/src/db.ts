@@ -17,7 +17,7 @@ export type DB = PoolClient;
 export async function transaction<T>(fn: (db: DB) => Promise<T>) {
   const db = await pool.connect();
   try {
-    await db.query("BEGIN");
+    await db.query("BEGIN; SET LOCAL default_toast_compression=lz4");
     const value = await fn(db);
     await db.query("COMMIT");
     return value;
@@ -30,6 +30,7 @@ export async function transaction<T>(fn: (db: DB) => Promise<T>) {
 }
 export async function migrate() {
   await transaction(async (db) => {
+    await db.query("SET LOCAL statement_timeout=0");
     await db.query("SELECT pg_advisory_xact_lock(70210401)");
     await db.query(
       "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, hash text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",

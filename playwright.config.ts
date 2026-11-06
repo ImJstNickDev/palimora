@@ -14,6 +14,7 @@ export default defineConfig({
         AUTH_KEY: "ab".repeat(32),
         APP_ORIGIN: "http://localhost:5173",
         PORT: "3000",
+        PALIMORA_DEV: "1",
       },
     },
     {

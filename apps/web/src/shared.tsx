@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { Button, Field, Select, Notice } from "@palimora/ui";
-import type { User } from "@palimora/contracts";
+import type { User, ErrorCode } from "@palimora/contracts";
 import { ApiFailure } from "./api";
 export const client = new QueryClient({
   defaultOptions: {
@@ -95,7 +95,10 @@ export function errorText(error: unknown, t: ReturnType<typeof useText>) {
     )
   );
 }
-export function useAction(translate?: ReturnType<typeof useText>) {
+export function useAction(
+  translate?: ReturnType<typeof useText>,
+  errors: Partial<Record<ErrorCode, string>> = {},
+) {
   const localText = useText();
   const t = translate ?? localText;
   const [busy, setBusy] = useState(false),
@@ -119,7 +122,11 @@ export function useAction(translate?: ReturnType<typeof useText>) {
         if (success) setDone(success);
         return true;
       } catch (e) {
-        setError(errorText(e, t));
+        setError(
+          e instanceof ApiFailure && errors[e.code]
+            ? errors[e.code]!
+            : errorText(e, t),
+        );
         return false;
       } finally {
         setBusy(false);

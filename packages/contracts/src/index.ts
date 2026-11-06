@@ -67,7 +67,315 @@ function endpoint<I extends z.ZodType, O extends z.ZodType>(
 ) {
   return { method, path, input, output, access };
 }
+const batch = z.object({
+  id: z.uuid(),
+  state: z.enum([
+    "pending",
+    "scanning",
+    "running",
+    "parser_blocked",
+    "paused",
+    "completed",
+    "completed_with_gaps",
+    "failed_global",
+  ]),
+  created_at: z.string(),
+  updated_at: z.string(),
+  error: json.nullable(),
+  reprocess: z.boolean(),
+  selection: z.array(z.string()),
+  metadata_scope: z.array(z.string()),
+  reconcile_batch_id: z.uuid().nullable(),
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+  generation: z.number(),
+});
+const source = z.object({
+  id: z.uuid(),
+  path: z.string(),
+  state: z.string(),
+  checkpoint: z.string(),
+  checkpoint_detail: json,
+  index_progress: z.string().nullable().optional(),
+  fingerprint: z.string(),
+  parser: z.string(),
+  total: z.string().nullable(),
+  bytes: z.string(),
+  duplicates: z.string(),
+  attempts: z.number(),
+  next_retry_at: z.string().nullable(),
+  imported: z.string(),
+  gaps: z.string(),
+  error: json.nullable(),
+});
+const work = z.object({
+  id: z.uuid(),
+  external_id: z.string().nullable(),
+  metadata: json,
+  current_snapshot_id: z.uuid().nullable(),
+  head_reason: z.string(),
+  canonical_work_id: z.string().nullable().optional(),
+});
 export const api = {
+  archiveDownload: endpoint(
+    "get",
+    "/admin/archive/blobs/:hash",
+    z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    z.object({ hash: z.string() }),
+    "admin",
+  ),
+  archiveInventory: endpoint(
+    "get",
+    "/admin/ingest/inventory/files",
+    empty,
+    z.object({
+      items: z.array(
+        z.object({
+          path: z.string(),
+          size: z.string(),
+          state: z.string(),
+          updated_at: z.string(),
+        }),
+      ),
+    }),
+    "admin",
+  ),
+  ingestReport: endpoint(
+    "get",
+    "/admin/ingest/:id/report",
+    id.extend({
+      path: z.string().max(1000).optional(),
+      cursor: z
+        .string()
+        .regex(/^[0-9]+$/)
+        .optional(),
+    }),
+    z.object({
+      summary: z.object({
+        sources: z.number(),
+        records: z.string(),
+        bytes: z.string(),
+        duplicates: z.string(),
+        gaps: z.string(),
+        checkpoints: z.string(),
+        total: z.string().nullable(),
+        state: batch.shape.state,
+        started_at: z.string().nullable(),
+        finished_at: z.string().nullable(),
+        content: z.array(z.object({ state: z.string(), count: z.number() })),
+        works: z.array(z.object({ state: z.string(), count: z.number() })),
+        sources_by_state: z.array(
+          z.object({ state: z.string(), count: z.number() }),
+        ),
+        elapsed_seconds: z.number(),
+        records_per_second: z.number(),
+        eta_seconds: z.number().nullable(),
+      }),
+      issues: z.array(
+        z.object({
+          id: z.string(),
+          path: z.string(),
+          fingerprint: z.string(),
+          locator: z.string(),
+          code: z.string(),
+          detail: json,
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  archiveConflicts: endpoint(
+    "get",
+    "/admin/archive/works/:id/conflicts",
+    id.extend({
+      cursor: z.uuid().optional(),
+      evidenceCursor: z
+        .string()
+        .regex(/^[0-9]+$/)
+        .optional(),
+    }),
+    z.object({
+      items: z.array(
+        z.object({ id: z.uuid(), kind: z.string(), detail: json }),
+      ),
+      evidence: z.array(json),
+      next: z.string().nullable(),
+      nextEvidence: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  archiveResolve: endpoint(
+    "post",
+    "/admin/archive/works/:id/resolve",
+    id.extend({
+      requestId: z.uuid(),
+      kind: z.enum(["head", "metadata", "identity", "external_id", "unlink"]),
+      target: z.string().max(100),
+      field: z.string().max(100).optional(),
+      source: z.string().max(1000).optional(),
+      locator: z.string().max(2000).optional(),
+      reason: z.string().trim().min(3).max(1000),
+    }),
+    ok,
+    "admin",
+  ),
+  archiveMaintenance: endpoint(
+    "post",
+    "/admin/archive/maintenance",
+    z.object({ requestId: z.uuid(), kind: z.enum(["compact", "collect"]) }),
+    ok,
+    "admin",
+  ),
+  archiveStorage: endpoint(
+    "get",
+    "/admin/archive/storage",
+    empty,
+    z.object({
+      dev_reset_available: z.boolean().default(false),
+      objects: z.string(),
+      bytes: z.string(),
+      packed_bytes: z.string(),
+      available_bytes: z.number().nullable(),
+      total_bytes: z.number().nullable(),
+      packs: z.string(),
+      reserve_bytes: z.number(),
+      kinds: z.array(
+        z.object({
+          kind: z.string(),
+          objects: z.string(),
+          bytes: z.string(),
+          packed_bytes: z.string(),
+        }),
+      ),
+      jobs: z.array(
+        z.object({
+          id: z.uuid(),
+          kind: z.string(),
+          state: z.string(),
+          result: json.nullable(),
+          created_at: z.string(),
+        }),
+      ),
+    }),
+    "admin",
+  ),
+  archiveDevReset: endpoint(
+    "post",
+    "/admin/archive/dev-reset",
+    z.object({ requestId: z.uuid(), confirmation: z.literal("RESET") }),
+    ok,
+    "owner",
+  ),
+
+  ingestBatches: endpoint(
+    "get",
+    "/admin/ingest",
+    page.extend({
+      cursor: z.uuid().optional(),
+      filter: z.enum(["all", "active", "attention", "finished"]).default("all"),
+    }),
+    z.object({
+      items: z.array(
+        batch.extend({
+          sources: z.number(),
+          processed: z.string(),
+          gaps: z.string(),
+          done_sources: z.number(),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  ingestCreate: endpoint(
+    "post",
+    "/admin/ingest",
+    z.object({
+      requestId: z.uuid(),
+      reprocess: z.boolean(),
+      reconcileBatchId: z.uuid().optional(),
+      selection: z
+        .array(z.string().regex(/^[^/\\]+\.(zip|sqlite3|part)$/))
+        .max(1000)
+        .default([]),
+      metadataScope: z
+        .array(z.string().regex(/^[a-zA-Z0-9_]+$/))
+        .max(1000)
+        .default([]),
+    }),
+    batch,
+    "admin",
+  ),
+  ingestDetail: endpoint(
+    "get",
+    "/admin/ingest/:id",
+    id,
+    z.object({ batch, sources: z.array(source) }),
+    "admin",
+  ),
+  ingestControl: endpoint(
+    "post",
+    "/admin/ingest/:id/control",
+    id.extend({ action: z.enum(["pause", "resume"]) }),
+    ok,
+    "admin",
+  ),
+  archiveWorks: endpoint(
+    "get",
+    "/admin/archive/works",
+    page.extend({
+      cursor: z.uuid().optional(),
+      filter: z.enum(["all", "current", "missing", "conflicts"]).default("all"),
+    }),
+    z.object({
+      items: z.array(
+        work.extend({ snapshots: z.number(), conflicts: z.number() }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  archiveWork: endpoint(
+    "get",
+    "/admin/archive/works/:id",
+    id.extend({ cursor: z.uuid().optional() }),
+    z.object({
+      work,
+      snapshots: z.array(
+        z.object({
+          id: z.uuid(),
+          work_id: z.uuid(),
+          manifest_hash: z.string(),
+          state: z.string(),
+          imported_at: z.string(),
+          ordering_uncertain: z.boolean(),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  archiveSnapshot: endpoint(
+    "get",
+    "/admin/archive/snapshots/:id",
+    id,
+    z.object({ manifest: json }),
+    "admin",
+  ),
+  archiveObject: endpoint(
+    "get",
+    "/admin/archive/objects/:hash",
+    z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    z.object({
+      base64: z.string().nullable(),
+      kind: z.string(),
+      size: z.string(),
+      truncated: z.boolean(),
+    }),
+    "admin",
+  ),
+
   status: endpoint(
     "get",
     "/auth/status",
@@ -318,7 +626,14 @@ export function openapi() {
       responses: {
         200: {
           description: "Success",
-          content: { "application/json": { schema: z.toJSONSchema(e.output) } },
+          content:
+            name === "archiveDownload"
+              ? {
+                  "application/octet-stream": {
+                    schema: { type: "string", format: "binary" },
+                  },
+                }
+              : { "application/json": { schema: z.toJSONSchema(e.output) } },
         },
         default: {
           description: "Error",

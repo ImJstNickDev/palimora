@@ -757,3 +757,12 @@ html[data-security-direction="back"]::view-transition-new(security-content) {
 .login-factor .icon-button {
   margin-left: -10px;
 }
+
+/* Canonical source inspection remains escaped text, including imported HTML. */
+main pre {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}

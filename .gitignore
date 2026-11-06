@@ -8,3 +8,10 @@ coverage/
 playwright-report/
 test-results/
 .local/
+
+__pycache__/
+*.pyc
+
+apps/api/native/build/
+
+apps/ingest-adapters/native/build/

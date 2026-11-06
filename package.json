@@ -12,7 +12,7 @@
   "scripts": {
     "build": "npm run build -w @palimora/contracts && npm run build -w @palimora/ui && npm run build -w @palimora/api && npm run build -w @palimora/web",
     "check": "npm run build && npm run test",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:browser": "playwright test",
     "dev": "npm run dev -w @palimora/web",
     "migrate": "npm run migrate -w @palimora/api"

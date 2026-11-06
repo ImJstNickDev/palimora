@@ -57,7 +57,7 @@ APP_DATA_ROOT=/mnt/sdb/palimora-data
 AO3_DUMP_ROOT=/mnt/teratron_data/AO3_dumper/ao3_dump/data/ao3_stories
 ```
 
-Persistenza sotto `APP_DATA_ROOT`: `postgres/`, `redis/`, `opensearch/`, `storage/packs/`, `storage/staging/`, `backups/`, `exports/`, `logs/`, `secrets/` secondo le necessità reali. Nessun Docker named volume; montaggi persistenti esclusivamente bind mounts con path host espliciti. Il dump è disponibile nel container ingest come **`/dumps/ao3_stories:ro`**. Il runtime lettura non vi accede.
+Persistenza sotto `APP_DATA_ROOT`: `postgres/`, `redis/`, `opensearch/`, `storage/packs/`, `storage/staging/`, `storage/cache/`, `backups/`, `exports/`, `logs/`, `secrets/` secondo le necessità reali. Nessun Docker named volume; montaggi persistenti esclusivamente bind mounts con path host espliciti. Il dump è disponibile nel container ingest come **`/dumps/ao3_stories:ro`**. Il runtime lettura non vi accede.
 
 Backups aggiuntivi: mount esterni configurabili (es. `/mnt/backupdisk/palimora` → `/backup-targets/disk1`, `/mnt/nas/palimora` → `/backup-targets/nas`) nel `compose.backups.yaml` opzionale. Il Backup Manager mostra solo le destinazioni montate e verificate. **Non** trattare una directory vuota lasciata da un disco smontato come destinazione valida: validare device/mount identity prima di scrivere; mount `create_host_path: false` non basta da solo.
 
@@ -102,7 +102,7 @@ sync/media worker — palimora-egress (bridge non internal) → AO3/media estern
 
 Workspace npm con lockfile: `apps/api` (NestJS/Express), `apps/web` (React/Vite), `packages/contracts` (Zod, tipi e OpenAPI derivati dallo stesso contratto), `packages/ui` (token, controlli nativi e dialoghi Radix). I pacchetti dei domini successivi vengono aggiunti quando hanno un'implementazione reale. Node 22 per immagini e CI; Node ≥20.19 per sviluppo locale.
 
-`infra/compose.yaml` avvia gateway, web, API, PostgreSQL, Redis AOF e OpenSearch single-node. L'API Foundation dipende soltanto da PostgreSQL: indisponibilità di Redis/OpenSearch non impedisce login o amministrazione. Nessun worker/job viene simulato. Il mount dump entrerà esclusivamente nel servizio ingest della milestone 2, in sola lettura; nessun servizio Foundation riceve i dump.
+`infra/compose.yaml` avvia gateway, web, API, PostgreSQL, Redis AOF e OpenSearch single-node. L'API Foundation dipende soltanto da PostgreSQL: indisponibilità di Redis/OpenSearch non impedisce login o amministrazione. Nessun worker/job viene simulato. Il mount dump appartiene esclusivamente al servizio ingest, in sola lettura; API e frontend non ricevono i dump.
 
 Le migrazioni SQL sono ordinate, transazionali e protette da advisory lock; il registro verifica SHA-256 e rifiuta migrazioni applicate modificate o uno schema più recente dell'API. Il ruolo DB `palimora` possiede il proprio database per eseguire migrazioni, senza superuser, creazione ruoli o database. Il superuser PostgreSQL ha una credenziale distinta, montata soltanto nel servizio database.
 
@@ -130,7 +130,14 @@ Aggiornamenti: ricostruire con `docker compose ... up -d --build`, poi eseguire 
 
 ### Ambiente di review UI con live reload
 
-`infra/compose.dev.yaml`, applicato dopo il Compose principale, isola la review nel progetto `palimora-dev`, rete privata `palimora-dev-app` e gateway `palimora-dev-gateway:80`. Avvia soltanto PostgreSQL, API, Vite e gateway; Redis/OpenSearch sono opzionali con `--profile full`. I dati di review sono separati dalla produzione, sotto `/mnt/sdb/palimora-dev-data`.
+`infra/compose.dev.yaml`, applicato dopo il Compose principale, isola la review nel progetto `palimora-dev`, rete privata `palimora-dev-app` e gateway `palimora-dev-gateway:80`. Avvia PostgreSQL, API, Vite, gateway, Redis e worker ingest; soltanto OpenSearch è opzionale con `--profile full`. I dati di review sono separati dalla produzione, sotto `/mnt/sdb/palimora-dev-data`.
+
+Per le prove di carico, l’override dev rimuove i limiti Docker di CPU e memoria
+da tutti i servizi e imposta Redis `maxmemory=0`. I container possono utilizzare
+le risorse disponibili sull’host; non sono imposti limiti di banda/IOPS del disco.
+Restano attivi controlli di integrità e riserva
+disco. Il Compose principale conserva i limiti di produzione; i valori
+`INGEST_CPUS`/`INGEST_MEMORY` sono superati dall’override dev.
 
 Configurazione locale in `.local/dev.env` (ignorata da Git):
 
@@ -145,9 +152,62 @@ Verificare l'indirizzo corrente di NPM sulla rete `prod-frontend` prima di riuti
 
 ```sh
 APP_DATA_ROOT=/mnt/sdb/palimora-dev-data ./scripts/prepare-host.sh
-docker compose --env-file .local/dev.env -f infra/compose.yaml -f infra/compose.dev.yaml up -d --build
+./scripts/dev.sh
 ```
 
 In NPM: dominio `dev.palimora.imjstnick.com`, schema upstream **HTTP**, host **palimora-dev-gateway**, porta **80**, **Websockets Support** attivo e certificato HTTPS sul dominio. Per il primo Owner vale la procedura di bootstrap sopra. Nessuna porta host pubblicata; solo il gateway partecipa alla rete frontend esterna.
 
-I sorgenti React, CSS, componenti UI e contratti frontend sono bind mount in sola lettura: le modifiche dell'host attivano Vite HMR senza rebuild. Host consentito esplicito e WebSocket sullo stesso dominio HTTPS; il template gateway di sviluppo permette gli script inline richiesti da React Refresh, lasciando invariata la CSP di produzione. Configurazione basata sulle [opzioni server Vite](https://vite.dev/config/server-options). L'API usa l'immagine compilata: per modifiche backend o dipendenze ripetere `up -d --build`; dopo modifiche ai template Nginx eseguire `restart gateway` con gli stessi argomenti Compose. Per arrestare usare `down`: i dati persistenti restano sul disco.
+I sorgenti React, CSS, componenti UI e contratti frontend sono bind mount in sola lettura: le modifiche dell'host attivano Vite HMR senza rebuild. Host consentito esplicito e WebSocket sullo stesso dominio HTTPS; il template gateway di sviluppo permette gli script inline richiesti da React Refresh, lasciando invariata la CSP di produzione. Configurazione basata sulle [opzioni server Vite](https://vite.dev/config/server-options). API e worker usano immagini compilate: dopo modifiche backend, contratti condivisi, migrazioni o dipendenze eseguire `./scripts/dev.sh`. Lo script aggiorna insieme API, worker e dipendenze Vite, attende i servizi e riavvia il gateway; conserva dati e sessioni. Il solo HMR del frontend non aggiorna l’API: lasciare il backend precedente produce endpoint mancanti o contratti incompatibili. Redis e ingest sono parte della review dalla Milestone 2; il worker aggiorna l’inventario ma importa soltanto i batch richiesti dall’admin. Per arrestare usare `down`: i dati persistenti restano sul disco.
+
+Il Compose di review imposta `PALIMORA_DEV=1` soltanto su API e ingest.
+In Storage l’Owner può usare **Reset archivio dev**, confermando con `RESET`:
+cancella catalogo, versioni, importazioni, code Archive/Ingest e file pack/staging,
+senza backup. Account, credenziali, sessioni, preferenze, inviti, audit, inventario
+dei sorgenti e dump rimangono conservati. Non impostare questo flag in produzione:
+senza flag l’endpoint rifiuta il reset e il pulsante non compare. Non richiede
+Docker socket, accesso scrivibile dell’API ai pack o cancellazione del database.
+
+### Worker Archive Engine
+
+Il servizio `ingest` usa l'immagine API con entrypoint dedicato e Python 3 per gli
+adapter. Riceve `/storage` scrivibile e `/dumps/ao3_stories:ro`; API riceve soltanto
+`/storage:ro`. `prepare-host.sh` prepara storage/packs/staging con UID 1000.
+`ARCHIVE_RESERVE_BYTES` configura la riserva libera, predefinita a 256 MiB;
+controlli prima dello staging e della scrittura pack sospendono senza pubblicare
+contenuti incompleti. Il codec N-API del progetto usa libzstd di Debian; il build installa g++ e
+libzstd-dev, il runtime richiede soltanto libzstd.
+
+BullMQ esegue `palimora-ingest-v1` e `palimora-archive-events-v1`. Batch, generazione,
+checkpoint, retry e outbox restano in PostgreSQL. Il dispatcher ricrea job mancanti
+con ID deterministici; il consumatore eventi conferma gli ID nella tabella
+`archive_dispatch`. Redis AOF usa il bind mount già previsto. Un advisory lock
+PostgreSQL protegge l'esecuzione anche dopo perdita delle code Redis. SIGTERM e
+pausa interrompono il produttore Python e i processi del pool, conservando l’ultimo gruppo committato;
+il trasporto con ack limita a due i gruppi preparati in anticipo. Il formato e gli
+stati canonici restano invariati. `INGEST_GROUP_RECORDS` configura 1–1024 record
+per gruppo (default 256); `INGEST_CPUS` e `INGEST_MEMORY` configurano il solo
+container ingest (default 2 CPU e 1 GiB). Aumentare i limiti senza un profilo non
+rimuove le attese seriali di database/storage.
+
+Oggetti, capitoli, relazioni ed eventi sono inseriti in blocco dove indipendenti;
+un writer per transazione condivide i pack tra opere. Gli ack degli eventi
+ordinari non prendono il lock dello storage; le decisioni amministrative che
+scrivono pack lo mantengono. Il dispatcher seleziona fino a 4.096 eventi
+per ciclo e accoda gruppi di massimo 512 ID espliciti con `addBulk`; il
+consumatore li conferma in una sola transazione. Non usa intervalli MAX(id),
+che perderebbero eventi committati fuori ordine. Job individuali preesistenti
+restano leggibili; ID deterministici e retry durevole sono preservati.
+
+Il dev usa 6 processi parser (`DEV_INGEST_PARSER_WORKERS`), 4 gruppi concorrenti
+(`DEV_INGEST_COMMIT_CONCURRENCY`), 8 thread I/O/codec (`DEV_INGEST_IO_THREADS`)
+e Zstd livello 1
+(`DEV_ARCHIVE_ZSTD_LEVEL`). PostgreSQL ha shared_buffers 4 GiB,
+effective_cache_size 24 GiB, work_mem 16 MiB, maintenance_work_mem 512 MiB,
+max_wal_size 8 GiB, checkpoint_timeout 15 minuti, WAL e TOAST LZ4 e track_io_timing.
+Sono parametri del solo dev su questo host; fsync e synchronous_commit restano
+attivi. Il catalogo mantiene un coordinatore unico delle scritture, con parsing
+e codec paralleli, senza moltiplicare writer in contesa sullo stesso lock.
+
+I job di compattazione/recupero spazio sono durevoli in PostgreSQL ed eseguiti dal
+medesimo worker. Copia e sostituzione locator sono transazionali; letture protette
+da lock condiviso e lease persistenti impediscono la rimozione dei pack in uso.

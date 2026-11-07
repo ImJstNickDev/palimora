@@ -1,3 +1,4 @@
+import { syncGate } from "./ao3-policy";
 import { DB, pool, transaction } from "./db";
 export type SyncKind = "discovery" | "backfill" | "work" | "entity" | "media";
 export async function enqueueSync(
@@ -69,11 +70,16 @@ export async function scheduleSync() {
         AND w.availability<>'deleted' AND j.availability<>'deleted' AND j.state<>'running'`);
   });
 }
-export async function syncAllowed(db: DB) {
-  return !!(
-    await db.query(`SELECT 1 FROM ao3_control WHERE NOT paused AND mode<>'force_offline'
-    AND (mode='force_online' OR observed_state='online') AND (cooldown_until IS NULL OR cooldown_until<=now())`)
-  ).rowCount;
+export async function syncAllowed(db: Pick<DB, "query">) {
+  return (
+    syncGate(
+      (
+        await db.query(
+          "SELECT paused,mode,observed_state,cooldown_until FROM ao3_control",
+        )
+      ).rows[0],
+    ) === null
+  );
 }
 /** PostgreSQL jobs are the replayable outbox; Redis is only the dispatch transport. */
 export async function runSyncQueue(
@@ -108,11 +114,7 @@ export async function runSyncQueue(
           await scheduleSync();
           nextSchedule = Date.now() + 60000;
         }
-        const permitted = (
-          await pool.query(
-            "SELECT 1 FROM ao3_control WHERE NOT paused AND mode<>'force_offline' AND (mode='force_online' OR observed_state='online') AND (cooldown_until IS NULL OR cooldown_until<=now())",
-          )
-        ).rowCount;
+        const permitted = await syncAllowed(pool);
         const jobs = (
           await pool.query(
             `SELECT id,generation FROM ao3_jobs WHERE due_at<=now() AND NOT (SELECT paused FROM ao3_control) AND ($1::boolean OR (kind='media' AND checkpoint?'upload'))

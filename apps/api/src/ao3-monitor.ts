@@ -1,3 +1,4 @@
+import { syncGate } from "./ao3-policy";
 import { pool, DB } from "./db";
 import {
   classifyAO3,
@@ -136,9 +137,12 @@ export async function ao3MonitorOperation(db: DB, op: string, input: any) {
   }
   const control = (
     await db.query(`SELECT mode,paused,observed_state,checked_at,next_probe_at,cooldown_until,failures,
+    CASE WHEN paused OR mode='force_offline' THEN NULL ELSE greatest(next_probe_at,next_request_at,cooldown_until) END AS probe_eligible_at,
     NOT paused AND mode <> 'force_offline' AND (mode='force_online' OR observed_state='online')
       AND (cooldown_until IS NULL OR cooldown_until<=now()) AS eligible FROM ao3_control`)
   ).rows[0];
+  control.eligible = syncGate(control) === null;
+  control.gate = syncGate(control);
   const history = (
     await db.query("SELECT * FROM ao3_health_history ORDER BY id DESC LIMIT 50")
   ).rows;

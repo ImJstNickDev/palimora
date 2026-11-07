@@ -31,7 +31,7 @@ Non aggirare CAPTCHA, login, restrizioni, rate limiting o protezioni con IP/iden
 
 ## Stato globale AO3
 
-`mode = auto | force_online | force_offline`; **default `auto`**. Il monitoraggio automatico usa healthchecks mirati (non solo homepage), risultati autenticati e distinguibili da blocchi 429/403, timeout e opere assenti. `force_online` consente il tentativo anche se monitor considera il sito degradato, **senza** bypassare le pause da rate limit. `force_offline` sospende discovery/sync, non lettura locale. L'override non è fonte autorevole della reale disponibilità.
+`mode = auto | force_online | force_offline`; **default `auto`**. Il monitoraggio automatico usa healthchecks mirati (non solo homepage), risultati autenticati e distinguibili da blocchi 429/403, timeout e opere assenti. `force_online` consente tentativi con stato sconosciuto o non raggiungibile; **non** supera manutenzione esplicita, blocchi, rate limit o cooldown. Il monitor deve rilevare nuovamente un servizio operativo prima della ripresa dopo manutenzione. `force_offline` sospende discovery/sync, non lettura locale. L'override non è fonte autorevole della reale disponibilità.
 
 Riconoscere stati per opera `available`, `deleted`, `hidden_or_restricted`, `temporarily_unavailable`, `unknown`; distinguere prova definitiva da errore temporaneo. Revisione manuale solo per errori inattesi e persistenti. La UI ordinaria usa eventualmente unicamente il badge `Unavailable from AO3` e filtro `Eliminate` solo per eliminazioni **confermate**. Non interpretare l'assenza dal dump come cancellazione.
 
@@ -90,7 +90,7 @@ La sonda `/works/search` richiede un form riconoscibile; HTTP 200 e branding non
 bastano. Manutenzione, blocchi, 429, errori di rete e stato sconosciuto restano
 distinti. Monitor e client condividono un lock e budget persistente: una richiesta
 alla volta, distanza iniziale 10 secondi, rallentamento su errori, recupero graduale,
-`Retry-After` e cooldown non aggirabili dall'override Online. Offline sospende
+Manutenzione, blocchi, `Retry-After` e cooldown non aggirabili dall'override Online. Offline sospende
 il traffico AO3; la pausa sospende anche le elaborazioni locali. L'upload manuale
 può essere acquisito con AO3 offline. Timeout HTML 25 secondi, budget memoria
 64 MiB per documento/commenti; le sonde restano limitate a 1 MiB e 20 secondi.
@@ -150,3 +150,9 @@ riparte dalla pagina corrente se il lavoro non è in esecuzione; il retry della
 coda conserva invece il checkpoint. Gli endpoint usano ACL admin,
 CSRF e audit esistenti. Le notifiche personali restano nella Milestone 5;
 il commit emette già gli eventi canonici senza introdurre abbonamenti paralleli.
+
+La policy di esecuzione è condivisa da dispatcher, worker, client HTTP e risposte
+admin. `due_at` resta una scadenza persistente: durante sospensione l'API espone
+`waiting_service` e `eligible_at=null`, senza inventare una data di partenza.
+La sonda di disponibilità è distinta dalla sincronizzazione; upload locali restano
+eseguibili con AO3 indisponibile, salvo pausa globale.

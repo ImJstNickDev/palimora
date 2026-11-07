@@ -233,3 +233,11 @@ né da un endpoint amministrativo di editing. Dettagli e stati operativi in 05.
 copertura, con default sconosciuto per le vecchie acquisizioni; nessuna riscrittura
 dei pack v1. La proiezione della disponibilità corrente deriva dalle osservazioni
 sync, mantenendo immutabile quella degli snapshot scelti esplicitamente.
+
+Il monitor espone `control.gate` e `eligible` derivati dalla policy di esecuzione;
+`probe_eligible_at` include budget richieste e cooldown, ed è null con sonde sospese.
+La coda accetta filtri `state`, `kind`, `q`, `cursor`; ogni lavoro espone
+`execution`, `eligible_at`, titolo e collegamento all'opera quando presenti.
+`GET /api/v1/admin/ao3/media` (ACL admin) elenca i fallimenti `MEDIA_UNRECOVERABLE`,
+con ricerca URL, cursore, riferimenti alle opere e stato dell'upload. La migrazione
+027 indicizza errori media e ricerca inversa dei riferimenti.

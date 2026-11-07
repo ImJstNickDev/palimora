@@ -1,7 +1,28 @@
+import { jobExecution } from "./ao3-policy";
 import { DB } from "./db";
 import { seal, fail } from "./security";
 import { enqueueSync } from "./ao3-scheduler";
 export async function syncAdmin(db: DB, op: string, x: any) {
+  if (op === "ao3Media") {
+    const rows = (
+      await db.query(
+        `SELECT j.id,j.target AS url,j.error,j.started_at AS failed_at,j.attempts,
+      m.object_hash IS NOT NULL AS has_local_copy,
+      (SELECT count(*)::int FROM archive_media_references r WHERE r.url=j.target) AS work_count,
+      coalesce((SELECT jsonb_agg(w) FROM (SELECT h.id,coalesce(d.title,'AO3 · '||h.external_id,h.id::text) AS title FROM archive_media_references r JOIN archive_work_heads h ON h.id=r.work_id LEFT JOIN catalog_documents d ON d.work_id=h.id WHERE r.url=j.target ORDER BY h.id LIMIT 5) w),'[]'::jsonb) AS works,
+      (SELECT state FROM ao3_uploads u WHERE u.url=j.target AND state IN ('receiving','queued') ORDER BY created_at DESC LIMIT 1) AS upload_state
+      FROM ao3_jobs j LEFT JOIN ao3_media m ON m.url=j.target
+      WHERE j.kind='media' AND j.error='MEDIA_UNRECOVERABLE'
+      AND ($1::uuid IS NULL OR j.id>$1) AND ($2::text='' OR strpos(lower(j.target),lower($2))>0)
+      ORDER BY j.id LIMIT 21`,
+        [x.cursor ?? null, x.q ?? ""],
+      )
+    ).rows;
+    return {
+      items: rows.slice(0, 20),
+      next: rows.length > 20 ? rows[19].id : null,
+    };
+  }
   if (op === "ao3UploadStart") {
     await db.query(
       "INSERT INTO ao3_uploads(id,url,size,mime) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
@@ -138,17 +159,21 @@ export async function syncAdmin(db: DB, op: string, x: any) {
   }
   const control = (
     await db.query(
-      "SELECT auth_state,priorities,spacing_ms,seed_complete FROM ao3_control",
+      "SELECT auth_state,priorities,spacing_ms,seed_complete,paused,mode,observed_state,cooldown_until FROM ao3_control",
     )
   ).rows[0];
   const rows = (
     await db.query(
-      `SELECT id,kind,target,state,priority,due_at,started_at,checked_at,attempts,error,availability,(checkpoint-'record'-'seen'-'entity') AS checkpoint FROM ao3_jobs
-    WHERE ($1::uuid IS NULL OR id>$1) AND ($2::text='all' OR state=$2) ORDER BY id LIMIT 51`,
-      [x.cursor ?? null, x.state ?? "all"],
+      `SELECT j.id,j.kind,j.target,j.state,j.priority,j.due_at,j.started_at,j.checked_at,j.attempts,j.error,j.availability,(j.checkpoint-'record'-'seen'-'entity') AS checkpoint,d.title,h.id AS work_id
+    FROM ao3_jobs j LEFT JOIN archive_work_heads h ON j.kind='work' AND h.external_id=j.target LEFT JOIN catalog_documents d ON d.work_id=h.id
+    WHERE ($1::uuid IS NULL OR j.id>$1) AND ($2::text='all' OR j.state=$2)
+    AND ($3::text='all' OR j.kind=$3) AND ($4::text='' OR strpos(lower(j.target),lower($4))>0 OR strpos(lower(d.title),lower($4))>0) ORDER BY j.id LIMIT 51`,
+      [x.cursor ?? null, x.state ?? "all", x.kind ?? "all", x.q ?? ""],
     )
   ).rows;
-  const jobs = rows.slice(0, 50),
+  const jobs = rows
+      .slice(0, 50)
+      .map((j) => ({ ...j, ...jobExecution(j, control) })),
     counts = (
       await db.query(
         "SELECT state,count(*)::int AS count FROM ao3_jobs GROUP BY state",
@@ -166,6 +191,13 @@ export async function syncAdmin(db: DB, op: string, x: any) {
     jobs,
     counts,
     runs,
+    media_unrecoverable: Number(
+      (
+        await db.query(
+          "SELECT count(*) FROM ao3_jobs WHERE kind='media' AND error='MEDIA_UNRECOVERABLE'",
+        )
+      ).rows[0].count,
+    ),
     next: rows.length > 50 ? jobs.at(-1).id : null,
   };
 }

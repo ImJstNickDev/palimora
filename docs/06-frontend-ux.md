@@ -183,3 +183,19 @@ Prosa giustificata con rientro e ultima riga naturale; righe brevi, interruzioni
 esplicite, citazioni e impaginazioni strette non vengono allargate artificialmente.
 Le Work Skins complesse conservano il rendering HTML; la geometria della pagina
 è propria del PDF. HTML ed EPUB mantengono la loro impaginazione.
+
+## Pannello AO3
+
+`/admin/ao3` separa Panoramica, Coda, Media da recuperare, Attività e Impostazioni
+con navigazione nell'URL. Stato effettivo e pausa rimangono visibili; Auto/Online/Offline
+sono controlli radio espliciti. Nessun menu `details` per funzioni operative.
+La coda distingue disponibilità del servizio, pausa individuale, scadenza e avvio
+effettivo; durante manutenzione mostra «Alla ripresa del servizio». Filtri e
+paginazione sono nell'URL, righe adattate al mobile. Le sonde hanno una cronologia
+separata dalle acquisizioni.
+
+Media da recuperare elenca soltanto fallimenti confermati 404/410, con fonte,
+ultima verifica, copie già conservate e opere coinvolte. Selezionare una risorsa
+apre il dialogo di recupero: URL non editabile, file locale e avanzamento reale;
+la copia entra nella coda locale esistente. Errori temporanei e URL non ancora
+verificati non vengono presentati come irrecuperabili.

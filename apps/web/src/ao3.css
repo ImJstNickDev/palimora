@@ -1,0 +1,541 @@
+.sync-view {
+  max-width: 1120px;
+}
+.sync-view .sync-section {
+  max-width: none;
+  margin: 0;
+  padding: 1.6rem 0;
+  border: 0;
+}
+.sync-view .sync-section form {
+  max-width: none;
+}
+.sync-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 1.3rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+}
+.sync-status-bar.suspended {
+  border-left-color: var(--warning);
+}
+.sync-status-icon {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.suspended .sync-status-icon {
+  color: var(--warning);
+}
+.sync-status-copy {
+  flex: 1;
+  min-width: 0;
+}
+.sync-status-copy strong {
+  display: block;
+  font-size: 1rem;
+}
+.sync-status-copy > span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 62ch;
+  margin-top: 0.25rem;
+}
+.sync-status-bar > .button {
+  white-space: nowrap;
+}
+.sync-nav {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-top: 1.35rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.sync-nav a {
+  padding: 0.85rem 0.15rem;
+  min-height: 48px;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 550;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sync-nav a[aria-current="page"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+.sync-nav a:hover {
+  color: var(--text);
+}
+.sync-count {
+  background: var(--soft);
+  color: var(--accent);
+  padding: 0 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.sync-section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1.2rem;
+  margin-bottom: 1.25rem;
+}
+.sync-section-heading h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.sync-section-heading p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.4rem 0 0;
+  max-width: 65ch;
+}
+.sync-section-heading > .muted {
+  font-size: 0.75rem;
+}
+.sync-section-heading > .button {
+  flex-shrink: 0;
+}
+.sync-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 2.5rem;
+}
+.sync-modes {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.sync-modes label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 1rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  min-width: 0;
+}
+.sync-modes label.selected {
+  background: var(--soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.sync-modes input {
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.sync-modes strong {
+  font-size: 0.9rem;
+  display: block;
+}
+.sync-modes small {
+  font-size: 0.73rem;
+  display: block;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+.sync-caption {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.85rem 0 1.25rem;
+}
+.sync-facts {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.sync-facts > div {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.sync-facts dt {
+  color: var(--muted);
+}
+.sync-facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sync-ledger > a {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  text-decoration: none;
+  color: var(--text);
+  padding: 1.05rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.sync-ledger > a:first-child {
+  padding-top: 0.25rem;
+}
+.sync-ledger > a:hover {
+  color: var(--accent);
+}
+.sync-ledger > a > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.sync-ledger strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.sync-ledger small {
+  display: block;
+  font-size: 0.77rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+.sync-ledger b {
+  font-size: 1.4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sync-ledger > a > span:last-child {
+  color: var(--accent);
+}
+.sync-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 1.25rem;
+  font-size: 0.82rem;
+}
+.sync-note > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.sync-table table {
+  table-layout: fixed;
+  font-size: 0.82rem;
+}
+.sync-table th {
+  font-size: 0.73rem;
+  background: var(--surface);
+}
+.sync-table th:first-child {
+  width: 34%;
+}
+.sync-table td,
+.sync-table th {
+  padding: 0.85rem 0.65rem;
+  overflow-wrap: anywhere;
+}
+.sync-table td:first-child,
+.sync-table th:first-child {
+  padding-left: 0.8rem;
+}
+.sync-table td {
+  vertical-align: middle;
+}
+.sync-table td small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.73rem;
+  margin-top: 0.35rem;
+}
+.sync-table tr:hover {
+  background: color-mix(in srgb, var(--soft) 40%, transparent);
+}
+.sync-resource {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sync-resource > a {
+  font-weight: 600;
+  text-decoration: none;
+}
+.sync-resource > a:hover {
+  text-decoration: underline;
+}
+.sync-kind {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.sync-inline-error {
+  color: var(--danger);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+.sync-due {
+  font-weight: 500;
+  font-size: 0.82rem;
+}
+.sync-row-actions {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sync-row-actions a {
+  font-size: 0.78rem;
+}
+.sync-row-actions .button {
+  font-size: 0.78rem;
+  padding: 0.4rem 0.65rem;
+}
+.sync-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 3rem;
+}
+.sync-settings > .notice {
+  grid-column: 1/-1;
+}
+.sync-priorities .field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.sync-priorities label {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.sync-priorities input {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.sync-settings .sync-section-heading {
+  flex-wrap: wrap;
+}
+.sync-history-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.sync-history-tabs .button[aria-pressed="true"] {
+  background: var(--soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sync-wrap {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.sync-media-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.sync-media-list > li {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.sync-media-list .sync-resource {
+  flex: 1;
+}
+.sync-media-list strong {
+  font-size: 0.95rem;
+}
+.sync-media-list small,
+.sync-media-list .sync-wrap {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.sync-file-icon {
+  display: grid;
+  place-items: center;
+  background: var(--soft);
+  color: var(--accent);
+  width: 44px;
+  height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.sync-media-state {
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+.sync-media-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--soft);
+  margin-bottom: 1.2rem;
+  border-radius: 4px;
+}
+.sync-media-detail > span {
+  font-size: 0.8rem;
+}
+.sync-affected {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 1rem 0 1.4rem;
+  font-size: 0.85rem;
+}
+.sync-affected h3 {
+  font-size: 0.85rem;
+  margin: 0;
+}
+.sync-upload-progress {
+  margin: 1rem 0;
+}
+.sync-upload-progress span {
+  display: block;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.sync-upload-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+@media (max-width: 1100px) {
+  .sync-overview {
+    gap: 1.5rem;
+    grid-template-columns: 1fr;
+  }
+  .sync-modes label {
+    padding: 1rem;
+  }
+  .sync-overview .sync-section + .sync-section {
+    border-top: 1px solid var(--line);
+    padding-top: 1.5rem;
+  }
+}
+@media (max-width: 700px) {
+  .sync-status-bar {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .sync-status-copy {
+    flex-basis: calc(100% - 60px);
+  }
+  .sync-status-bar > .button {
+    margin-left: auto;
+  }
+  .sync-nav {
+    gap: 0.15rem 1.1rem;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .sync-section-heading {
+    flex-wrap: wrap;
+  }
+  .sync-section-heading .button {
+    width: 100%;
+  }
+  .sync-modes {
+    gap: 0.35rem;
+  }
+  .sync-modes label {
+    flex-direction: column;
+    padding: 0.75rem 0.6rem;
+    gap: 0.45rem;
+  }
+  .sync-facts > div {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .sync-facts dd {
+    text-align: left;
+  }
+  .sync-settings {
+    display: block;
+  }
+  .sync-settings .sync-section + .sync-section {
+    border-top: 1px solid var(--line);
+  }
+  .sync-table table,
+  .sync-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .sync-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .sync-table tr {
+    display: block;
+    border-bottom: 1px solid var(--line);
+    padding: 0.85rem 0;
+  }
+  .sync-table td,
+  .sync-table td:first-child {
+    display: block;
+    padding: 0.35rem 0;
+    border: 0;
+  }
+  .sync-table td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 0.7rem;
+    margin-bottom: 0.2rem;
+  }
+  .sync-table td:first-child::before {
+    display: none;
+  }
+  .sync-table td:last-child {
+    padding-top: 0.6rem;
+  }
+  .sync-media-list > li {
+    flex-wrap: wrap;
+    gap: 0.85rem;
+  }
+  .sync-media-list > li > .button {
+    margin-left: calc(44px + 0.85rem);
+  }
+  .sync-media-list .sync-resource {
+    flex-basis: calc(100% - 64px);
+  }
+  .sync-filters > .field {
+    flex: 1 1 140px;
+  }
+  .sync-filters > .field:first-child {
+    flex-basis: calc(100% - 100px);
+  }
+}

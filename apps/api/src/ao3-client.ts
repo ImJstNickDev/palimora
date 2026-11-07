@@ -1,3 +1,4 @@
+import { syncGate } from "./ao3-policy";
 import { pool } from "./db";
 import { seal, unseal } from "./security";
 import { retryAfter, classifyAO3 } from "./ao3-availability";
@@ -75,8 +76,7 @@ export class AO3Client {
         throw new SyncError("AO3_ACCOUNT_CHANGED", 60000);
       if (this.stopped() || c.paused || c.mode === "force_offline")
         throw new SyncError("AO3_PAUSED", 60000);
-      if (c.mode !== "force_online" && c.observed_state !== "online")
-        throw new SyncError("AO3_OFFLINE", 300000);
+      if (syncGate(c) !== null) throw new SyncError("AO3_OFFLINE", 300000);
       const due = Math.max(
         c.next_request_at.getTime(),
         c.cooldown_until?.getTime() ?? 0,
@@ -89,6 +89,17 @@ export class AO3Client {
           setTimeout(r, Math.min(500, due - Date.now())),
         );
       }
+      const current = (
+        await db.query(
+          "SELECT paused,mode,observed_state,cooldown_until,credentials FROM ao3_control",
+        )
+      ).rows[0];
+      if (syncGate(current) !== null) throw new SyncError("AO3_PAUSED", 60000);
+      if (
+        this.credentialVersion !== undefined &&
+        current.credentials !== this.credentialVersion
+      )
+        throw new SyncError("AO3_ACCOUNT_CHANGED", 60000);
       await db.query(
         "UPDATE ao3_control SET next_request_at=now()+spacing_ms*interval '1 millisecond'",
       );

@@ -259,6 +259,31 @@ export const api = {
       next: z.string().nullable(),
     }),
   ),
+  ao3Media: endpoint(
+    "get",
+    "/admin/ao3/media",
+    z.object({
+      cursor: z.uuid().optional(),
+      q: z.string().max(200).default(""),
+    }),
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.uuid(),
+          url: z.string(),
+          error: z.string(),
+          failed_at: z.string().nullable(),
+          attempts: z.number(),
+          has_local_copy: z.boolean(),
+          work_count: z.number(),
+          works: z.array(z.object({ id: z.uuid(), title: z.string() })),
+          upload_state: z.enum(["receiving", "queued"]).nullable(),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
   ao3UploadStart: endpoint(
     "post",
     "/admin/ao3/uploads",
@@ -291,6 +316,10 @@ export const api = {
     "get",
     "/admin/ao3/jobs",
     z.object({
+      kind: z
+        .enum(["all", "work", "discovery", "backfill", "entity", "media"])
+        .default("all"),
+      q: z.string().max(200).default(""),
       cursor: z.uuid().optional(),
       job: z.uuid().optional(),
       state: z
@@ -311,6 +340,18 @@ export const api = {
           target: z.string(),
           state: z.string(),
           priority: z.number(),
+          title: z.string().nullable(),
+          work_id: z.uuid().nullable(),
+          execution: z.enum([
+            "deleted",
+            "paused",
+            "stopping",
+            "running",
+            "waiting_service",
+            "scheduled",
+            "ready",
+          ]),
+          eligible_at: z.string().nullable(),
           due_at: z.string(),
           started_at: z.string().nullable(),
           checked_at: z.string().nullable(),
@@ -320,6 +361,7 @@ export const api = {
           checkpoint: json,
         }),
       ),
+      media_unrecoverable: z.number(),
       counts: z.array(z.object({ state: z.string(), count: z.number() })),
       runs: z.array(
         z.object({
@@ -402,9 +444,11 @@ export const api = {
         ]),
         checked_at: z.string().nullable(),
         next_probe_at: z.string(),
+        probe_eligible_at: z.string().nullable(),
         cooldown_until: z.string().nullable(),
         failures: z.number(),
         eligible: z.boolean(),
+        gate: z.string().nullable(),
       }),
       history: z.array(
         z.object({

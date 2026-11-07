@@ -1,3 +1,4 @@
+import { syncGate, jobExecution } from "../apps/api/src/ao3-policy";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -10,6 +11,22 @@ import {
 const search =
   '<html><title>Search Works | Archive of Our Own</title><form action="/works/search"><input name="work_search[query]"></form></html>';
 test("AO3 health requires a usable search page and preserves rate limits", () => {
+  const c = {
+    mode: "force_online",
+    paused: false,
+    observed_state: "maintenance",
+    cooldown_until: null,
+  };
+  assert.equal(syncGate(c), "maintenance");
+  const local = {
+    kind: "media",
+    checkpoint: { upload: "id" },
+    due_at: new Date(0),
+    state: "pending",
+  };
+  assert.equal(jobExecution(local, c).execution, "ready");
+  assert.equal(jobExecution(local, { ...c, paused: true }).execution, "paused");
+  assert.equal(jobExecution({ ...local, checkpoint: {} }, c).eligible_at, null);
   assert.equal(classifyAO3(200, search), "online");
   assert.equal(
     classifyAO3(

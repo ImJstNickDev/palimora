@@ -820,3 +820,12 @@ query dell'indice usate dalla discovery. La policy effettiva viene controllata a
 runtime e, se conferma il divieto, il lavoro resta sospeso con errore esplicito.
 Non si dichiara verificata né completata una scansione remota vietata o non eseguita.
 Nessuna implementazione della Milestone 5, nessuna modifica ai dump originali.
+
+### Rework pannello AO3 — 2026-11-07
+
+Navigazione in cinque sezioni, controlli disponibilità espliciti, coda con stato
+eseguibile derivato dalla policy e recupero guidato dei soli media mancanti.
+Verifica mirata: nessun tentativo durante manutenzione neppure con Online forzato;
+scadenze sospese senza ETA, elenco 404/410 distinto dagli errori temporanei.
+Smoke browser con API/PostgreSQL reali: cambio modalità persistente, pausa lavoro,
+selezione media e upload, layout desktop/mobile e tema scuro.

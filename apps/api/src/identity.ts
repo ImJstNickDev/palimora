@@ -304,13 +304,14 @@ export class Identity {
       case "ao3UploadStart":
       case "ao3UploadChunk":
       case "ao3UploadFinish":
+      case "ao3Media":
       case "ao3Jobs":
       case "ao3Manual":
       case "ao3JobControl":
       case "ao3Account":
       case "ao3Priorities": {
         const result = await syncAdmin(db, op, x);
-        if (op !== "ao3Jobs" && op !== "ao3UploadChunk")
+        if (op !== "ao3Jobs" && op !== "ao3Media" && op !== "ao3UploadChunk")
           await this.audit(db, c, op, x.id, {
             kind: x.kind,
             action: x.action,

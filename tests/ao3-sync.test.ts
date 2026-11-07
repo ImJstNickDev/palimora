@@ -528,9 +528,54 @@ test(
           ])
         ).rows[0].checkpoint.record,
       );
+      const attemptsBefore = Number(
+        (await pool.query("SELECT count(*) FROM ao3_runs")).rows[0].count,
+      );
+      await pool.query(
+        "UPDATE ao3_control SET mode='force_online',cooldown_until=NULL",
+      );
+      await pool.query(
+        "UPDATE ao3_jobs SET due_at=now(),started_at=now()-interval '2 hours' WHERE id=$1",
+        [deepJob],
+      );
+      await executeSync(deepJob);
+      assert.equal(
+        Number(
+          (await pool.query("SELECT count(*) FROM ao3_runs")).rows[0].count,
+        ),
+        attemptsBefore,
+        "maintenance blocks even Online with an expired cooldown",
+      );
+      const suspended = await transaction((db) => syncAdmin(db, "ao3Jobs", {}));
+      assert.equal(
+        suspended.jobs.find((j: any) => j.id === deepJob).execution,
+        "waiting_service",
+      );
+      assert.equal(
+        suspended.jobs.find((j: any) => j.id === deepJob).eligible_at,
+        null,
+      );
+      await pool.query(
+        "UPDATE ao3_jobs SET error='MEDIA_UNRECOVERABLE',attempts=1 WHERE id=$1",
+        [mediaJob.id],
+      );
+      await pool.query(
+        "INSERT INTO ao3_jobs(kind,target,error) VALUES('media','https://media.example.test/temporary.png','MEDIA_NETWORK')",
+      );
+      const missing = await transaction((db) => syncAdmin(db, "ao3Media", {}));
+      assert.equal(missing.items.length, 1);
+      assert.equal(missing.items[0].url, mediaURL);
+      assert.equal(missing.items[0].has_local_copy, true);
+      assert.equal(missing.items[0].work_count, 1);
+      assert.equal(missing.items[0].works[0].id, head.id);
+      assert.equal(
+        (await transaction((db) => syncAdmin(db, "ao3Media", { q: "absent" })))
+          .items.length,
+        0,
+      );
       threadUnavailable = false;
       await pool.query(
-        "UPDATE ao3_control SET cooldown_until=NULL,next_request_at=now()",
+        "UPDATE ao3_control SET observed_state='online',cooldown_until=NULL,next_request_at=now()",
       );
       await pool.query(
         "UPDATE ao3_jobs SET due_at=now(),started_at=now()-interval '2 hours' WHERE id=$1",

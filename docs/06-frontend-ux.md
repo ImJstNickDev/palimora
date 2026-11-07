@@ -199,3 +199,64 @@ ultima verifica, copie già conservate e opere coinvolte. Selezionare una risors
 apre il dialogo di recupero: URL non editabile, file locale e avanzamento reale;
 la copia entra nella coda locale esistente. Errori temporanei e URL non ancora
 verificati non vengono presentati come irrecuperabili.
+
+### Biblioteca personale: prima integrazione
+
+`/library` espone bookmark, Mark for Later e cronologia tramite viste nell'URL,
+filtri e paginazione. Il lettore riusa lo stesso editor dei bookmark della
+biblioteca: note testuali, tag personali (uno per riga) e raccomandazione.
+I bookmark creati da questa UI sono privati. Il modulo conserva il testo in caso
+di conflitto e richiede di riaprire la versione aggiornata prima di salvare.
+Collezioni, progressi e annotazioni sono descritti nella sezione successiva.
+
+### Collezioni, progressi e annotazioni
+
+La biblioteca collega `/collections` e il lettore/editor bookmark offre
+«Aggiungi a collezione». Dettagli, opere, inviti e membri condividono i componenti
+esistenti; le azioni dipendono dal ruolo restituito dal server. L'eliminazione
+richiede conferma e conserva le opere archiviate.
+
+Il lettore campiona la posizione testuale dopo lo scorrimento e salva dopo una
+breve stabilizzazione. Stato e percentuale sono visibili anche in biblioteca.
+«Riprendi lettura» usa la posizione riallineata nella versione selezionata, senza
+forzare uno snapshot storico. Un conflitto conserva la posizione locale in memoria
+e offre esplicitamente quella locale o quella salvata. Le annotazioni si creano
+dalla selezione del testo; mostrano citazione, autore, condivisione e collegamento
+alla versione originale. Il mancato riallineamento rimane visibile.
+
+### Esperienza sociale, statistiche e notifiche
+
+La biblioteca collega statistiche, attività, sottoscrizioni e centro notifiche.
+Opere, autori e serie offrono lo stesso controllo di sottoscrizione; il comando
+«Consiglia» nelle opere salvate e nel lettore invia una nota privata. Preferenze
+con destinatari distinti per attività e statistiche; profili non autorizzati non
+rivelano dati. Elenchi condivisi attraverso le collezioni esistenti.
+
+Statistiche con etichette che distinguono opere completate, parole di quelle opere
+e tempo attivo misurato; andamento dei completamenti in UTC. Notifiche persistenti
+lette/non lette, filtro non lette e aggiornamento periodico ogni 30 s. Preferenze
+per consigli, aggiornamenti, push e aggregazione singola/5 minuti/ora. Attivazione
+push soltanto su gesto esplicito, permessi negati gestibili, elenco dispositivi e
+revoca. IT/EN e layout compatti desktop/mobile/tablet.
+
+### Integrazione offline (5C)
+
+«Salva offline» nel lettore e «Offline» nella navigazione della biblioteca.
+Elenco compatto per opera/versione con dimensione, data, apertura, rimozione e
+nuova versione disponibile; spazio del browser, richiesta di persistenza e
+installazione nello stesso percorso. Navigazione offline limitata alle copie:
+capitoli, Entire Work, aspetto, Work Skins e lettura immersiva riusano il reader.
+
+Progresso/stato e note proprie si salvano sul dispositivo; l'indicazione distingue
+il salvataggio locale dalla conferma server. Riconnessione e riapertura online
+riprendono la coda, con retry periodico mentre l'app è aperta. I conflitti mostrano
+valore locale/server e scelta esplicita; una nota non più condivisibile può essere
+conservata come nuova nota privata. Nessun merge automatico di testi o permessi.
+Le note nuove senza rete sono private; una condivisione già esistente viene
+ricontrollata dalle ACL durante il replay. La sincronizzazione non richiede il
+supporto browser a Background Sync e riparte alla successiva apertura.
+
+Revisione della biblioteca: navigazione personale uniforme anche nelle collezioni,
+nessun collegamento duplicato alle collezioni, stato locale visibile nel lettore,
+conferma prima di eliminare modifiche non inviate al logout. Installazione e
+aggiornamento applicativo non modificano le copie delle opere.

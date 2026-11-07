@@ -30,6 +30,7 @@
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "sanitize-html": "2.18.1",
+    "web-push": "^3.6.7",
     "yazl": "3.3.1"
   },
   "devDependencies": {
@@ -38,6 +39,7 @@
     "@types/express": "5.0.3",
     "@types/pg": "8.15.6",
     "@types/sanitize-html": "2.16.2",
+    "@types/web-push": "^3.6.4",
     "@types/yazl": "3.3.1"
   }
 }

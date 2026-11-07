@@ -157,7 +157,7 @@ APP_DATA_ROOT=/mnt/sdb/palimora-dev-data ./scripts/prepare-host.sh
 
 In NPM: dominio `dev.palimora.imjstnick.com`, schema upstream **HTTP**, host **palimora-dev-gateway**, porta **80**, **Websockets Support** attivo e certificato HTTPS sul dominio. Per il primo Owner vale la procedura di bootstrap sopra. Nessuna porta host pubblicata; solo il gateway partecipa alla rete frontend esterna.
 
-I sorgenti React, CSS, componenti UI e contratti frontend sono bind mount in sola lettura: le modifiche dell'host attivano Vite HMR senza rebuild. Host consentito esplicito e WebSocket sullo stesso dominio HTTPS; il template gateway di sviluppo permette gli script inline richiesti da React Refresh, lasciando invariata la CSP di produzione. Configurazione basata sulle [opzioni server Vite](https://vite.dev/config/server-options). API e worker usano immagini compilate: dopo modifiche backend, contratti condivisi, migrazioni o dipendenze eseguire `./scripts/dev.sh`. Lo script aggiorna insieme API, worker e dipendenze Vite, attende i servizi e riavvia il gateway; conserva dati e sessioni. Il solo HMR del frontend non aggiorna l’API: lasciare il backend precedente produce endpoint mancanti o contratti incompatibili. Redis e ingest sono parte della review dalla Milestone 2; il worker aggiorna l’inventario ma importa soltanto i batch richiesti dall’admin. Per arrestare usare `down`: i dati persistenti restano sul disco.
+I sorgenti React, CSS, componenti UI e contratti frontend sono bind mount in sola lettura: le modifiche dell'host attivano Vite HMR senza rebuild. Host consentito esplicito e WebSocket sullo stesso dominio HTTPS; il template gateway di sviluppo permette gli script inline richiesti da React Refresh, lasciando invariata la CSP di produzione. Configurazione basata sulle [opzioni server Vite](https://vite.dev/config/server-options). API e worker usano immagini compilate: dopo modifiche backend, contratti condivisi, migrazioni o dipendenze eseguire `./scripts/dev.sh`. Lo script aggiorna insieme API, worker e dipendenze Vite, attende i servizi e riavvia il gateway; conserva dati e sessioni. Il solo HMR del frontend non aggiorna l’API: lasciare il backend precedente produce endpoint mancanti o contratti incompatibili. Le risposte di autenticazione vengono validate prima di inizializzare lo stato locale: una risposta senza i riferimenti di sessione richiesti segnala versioni incompatibili, senza confondere l’errore con credenziali o 2FA errati. Redis e ingest sono parte della review dalla Milestone 2; il worker aggiorna l’inventario ma importa soltanto i batch richiesti dall’admin. Per arrestare usare `down`: i dati persistenti restano sul disco.
 
 Il Compose di review imposta `PALIMORA_DEV=1` soltanto su API e ingest.
 In Storage l’Owner può usare **Reset archivio dev**, confermando con `RESET`:
@@ -235,3 +235,41 @@ Il worker `ingest` aderisce alle reti `app` ed `egress`; solo il gateway resta s
 `prod-frontend`. I gateway dev e produzione ammettono body da 1 MiB soltanto sotto
 `/api/v1/admin/ao3/uploads/`, per i segmenti media da 512 KiB codificati base64.
 Gli altri endpoint mantengono il limite di 32 KiB.
+
+### Web Push e consegne personali
+
+Il consumatore delle notifiche gira con le proiezioni API; la consegna Web Push
+gira nel worker ingest/sync esistente, unico dei due con rete `egress`.
+`push_deliveries` conserva generazione, tentativi e prossima esecuzione in
+PostgreSQL; advisory lock coordinano repliche e revoche. Backoff e `Retry-After`,
+rimozione degli endpoint 404/410, errore visibile dopo 100 tentativi e riattivazione
+dal dispositivo. Delivery almeno una volta; il tag browser sostituisce l'avviso
+precedente. Shutdown attende il tentativo attivo, senza cancellare lavori pendenti.
+
+Chiavi VAPID generate una volta e salvate nel DB; chiave privata e subscription
+cifrate con `AUTH_KEY`. Il worker riceve `APP_ORIGIN`; `VAPID_SUBJECT` facoltativo
+accetta un URL HTTPS o un'identità `mailto:`, con default all'origin. Nessun invio
+email. Nessuna credenziale di provider proprietario richiesta. Endpoint HTTPS
+verificati prima dell'invio, DNS pubblico vincolato alla connessione, nessun redirect
+seguito. Messaggi generici localizzati evitano di esporre titoli, utenti o note
+sullo schermo bloccato. Il blocco 5C estende lo stesso `/push-worker.js` con
+la sola shell pubblica; dati e copie private rimangono fuori da Cache Storage.
+
+### PWA e client offline (5C)
+
+La build Vite genera il precache esatto degli asset pubblici e dell'HTML senza
+stato utente. Lo stesso `/push-worker.js` mantiene Web Push e gestisce la shell;
+non intercetta né memorizza `/api/`. Aggiornamenti installati in attesa, attivati
+su comando dopo il completamento delle scritture locali; le schede controllate
+si ricaricano. Manifest, icone 192/512 e avvio su `/offline`; HTTPS richiesto fuori
+localhost. Il server Vite di sviluppo non precachea moduli HMR: verificare offline
+con build e `vite preview` o gateway di produzione.
+
+`offline-store.ts` è l'adapter IndexedDB; `offline.ts` coordina copie e operazioni
+usando i contratti API esistenti e la stessa funzione di riallineamento del server.
+Il lettore React rimane unico. Futuri contenitori Capacitor potranno sostituire
+l'adapter di persistenza/trasporto e installazione, senza un secondo modello di
+bookmark, progresso o annotazione; nessun client nativo distribuito in questa fase.
+
+Fonti piattaforma: [ciclo di vita service worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers),
+[installabilità](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).

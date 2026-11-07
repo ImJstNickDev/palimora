@@ -1,3 +1,4 @@
+import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { readParseCache } from "./archive-catalog";
 import { IngestPipeline } from "./ingest-pipeline";
 import { progressKey } from "./ingest-progress";
@@ -696,6 +697,7 @@ async function main() {
       });
   }, 30000);
   inventoryTimer.unref();
+  startPersonalWorker("push");
   try {
     await runQueue(
       async (id) => {
@@ -706,6 +708,7 @@ async function main() {
     );
   } finally {
     clearInterval(inventoryTimer);
+    await stopPersonalWorker();
     await pool.end();
   }
 }

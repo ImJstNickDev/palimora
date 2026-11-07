@@ -1,9 +1,13 @@
+import { socialOperation } from "./social";
+import { readingOperation } from "./reading";
+import { collectionOperation } from "./collections";
+import { libraryOperation, recordReading } from "./library";
 import { syncAdmin } from "./ao3-admin";
 import { ao3MonitorOperation, recordAO3Open } from "./ao3-monitor";
 import { downloadWork } from "./reader-download";
 import { catalogOperation } from "./catalog";
 import { archiveOperation } from "./archive-admin";
-import { Injectable } from "@nestjs/common";
+import { HttpException, Injectable } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { randomUUID, randomBytes } from "node:crypto";
 import {
@@ -72,29 +76,40 @@ export class Identity {
       ],
     );
   }
-  async rate(c: Context, op: Operation, input: any) {
-    if (api[op].method === "get") return;
+  async rate(c: Context, op: Operation) {
+    if (
+      api[op].method === "get" ||
+      ["login", "passkeyLoginFinish", "logout"].includes(op)
+    )
+      return;
     const sensitive = [
-      "login",
       "register",
       "setup",
       "passkeyLoginStart",
-      "passkeyLoginFinish",
       "inviteInfo",
     ].includes(op);
     const buckets = [
       {
         key:
-          (op === "ao3UploadChunk" ? "media-ip:" : "ip:") +
-          digest(c.request.ip ?? ""),
-        limit: op === "ao3UploadChunk" ? 6000 : sensitive ? 40 : 180,
+          (op === "passkeyLoginStart"
+            ? "login-challenge-ip:"
+            : op === "ao3UploadChunk"
+              ? "media-ip:"
+              : op === "readingHeartbeat"
+                ? "reading-time-ip:"
+                : "ip:") + digest(c.request.ip ?? ""),
+        limit:
+          op === "passkeyLoginStart"
+            ? 60
+            : op === "ao3UploadChunk"
+              ? 6000
+              : op === "readingHeartbeat"
+                ? 1800
+                : sensitive
+                  ? 40
+                  : 180,
       },
     ];
-    if (op === "login")
-      buckets.push({
-        key: "login:" + digest(input.username.toLowerCase()),
-        limit: 15,
-      });
     if (
       c.request.cookies?.palimora_session &&
       [
@@ -117,17 +132,75 @@ export class Identity {
     await transaction(async (db) => {
       for (const bucket of buckets) {
         const r = await db.query(
-          `INSERT INTO rate_limits(key,hits,until_at) VALUES($1,1,now()+interval '15 minutes') ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN rate_limits.until_at<now() THEN 1 ELSE rate_limits.hits+1 END,until_at=CASE WHEN rate_limits.until_at<now() THEN now()+interval '15 minutes' ELSE rate_limits.until_at END RETURNING hits`,
-          [bucket.key],
+          `INSERT INTO rate_limits(key,hits,until_at) VALUES($1,1,now()+$2*interval '1 second') ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN rate_limits.until_at<now() THEN 1 ELSE rate_limits.hits+1 END,until_at=CASE WHEN rate_limits.until_at<now() THEN now()+$2*interval '1 second' ELSE rate_limits.until_at END RETURNING hits,ceil(extract(epoch FROM until_at-now()))::int AS retry_after`,
+          [bucket.key, op === "passkeyLoginStart" ? 60 : 900],
         );
-        if (r.rows[0].hits > bucket.limit) fail("RATE_LIMITED", 429);
+        if (r.rows[0].hits > bucket.limit) {
+          c.response.setHeader(
+            "Retry-After",
+            Math.max(1, r.rows[0].retry_after),
+          );
+          fail("RATE_LIMITED", 429);
+        }
       }
     });
   }
-  async execute(op: Operation, input: any, c: Context) {
-    await this.rate(c, op, input);
+  private async loginAttempt(
+    db: DB,
+    op: "login" | "passkeyLoginFinish",
+    input: any,
+    c: Context,
+  ) {
+    const keys = ["login-failure-ip:" + digest(c.request.ip ?? "")];
+    if (op === "login")
+      keys.push("login-failure-user:" + digest(input.username.toLowerCase()));
+    const blocked = await db.query(
+      `SELECT ceil(extract(epoch FROM max(until_at)-clock_timestamp()))::int AS retry_after
+       FROM rate_limits WHERE key=ANY($1::text[]) AND hits>=4 AND until_at>clock_timestamp()`,
+      [keys],
+    );
+    if (blocked.rows[0].retry_after > 0) {
+      c.response.setHeader("Retry-After", blocked.rows[0].retry_after);
+      fail("RATE_LIMITED", 429);
+    }
+    await db.query("SAVEPOINT login_attempt");
     try {
-      return await transaction(async (db) => {
+      return { result: serialize(await this.run(db, op, input, c)) };
+    } catch (error) {
+      const response =
+        error instanceof HttpException ? error.getResponse() : null;
+      const code =
+        response && typeof response === "object" && "code" in response
+          ? response.code
+          : null;
+      if (
+        ![
+          "CREDENTIALS_INVALID",
+          "SECOND_FACTOR_INVALID",
+          "PASSKEY_INVALID",
+          "CHALLENGE_EXPIRED",
+        ].includes(String(code))
+      )
+        throw error;
+      // Roll back authentication effects, but commit failed attempts under the same
+      // identity lock so concurrent requests cannot bypass the limit.
+      await db.query("ROLLBACK TO SAVEPOINT login_attempt");
+      for (const key of keys) {
+        await db.query(
+          `INSERT INTO rate_limits(key,hits,until_at) VALUES($1,1,clock_timestamp()+interval '1 minute')
+           ON CONFLICT(key) DO UPDATE SET
+             hits=CASE WHEN rate_limits.until_at<=clock_timestamp() THEN 1 ELSE rate_limits.hits+1 END,
+             until_at=CASE WHEN rate_limits.until_at<=clock_timestamp() THEN clock_timestamp()+interval '1 minute' ELSE rate_limits.until_at END`,
+          [key],
+        );
+      }
+      return { error };
+    }
+  }
+  async execute(op: Operation, input: any, c: Context) {
+    await this.rate(c, op);
+    try {
+      const outcome = await transaction(async (db) => {
         // Serialize identity mutations, including authority checks and immediate revocation.
         if (api[op].method !== "get")
           await db.query("SELECT pg_advisory_xact_lock(70210402)");
@@ -159,9 +232,13 @@ export class Identity {
             [c.session.id],
           );
         }
+        if (op === "login" || op === "passkeyLoginFinish")
+          return this.loginAttempt(db, op, input, c);
         const result = await this.run(db, op, input, c);
-        return op === "readerDownload" ? result : serialize(result);
+        return { result: op === "readerDownload" ? result : serialize(result) };
       });
+      if ("error" in outcome) throw outcome.error;
+      return outcome.result;
     } catch (e) {
       if (api[op].method !== "get") {
         await transaction((db) =>
@@ -175,8 +252,8 @@ export class Identity {
     const token = random(),
       csrf = random(),
       id = randomUUID();
-    await db.query(
-      "INSERT INTO sessions(id,user_id,token_hash,csrf,device,ip) VALUES($1,$2,$3,$4,$5,$6)",
+    const createdSession = await db.query(
+      "INSERT INTO sessions(id,user_id,token_hash,csrf,device,ip) VALUES($1,$2,$3,$4,$5,$6) RETURNING expires_at",
       [
         id,
         user.id,
@@ -194,10 +271,14 @@ export class Identity {
       maxAge: 30 * 86400000,
     });
     c.user = user;
-    c.session = { id, csrf };
-    return { user: publicUser(user), csrf };
+    c.session = { id, csrf, expires_at: createdSession.rows[0].expires_at };
+    return {
+      user: publicUser(user),
+      csrf,
+      session: { id, expires_at: c.session.expires_at.toISOString() },
+    };
   }
-  private async factor(db: DB, user: any, code?: string) {
+  private async factor(db: DB, user: any, code?: string, allowReuse = false) {
     if (!user.totp_secret) return;
     if (!code) fail("SECOND_FACTOR_REQUIRED", 401);
     const r = await db.query(
@@ -209,12 +290,12 @@ export class Identity {
       delta = otp.validate({ token: code, window: 1 });
     if (delta === null) fail("SECOND_FACTOR_INVALID", 401);
     const counter = Math.floor(Date.now() / 30000) + delta;
-    if (counter <= Number(user.totp_counter))
+    if (!allowReuse && counter <= Number(user.totp_counter))
       fail("SECOND_FACTOR_INVALID", 401);
-    await db.query("UPDATE users SET totp_counter=$2 WHERE id=$1", [
-      user.id,
-      counter,
-    ]);
+    await db.query(
+      "UPDATE users SET totp_counter=GREATEST(totp_counter,$2) WHERE id=$1",
+      [user.id, counter],
+    );
   }
   private async proof(db: DB, c: Context, input: any) {
     if (!(await verifyPassword(c.user.password_hash, input.password)))
@@ -336,9 +417,47 @@ export class Identity {
         )
           fail("NOT_FOUND", 404);
         await recordAO3Open(db, x.id);
+        await recordReading(db, c.user.id, x.id);
         return { ok: true };
       }
 
+      case "socialPreferences":
+      case "socialPreferencesSave":
+      case "personalStatistics":
+      case "personalActivity":
+      case "readingHeartbeat":
+      case "recommendWork":
+      case "subscriptionStatus":
+      case "subscriptionSave":
+      case "subscriptions":
+      case "notifications":
+      case "notificationRead":
+      case "pushDevices":
+      case "pushRegister":
+      case "pushRevoke":
+        return socialOperation(db, op, x, c.user.id, c.session.id);
+      case "readingProgress":
+      case "readingSave":
+      case "annotationList":
+      case "annotationSave":
+        return readingOperation(db, op, x, c.user.id);
+      case "collectionList":
+      case "collectionCreate":
+      case "collectionDetail":
+      case "collectionUpdate":
+      case "collectionMember":
+      case "collectionRespond":
+      case "collectionWork": {
+        const result = await collectionOperation(db, op, x, c.user.id);
+        if (api[op].method !== "get") await this.audit(db, c, op, x.id);
+        return result;
+      }
+      case "libraryList":
+      case "libraryWork":
+      case "bookmarkSave":
+      case "libraryLater":
+      case "libraryForget":
+        return libraryOperation(db, op, x, c.user.id);
       case "readerDownload":
         return downloadWork(db, x);
       case "readerInteractions":
@@ -466,7 +585,7 @@ export class Identity {
           recovered = !!recovery.rowCount;
         }
         if (!valid && !recovered) fail("CREDENTIALS_INVALID", 401);
-        if (!recovered) await this.factor(db, user, x.code);
+        if (!recovered) await this.factor(db, user, x.code, true);
         const result = await this.newSession(db, c, user);
         await this.audit(db, c, "login", user.id, {
           method: recovered ? "recovery" : "password",
@@ -474,7 +593,14 @@ export class Identity {
         return result;
       }
       case "me":
-        return { user: publicUser(c.user), csrf: c.session.csrf };
+        return {
+          user: publicUser(c.user),
+          csrf: c.session.csrf,
+          session: {
+            id: c.session.id,
+            expires_at: c.session.expires_at.toISOString(),
+          },
+        };
       case "logout":
         await db.query("UPDATE sessions SET revoked_at=now() WHERE id=$1", [
           c.session.id,

@@ -1,3 +1,4 @@
+import { registerApp } from "./pwa";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -11,3 +12,5 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </QueryClientProvider>,
 );
+
+void registerApp().catch(() => {});

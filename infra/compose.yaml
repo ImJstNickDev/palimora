@@ -86,6 +86,8 @@ services:
     command: [node, apps/api/dist/ingest-worker.js]
     restart: unless-stopped
     environment:
+      APP_ORIGIN: ${APP_ORIGIN:?Set HTTPS origin}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       DB_PASSWORD_FILE: /run/secrets/database
       AUTH_KEY_FILE: /run/secrets/auth
       ARCHIVE_RESERVE_BYTES: ${ARCHIVE_RESERVE_BYTES:-268435456}

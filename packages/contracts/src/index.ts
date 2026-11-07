@@ -1,3 +1,4 @@
+export { alignAnchor } from "./reading-anchor";
 import {
   CatalogBibliography,
   SourceComment,
@@ -65,7 +66,11 @@ const login = z.object({
   password: z.string().min(1).max(128),
   code: z.string().max(100).optional(),
 });
-const auth = z.object({ user: User, csrf: z.string() });
+const auth = z.object({
+  user: User,
+  csrf: z.string(),
+  session: z.object({ id: z.uuid(), expires_at: z.string() }),
+});
 const page = z.object({
   q: z.string().max(100).optional(),
   cursor: z.string().max(100).optional(),
@@ -131,7 +136,366 @@ const work = z.object({
   canonical_work_id: z.string().nullable().optional(),
 });
 const readerSelection = id.extend({ snapshot: z.uuid().optional() });
+export const Bookmark = z.object({
+  notes: z.string().max(10000),
+  tags: z.array(z.string().trim().min(1).max(100)).max(50),
+  recommended: z.boolean(),
+  private: z.boolean(),
+});
+export const ReadingState = z.enum([
+  "to_read",
+  "reading",
+  "completed",
+  "paused",
+  "abandoned",
+]);
+const libraryEntry = z.object({
+  work_id: z.uuid(),
+  title: z.string(),
+  bookmark: Bookmark.nullable(),
+  revision: z.number().int(),
+  later: z.boolean(),
+  last_viewed: z.string().nullable(),
+  progress: z.object({ state: ReadingState, percent: z.number() }).nullable(),
+});
+const collection = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  description: z.string(),
+  revision: z.number().int(),
+  role: z.enum(["Owner", "Editor", "Viewer"]),
+  accepted: z.boolean(),
+});
+const collectionFields = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().max(4000),
+});
+
+export const TextAnchor = z.object({
+  snapshot: z.uuid(),
+  chapter: z.uuid(),
+  offset: z.number().int().nonnegative(),
+  quote: z.string().min(1).max(4000),
+  prefix: z.string().max(32),
+  suffix: z.string().max(32),
+});
+const alignment = z.object({
+  anchor: TextAnchor.nullable(),
+  status: z.enum(["exact", "moved", "unresolved"]),
+});
+const progress = z.object({
+  revision: z.number().int(),
+  state: ReadingState,
+  anchor: TextAnchor.nullable(),
+  percent: z.number(),
+  aligned: alignment,
+});
+const annotation = z.object({
+  id: z.uuid(),
+  user_id: z.uuid(),
+  username: z.string(),
+  body: z.string(),
+  revision: z.number().int(),
+  collection_id: z.uuid().nullable(),
+  anchor: TextAnchor,
+  aligned: alignment,
+  editable: z.boolean(),
+});
+const audience = z.enum(["private", "selected", "instance"]);
+export const SocialPreferences = z.object({
+  revision: z.number().int().nonnegative(),
+  activity: audience,
+  statistics: audience,
+  activity_users: z.array(z.string().min(1).max(100)).max(100),
+  statistics_users: z.array(z.string().min(1).max(100)).max(100),
+  recommendations: z.boolean(),
+  updates: z.boolean(),
+  push: z.boolean(),
+  grouping: z.union([z.literal(0), z.literal(300), z.literal(3600)]),
+});
+const subscriptionTarget = z.object({
+  kind: z.enum(["work", "author", "series"]),
+  target: z.string().min(1).max(64),
+});
+const statisticsResult = z.object({
+  works: z.number(),
+  completed: z.number(),
+  words: z.number().nullable(),
+  unknown_words: z.number(),
+  seconds: z.number(),
+  measured_since: z.string(),
+  fandoms: z.array(z.object({ name: z.string(), works: z.number() })),
+  timeline: z.array(z.object({ day: z.string(), completed: z.number() })),
+});
 export const api = {
+  socialPreferences: endpoint("get", "/me/social", empty, SocialPreferences),
+  socialPreferencesSave: endpoint(
+    "post",
+    "/me/social",
+    SocialPreferences,
+    SocialPreferences,
+  ),
+  personalStatistics: endpoint(
+    "get",
+    "/library/statistics",
+    z.object({ username: z.string().max(100).optional() }),
+    statisticsResult,
+  ),
+  personalActivity: endpoint(
+    "get",
+    "/library/activity",
+    z.object({
+      username: z.string().max(100).optional(),
+      cursor: z.uuid().optional(),
+    }),
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.uuid(),
+          title: z.string(),
+          state: ReadingState,
+          percent: z.number(),
+        }),
+      ),
+      next: z.uuid().nullable(),
+    }),
+  ),
+  readingHeartbeat: endpoint(
+    "post",
+    "/reading-time/:id",
+    id.extend({ requestId: z.uuid(), active: z.boolean().default(true) }),
+    ok,
+  ),
+  recommendWork: endpoint(
+    "post",
+    "/recommendations",
+    z.object({
+      requestId: z.uuid(),
+      work: z.uuid(),
+      username: z.string().min(1).max(100),
+      note: z.string().max(2000),
+    }),
+    ok,
+  ),
+  subscriptionStatus: endpoint(
+    "get",
+    "/subscriptions/status",
+    subscriptionTarget,
+    z.object({ mode: z.enum(["chapters", "changes"]).nullable() }),
+  ),
+  subscriptionSave: endpoint(
+    "post",
+    "/subscriptions",
+    subscriptionTarget.extend({
+      mode: z.enum(["chapters", "changes"]).nullable(),
+    }),
+    ok,
+  ),
+  subscriptions: endpoint(
+    "get",
+    "/subscriptions",
+    page,
+    z.object({
+      items: z.array(
+        subscriptionTarget.extend({
+          name: z.string(),
+          mode: z.enum(["chapters", "changes"]),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+  ),
+  notifications: endpoint(
+    "get",
+    "/notifications",
+    z.object({
+      cursor: z.uuid().optional(),
+      unread: z.enum(["true", "false"]).default("false"),
+    }),
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.uuid(),
+          kind: z.enum(["update", "recommendation"]),
+          work_id: z.uuid(),
+          title: z.string(),
+          versions: z.number(),
+          read_at: z.string().nullable(),
+          updated_at: z.string(),
+          sender: z.string().nullable(),
+          note: z.string().nullable(),
+        }),
+      ),
+      next: z.uuid().nullable(),
+      unread: z.number(),
+    }),
+  ),
+  notificationRead: endpoint(
+    "post",
+    "/notifications/:id",
+    id.extend({ read: z.boolean() }),
+    ok,
+  ),
+  pushDevices: endpoint(
+    "get",
+    "/me/push",
+    empty,
+    z.object({
+      publicKey: z.string(),
+      devices: z.array(
+        z.object({
+          id: z.uuid(),
+          name: z.string(),
+          current: z.boolean(),
+          last_error: z.string().nullable(),
+        }),
+      ),
+    }),
+  ),
+  pushRegister: endpoint(
+    "post",
+    "/me/push",
+    z.object({
+      name: z.string().trim().min(1).max(100),
+      endpoint: z.url().max(4096),
+      keys: z.object({
+        p256dh: z.string().regex(/^[A-Za-z0-9_-]{87}$/),
+        auth: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
+      }),
+    }),
+    ok,
+  ),
+  pushRevoke: endpoint("post", "/me/push/:id/revoke", id, ok),
+
+  readingProgress: endpoint(
+    "get",
+    "/reading-progress/:id",
+    readerSelection,
+    progress,
+  ),
+  readingSave: endpoint(
+    "post",
+    "/reading-progress/:id",
+    id.extend({
+      requestId: z.uuid().optional(),
+      revision: z.number().int().nonnegative(),
+      anchor: TextAnchor,
+      state: ReadingState,
+    }),
+    progress,
+  ),
+  annotationList: endpoint(
+    "get",
+    "/annotations/:id",
+    readerSelection.extend({ cursor: z.uuid().optional() }),
+    z.object({ items: z.array(annotation), next: z.uuid().nullable() }),
+  ),
+  annotationSave: endpoint(
+    "post",
+    "/annotations/:id",
+    id.extend({
+      requestId: z.uuid().optional(),
+      annotation_id: z.uuid(),
+      revision: z.number().int().nonnegative(),
+      anchor: TextAnchor,
+      body: z.string().trim().min(1).max(10000),
+      collection_id: z.uuid().nullable(),
+      deleted: z.boolean(),
+    }),
+    ok,
+  ),
+
+  collectionList: endpoint(
+    "get",
+    "/collections",
+    page,
+    z.object({ items: z.array(collection), next: z.uuid().nullable() }),
+  ),
+  collectionCreate: endpoint(
+    "post",
+    "/collections",
+    collectionFields.extend({ id: z.uuid() }),
+    ok,
+  ),
+  collectionDetail: endpoint(
+    "get",
+    "/collections/:id",
+    id.extend({ cursor: z.uuid().optional() }),
+    z.object({
+      collection,
+      members: z.array(
+        z.object({
+          user_id: z.uuid(),
+          username: z.string(),
+          role: z.enum(["Owner", "Editor", "Viewer"]),
+          accepted: z.boolean(),
+        }),
+      ),
+      works: z.array(z.object({ id: z.uuid(), title: z.string() })),
+      next: z.uuid().nullable(),
+    }),
+  ),
+  collectionUpdate: endpoint(
+    "post",
+    "/collections/:id",
+    collectionFields.extend({
+      id: z.uuid(),
+      revision: z.number().int(),
+      deleted: z.boolean(),
+    }),
+    ok,
+  ),
+  collectionMember: endpoint(
+    "post",
+    "/collections/:id/members",
+    id.extend({
+      username: z.string().min(1).max(100),
+      role: z.enum(["Editor", "Viewer"]).nullable(),
+    }),
+    ok,
+  ),
+  collectionRespond: endpoint(
+    "post",
+    "/collections/:id/respond",
+    id.extend({ accept: z.boolean() }),
+    ok,
+  ),
+  collectionWork: endpoint(
+    "post",
+    "/collections/:id/works",
+    id.extend({ work: z.uuid(), remove: z.boolean() }),
+    ok,
+  ),
+
+  libraryList: endpoint(
+    "get",
+    "/library",
+    z.object({
+      kind: z.enum(["bookmarks", "later", "history"]).default("bookmarks"),
+      q: z.string().max(200).optional(),
+      tag: z.string().max(100).optional(),
+      cursor: z.uuid().optional(),
+    }),
+    z.object({ items: z.array(libraryEntry), next: z.uuid().nullable() }),
+  ),
+  libraryWork: endpoint("get", "/library/works/:id", id, libraryEntry),
+  bookmarkSave: endpoint(
+    "post",
+    "/bookmarks/:id",
+    id.extend({
+      bookmark: Bookmark.nullable(),
+      revision: z.number().int().nonnegative(),
+    }),
+    libraryEntry,
+  ),
+  libraryLater: endpoint(
+    "post",
+    "/library/works/:id/later",
+    id.extend({ later: z.boolean() }),
+    ok,
+  ),
+  libraryForget: endpoint("post", "/library/works/:id/forget", id, ok),
+
   catalogWorks: endpoint(
     "get",
     "/works",

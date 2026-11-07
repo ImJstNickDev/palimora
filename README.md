@@ -1,6 +1,6 @@
 # Palimora — documentazione autorevole
 
-**Stato:** Milestone 1–4 implementate e integrate; verifiche AO3 locali, acquisizioni ufficiali non attestate · **Data:** 2026-11-07 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
+**Stato:** Milestone 1–5 implementate e integrate; verifiche AO3 locali, acquisizioni ufficiali non attestate · **Data:** 2026-11-07 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
 
 Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moderna e privata. Importa i dump disponibili, normalizza e conserva contenuti, media e versioni in un formato proprio, e si sincronizza responsabilmente con AO3 quando la fonte è disponibile e consente l’acquisizione. Non è un fork Rails, non è un servizio ufficiale AO3 e non pubblica opere per conto degli utenti.
 
@@ -49,7 +49,7 @@ Verifica completa su uno ZIP reale e relativi SQLite in
 
 ## Utilizzo e verifica
 
-Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. L’Archive Engine è disponibile agli amministratori. Catalogo AO3, ricerca OpenSearch, bibliografia, versioni, lettore e download sono integrati. Perimetro e misure della Milestone 3 in [09](docs/09-milestone.md#ao3-experience--completata-2026-11-06). La sincronizzazione della Milestone 4 è integrata; funzionamento, verifiche locali e restrizioni remote in [05](docs/05-sincronizzazione.md#implementazione-operativa--2026-11-07).
+Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. L’Archive Engine è disponibile agli amministratori. Catalogo AO3, ricerca OpenSearch, bibliografia, versioni, lettore e download sono integrati. Perimetro e misure della Milestone 3 in [09](docs/09-milestone.md#ao3-experience--completata-2026-11-06). La sincronizzazione della Milestone 4 è integrata; funzionamento, verifiche locali e restrizioni remote in [05](docs/05-sincronizzazione.md#implementazione-operativa--2026-11-07). Biblioteca personale, condivisione, statistiche, notifiche e PWA offline sono integrate; verifiche e limiti in [09](docs/09-milestone.md#blocco-5c--pwa-lettura-offline-e-integrazione-finale).
 
 - **Deployment e aggiornamenti:** [procedura autorevole in 02](docs/02-architettura.md#avvio-della-produzione).
 - **Regole di sicurezza e recupero:** [contratto operativo in 07](docs/07-identita-admin.md#contratto-operativo-foundation).

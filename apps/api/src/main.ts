@@ -1,3 +1,4 @@
+import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { closePdf } from "./reader-pdf";
 import { posix } from "node:path";
 import { byteRange, streamMedia } from "./reader-media";
@@ -169,6 +170,10 @@ class Errors implements ExceptionFilter {
   controllers: [ApiController],
   providers: [
     Identity,
+    {
+      provide: "PERSONAL_LIFECYCLE",
+      useValue: { onApplicationShutdown: stopPersonalWorker },
+    },
     { provide: "PDF_LIFECYCLE", useValue: { onApplicationShutdown: closePdf } },
   ],
 })
@@ -233,6 +238,7 @@ export async function start() {
     res.json(openapi()),
   );
   await app.get(Identity).initialize();
+  startPersonalWorker();
   app.enableShutdownHooks();
   let projecting = false;
   const catalogTimer = setInterval(async () => {
@@ -275,6 +281,7 @@ export async function start() {
     clearInterval(cleanup);
     clearInterval(catalogTimer);
     clearInterval(searchTimer);
+    await stopPersonalWorker();
     await app.close();
     await pool.end();
   };

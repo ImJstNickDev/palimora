@@ -103,6 +103,8 @@ Il client usa in sequenza `totpStart` (password → QR/chiave), `totpVerify` (se
 
 ### Login progressivo e recovery
 
+Il login accetta il riutilizzo dei TOTP ancora validi. I fallimenti sono limitati a quattro in 60 secondi per IP e username, senza contare successi, `SECOND_FACTOR_REQUIRED` o logout. Un 429 `RATE_LIMITED` espone `Retry-After` in secondi; il client mostra l’attesa effettiva. Dettagli delle quote in [07](07-identita-admin.md#contratto-operativo-foundation).
+
 `POST /auth/login` mantiene `{username, password, code?}`. `SECOND_FACTOR_REQUIRED` viene emesso solo dopo password corretta se TOTP è attivo; il client invia quindi le stesse credenziali con il codice a sei cifre. Il campo `password` accetta in alternativa un recovery code monouso: con codice valido non serve `code`. Errori per account inesistente, disabilitato, eliminato, password errata o recovery non valido restano `CREDENTIALS_INVALID`. Le operazioni di sicurezza autenticate continuano a richiedere la password reale. Le route WebAuthn mantengono il contratto precedente, compatibile con conditional mediation.
 
 ## Contratti Archive Engine
@@ -241,3 +243,67 @@ La coda accetta filtri `state`, `kind`, `q`, `cursor`; ogni lavoro espone
 `GET /api/v1/admin/ao3/media` (ACL admin) elenca i fallimenti `MEDIA_UNRECOVERABLE`,
 con ricerca URL, cursore, riferimenti alle opere e stato dell'upload. La migrazione
 027 indicizza errori media e ricerca inversa dei riferimenti.
+
+### Biblioteca personale: prima slice
+
+`libraryList`, `libraryWork`, `bookmarkSave`, `libraryLater` e `libraryForget`
+sono nel registro condiviso `/api/v1`. Ogni query usa l'utente della sessione;
+nessun ID utente fornito dal client determina il proprietario. `bookmarkSave`
+richiede la revisione letta (zero per la prima creazione) e restituisce quella
+nuova. Anche una cancellazione incrementa la revisione; un retry con revisione
+vecchia restituisce `CONFLICT` senza mutazioni. Le liste paginano 50 identità
+in ordine UUID stabile, con filtro titolo/note e tag esatto. `readerOpen`
+aggiorna anche la cronologia privata, senza togliere Mark for Later.
+
+### Collezioni e lettura personale
+
+Il registro condiviso espone `collectionList/Create/Detail/Update/Member/Respond/Work`,
+`readingProgress/Save` e `annotationList/Save`. Creazione collezione e annotazione
+usano UUID del client; associazioni opera sono idempotenti per chiave composta.
+Modifiche di metadati, progressi e annotazioni richiedono la revisione corrente:
+`CONFLICT` non sovrascrive la modifica concorrente. Liste collezioni, opere e
+annotazioni paginano per UUID stabile in gruppi di 50.
+
+Inviti alla condivisione rivolti a username locali: solo l'Owner invita/revoca o
+cambia ruolo, il destinatario accetta/rifiuta e può lasciare la collezione.
+Editor modifica metadati e opere; Viewer legge. Le annotazioni sono modificabili
+solo dall'autore, condivisibili con collezioni di cui è Owner/Editor e leggibili
+dai membri accettati. Condividere aggiunge anche l'opera alla collezione. Revoca
+e cancellazione collezione sono verificate a ogni lettura, senza autorizzazioni
+conservate nella cache server. Le operazioni sulle collezioni sono auditate.
+
+### Contratti 5B
+
+Registro condiviso: `socialPreferences/Save`, `personalStatistics/Activity`,
+`readingHeartbeat`, `recommendWork`, `subscriptionStatus/Save`, `subscriptions`,
+`notifications`, `notificationRead`, `pushDevices/Register/Revoke`.
+Preferenze protette da revisione; gli ID utente effettivi provengono dalla sessione.
+Consultazione altrui autorizzata separatamente per attività e statistiche;
+revoche applicate a ogni richiesta. Le risposte dispositivi escludono endpoint,
+chiavi private e subscription cifrate. Notifiche paginate per data aggiornamento
+con UUID come spareggio; opere e sottoscrizioni mantengono cursori stabili.
+
+Le sottoscrizioni partono dallo snapshot transazionale PostgreSQL, usando
+`pg_visible_in_snapshot` sul top-level XID del produttore outbox; nessuna
+assunzione che l'ordine dei sequence ID coincida con quello dei commit.
+Il payload Web Push contiene soltanto la lingua, il service worker apre sempre
+il centro notifiche locale. Sessione attiva e preferenze sono ricontrollate prima
+della consegna. La coda e le ricevute restano disponibili dopo un riavvio.
+
+### Contratti 5C
+
+Le risposte di autenticazione aggiungono `session: {id, expires_at}`.
+`readingSave` e `annotationSave` accettano `requestId` UUID opzionale per compatibilità;
+il client lo genera prima del primo tentativo e lo conserva fino all'ack. Le ricevute
+sono separate per utente; autenticazione/CSRF precedono anche il replay idempotente.
+Revisioni concorrenti restano `CONFLICT`. Una risoluzione esplicita genera una nuova
+operazione con revisione riletta; le note eliminate da remoto possono essere
+conservate con nuova identità privata, senza resuscitare una condivisione revocata.
+
+Le copie locali sono selezionate con `local=1&snapshot=…` nell'URL del reader.
+Questo parametro riguarda solo il client: API, identità opera, snapshot, ancore e
+validazione rimangono quelli canonici. `alignAnchor` è condiviso tra server e client.
+Download e scritture IndexedDB verificano la partizione attiva nella transazione;
+la coda è serializzata tra schede e ogni mutazione conserva la revisione attesa.
+Le Blob URL dei media esistono solo nel documento del lettore autenticato; nessuna
+risposta privata viene inserita in Cache Storage o servita dal service worker.

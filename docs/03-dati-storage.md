@@ -263,3 +263,92 @@ I binding URL→oggetto sono versionati nei manifest; chunk e asset condividono 
 hash globali esistenti. Credenziali/sessioni tecniche appartengono soltanto al DB
 operativo cifrato, mai ai documenti canonici. Staging upload e checkpoint sono
 ripristinabili col database, indipendenti dai dump. Policy e stati in 05.
+
+### Biblioteca personale: bookmark e cronologia
+
+La migrazione `028_personal_library.sql` introduce `library_bookmarks` e
+`library_readings`, entrambe con chiave `(user_id, work_id)` e FK all'identità
+archivistica esistente. Tag e note dei bookmark non modificano la tassonomia
+sorgente. La cancellazione del bookmark conserva una tombstone con revisione
+crescente: una scrittura da un dispositivo arretrato riceve `CONFLICT` e non
+ripristina dati cancellati. Cronologia e Mark for Later condividono la riga di
+lettura; rimuovere la cronologia non rimuove il contrassegno per dopo.
+
+### Collezioni, progressi e ancore di lettura
+
+Le migrazioni 029–030 aggiungono collezioni locali, membri invitati/accettati e
+associazioni alle identità opera. Il proprietario è immutabile. Le mutazioni
+passano da una verifica SQL nella transazione; i trigger controllano inoltre
+l'attore locale `palimora.user`, impedendo modifiche di Viewer, gestione membri
+senza Owner e trasferimenti della proprietà. Eliminare una collezione la nasconde,
+non elimina opere o annotazioni originali. Le collezioni sorgente AO3 rimangono
+bibliografia, non diventano contenitori locali modificabili.
+
+Progressi e annotazioni usano `{snapshot, chapter, offset, quote, prefix, suffix}`:
+offset UTF-16 nel testo del capitolo reso dal renderer sicuro, incluso il titolo;
+contesti fino a 32 caratteri. Il server valida l'ancora sullo snapshot selezionato.
+Il riallineamento considera solo la stessa identità capitolo e richiede una sola
+corrispondenza esatta di citazione e contesti. Nessuna corrispondenza o più
+corrispondenze producono `unresolved`. Per il progresso si offre l'inizio del
+capitolo corrispondente se presente; le annotazioni non vengono collocate a caso.
+
+Ogni salvataggio del progresso crea una revisione append-only; note, riferimenti,
+condivisione e cancellazioni delle annotazioni sono anch'essi conservati in una
+storia append-only. Le letture riallineate sono proiezioni, non riscritture delle
+ancore. La percentuale è calcolata dal server sulla posizione testuale nell'opera;
+`completed` è una scelta esplicita, pari al 100%. Bookmark, cronologia e Mark for
+Later mantengono i modelli esistenti; salvare progresso aggiorna la cronologia
+senza rimuovere il contrassegno per dopo.
+
+### Statistiche, social e notifiche (031)
+
+Le statistiche leggono i progressi esistenti: opere distinte con progressi,
+primo completamento per opera, parole sorgente dello snapshot completato,
+completamenti per giorno UTC e fandom per opere distinte. I conteggi parole
+assenti restano sconosciuti, con conteggio separato delle opere interessate.
+Le parole delle opere parzialmente lette non vengono estrapolate dal progresso.
+Il tempo misura intervalli di presenza attiva nel lettore: heartbeat ogni 15 s,
+scheda visibile, testo nel viewport e attività negli ultimi 60 s; perdita del
+focus/visibilità interrompe la misura. Intervalli server tra 5 e 25 s,
+unione PostgreSQL dei periodi sovrapposti tra
+sessioni. Nessuna ricostruzione del tempo precedente all'installazione della 031.
+UUID delle misure deduplicano i retry, compreso il primo heartbeat senza durata.
+
+`personal_settings` separa visibilità di attività e statistiche (privata,
+utenti selezionati, istanza), ricezione consigli, aggiornamenti, push e
+raggruppamento. I consigli sono unici per mittente/destinatario/opera; le liste
+condivise restano le collezioni con le loro ACL.
+
+Sottoscrizioni locali a identità opera e autori/serie del catalogo. La 031 aggiunge
+`producer_xid` solo ai nuovi eventi outbox e conserva lo snapshot transazionale
+all'iscrizione: le pubblicazioni ancora in corso vengono consegnate dopo commit,
+anche se il loro timestamp precede l'iscrizione. Ricevute per evento e vincolo
+utente/opera/snapshot rendono il consumatore ripetibile. Le proiezioni bibliografiche
+dello snapshot determinano i destinatari, incluse le protezioni dell'anonimato.
+Il centro notifiche raggruppa per utente/opera/finestra, mantenendo separati i consigli.
+
+### Copie offline e ricevute (5C)
+
+IndexedDB `palimora-personal-v1` contiene una sola partizione attiva utente/sessione:
+metadati e quattro documenti sanificati per snapshot (skin on/off, tema chiaro/scuro),
+media locali come Blob, progresso, sole annotazioni proprie e coda delle mutazioni.
+Il lettore seleziona capitoli e tipografia dagli stessi documenti, senza reinterpretare
+HTML sorgente. I media non disponibili nell'archivio non vengono acquisiti dal client.
+
+Download espliciti, risorse scaricate in sequenza con avanzamento e annullamento;
+la copia viene pubblicata in un'unica transazione solo dopo il completamento.
+Errore/quota/annullamento conservano la copia precedente. Le risorse di staging
+abbandonate da un arresto sono eliminate dopo 24 ore al successivo accesso online.
+Una nuova versione crea una copia distinta: quelle precedenti rimangono consultabili
+e rimovibili. Le copie con operazioni pendenti non si eliminano prima della risoluzione.
+Lo spazio riportato per copia misura documenti e media; la quota complessiva proviene
+da StorageManager e include l'overhead del browser. Persistenza richiesta su comando,
+mai assunta come garanzia contro cancellazioni manuali o rimozione dati del browser.
+
+Migrazione 032: `library_mutation_receipts`, chiave utente/request UUID, operazione,
+hash input e risultato, nella stessa transazione delle revisioni personali. Replay
+identici restituiscono il risultato originale; UUID riutilizzati con payload diversi
+sono rifiutati. La coda locale conserva una sequenza monotona, revisione e riferimenti originali;
+non usa l'orologio del dispositivo per decidere il vincitore di un conflitto.
+Il tempo di lettura offline non viene stimato; completamenti e cronologia diventano
+visibili nelle statistiche quando il server conferma il salvataggio.

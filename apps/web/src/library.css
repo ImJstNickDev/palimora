@@ -1,0 +1,137 @@
+.personal-library {
+  max-width: 76rem;
+  margin-inline: auto;
+}
+.library-tabs,
+.library-controls,
+.library-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+.library-tabs {
+  border-bottom: 1px solid var(--line);
+  padding-block: 0.6rem;
+}
+.library-tabs a {
+  padding: 0.4rem 0.65rem;
+}
+.library-tabs [aria-current] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.4rem;
+}
+.library-filter {
+  align-items: end;
+  margin-block: 1rem;
+}
+.library-filter .field {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+.library-entries {
+  list-style: none;
+  padding: 0;
+}
+.library-entries > li {
+  border-block-start: 1px solid var(--line);
+  padding-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.library-entries h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+.bookmark-notes {
+  white-space: pre-wrap;
+}
+.bookmark-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  list-style: none;
+  padding: 0;
+}
+.bookmark-editor {
+  display: grid;
+  gap: 1rem;
+}
+.bookmark-editor label:not(.check) {
+  display: grid;
+  gap: 0.4rem;
+}
+.bookmark-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.library-controls .notice {
+  flex-basis: 100%;
+}
+@media (max-width: 40rem) {
+  .library-tabs {
+    gap: 0.25rem;
+  }
+  .library-tabs a {
+    padding: 0.5rem 0.25rem;
+  }
+}
+.reading-tools {
+  border-block: 1px solid var(--line);
+  padding-block: 0.7rem;
+  margin-block: 1rem;
+}
+.reading-tools .field {
+  margin: 0;
+}
+.reading-tools details {
+  margin-top: 0.65rem;
+}
+.reading-tools blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.reading-tools .library-entries {
+  max-height: 28rem;
+  overflow: auto;
+}
+.personal-library .library-entries > li > .button {
+  margin-left: 0.5rem;
+}
+.personal-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 2rem;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.personal-totals dt {
+  font-weight: 600;
+}
+.personal-totals dd {
+  margin: 0.3rem 0 0;
+}
+.social-preferences {
+  max-width: 44rem;
+  display: grid;
+  gap: 0.8rem;
+  margin-block: 1rem 2rem;
+}
+.social-preferences fieldset {
+  border: 1px solid var(--line);
+  padding: 0.8rem;
+  min-width: 0;
+}
+.social-preferences textarea {
+  display: block;
+  width: 100%;
+  font: inherit;
+}
+@media (max-width: 40rem) {
+  .personal-totals {
+    grid-template-columns: 1fr;
+  }
+}

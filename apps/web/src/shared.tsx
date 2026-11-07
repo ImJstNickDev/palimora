@@ -5,7 +5,12 @@ import type { User, ErrorCode } from "@palimora/contracts";
 import { ApiFailure } from "./api";
 export const client = new QueryClient({
   defaultOptions: {
-    queries: { retry: false, staleTime: 15000, refetchOnWindowFocus: true },
+    queries: {
+      networkMode: "always",
+      retry: false,
+      staleTime: 15000,
+      refetchOnWindowFocus: true,
+    },
   },
 });
 export type Prefs = User["preferences"];
@@ -28,13 +33,37 @@ export const useText = () => {
   return (it: string, en: string) => (language === "it" ? it : en);
 };
 export function errorText(error: unknown, t: ReturnType<typeof useText>) {
+  if (
+    error instanceof ApiFailure &&
+    error.code === "RATE_LIMITED" &&
+    error.retryAfterSeconds
+  ) {
+    const seconds = error.retryAfterSeconds;
+    return seconds < 60
+      ? t(
+          `Troppi tentativi. Riprova tra ${seconds} secondi.`,
+          `Too many attempts. Try again in ${seconds} seconds.`,
+        )
+      : t(
+          `Troppi tentativi. Riprova tra ${Math.ceil(seconds / 60)} min.`,
+          `Too many attempts. Try again in ${Math.ceil(seconds / 60)} min.`,
+        );
+  }
   const code =
     error instanceof ApiFailure
       ? error.code
       : error instanceof Error && error.message === "PASSWORD_MISMATCH"
         ? "PASSWORD_MISMATCH"
-        : "";
+        : error instanceof DOMException
+          ? error.name
+          : error instanceof Error
+            ? error.message
+            : "";
   const messages: Record<string, string> = {
+    API_VERSION_MISMATCH: t(
+      "Frontend e server non sono allineati. Aggiorna l’istanza e ricarica la pagina.",
+      "Frontend and server versions do not match. Update the instance and reload the page.",
+    ),
     SEARCH_UNAVAILABLE: t(
       "Ricerca temporaneamente non disponibile. Riprova.",
       "Search is temporarily unavailable. Try again.",
@@ -46,6 +75,35 @@ export function errorText(error: unknown, t: ReturnType<typeof useText>) {
     SEARCH_CURSOR_EXPIRED: t(
       "La pagina dei risultati è scaduta. Ricomincia la ricerca.",
       "The results page has expired. Start the search again.",
+    ),
+    OFFLINE_UPDATE_REQUIRED: t(
+      "Attiva l’aggiornamento dell’applicazione prima di salvare offline.",
+      "Activate the application update before saving offline.",
+    ),
+    OFFLINE_BUILD_REQUIRED: t(
+      "La lettura offline richiede la versione compilata dell’applicazione.",
+      "Offline reading requires the built application.",
+    ),
+    OFFLINE_UNSUPPORTED: t(
+      "Questo browser non supporta la lettura offline.",
+      "This browser does not support offline reading.",
+    ),
+    AbortError: t("Download annullato.", "Download cancelled."),
+    OFFLINE_UNAVAILABLE: t(
+      "Questa sezione richiede una connessione.",
+      "This section requires a connection.",
+    ),
+    OFFLINE_PENDING: t(
+      "Sincronizza o risolvi le modifiche in attesa prima di rimuovere la copia.",
+      "Sync or resolve pending changes before removing this copy.",
+    ),
+    OFFLINE_MEDIA_UNAVAILABLE: t(
+      "Download interrotto: un contenuto non è disponibile. La copia precedente è conservata.",
+      "Download stopped: content is unavailable. The previous copy is preserved.",
+    ),
+    QuotaExceededError: t(
+      "Spazio insufficiente. Rimuovi alcune copie e riprova.",
+      "Not enough space. Remove some copies and try again.",
     ),
     INVALID_INPUT: t(
       "Controlla i campi inseriti.",
@@ -82,12 +140,12 @@ export function errorText(error: unknown, t: ReturnType<typeof useText>) {
       "Enter your authentication or recovery code.",
     ),
     SECOND_FACTOR_INVALID: t(
-      "Codice non valido o già utilizzato. Attendi il prossimo codice.",
-      "Invalid or already used code. Wait for the next code.",
+      "Codice non valido. Verifica il codice e riprova.",
+      "Invalid code. Check the code and try again.",
     ),
     RATE_LIMITED: t(
-      "Troppi tentativi. Riprova tra 15 minuti.",
-      "Too many attempts. Try again in 15 minutes.",
+      "Troppi tentativi. Riprova più tardi.",
+      "Too many attempts. Try again later.",
     ),
     PASSKEY_INVALID: t(
       "Passkey non verificata. Riprova.",

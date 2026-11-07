@@ -148,11 +148,24 @@ code paginate, errori, scadenze, cronologia, pausa/ripresa individuale, sincroni
 manuale di opera/autore/serie/tag e upload media. Una verifica manuale dell'opera
 riparte dalla pagina corrente se il lavoro non è in esecuzione; il retry della
 coda conserva invece il checkpoint. Gli endpoint usano ACL admin,
-CSRF e audit esistenti. Le notifiche personali restano nella Milestone 5;
-il commit emette già gli eventi canonici senza introdurre abbonamenti paralleli.
+CSRF e audit esistenti. Il consumatore personale 5B usa gli eventi canonici
+emessi dal commit, secondo il contratto notifiche descritto sotto.
 
 La policy di esecuzione è condivisa da dispatcher, worker, client HTTP e risposte
 admin. `due_at` resta una scadenza persistente: durante sospensione l'API espone
 `waiting_service` e `eligible_at=null`, senza inventare una data di partenza.
 La sonda di disponibilità è distinta dalla sincronizzazione; upload locali restano
 eseguibili con AO3 indisponibile, salvo pausa globale.
+
+### Consumatore notifiche personali
+
+Il blocco 5B consuma `work.snapshot.published` dopo la proiezione dello snapshot;
+`preserved` e le sole osservazioni statistiche non producono nuovi capitoli.
+Confronto tra identità e hash dei capitoli della pubblicazione precedente:
+modalità `chapters` per nuove opere/capitoli, `changes` anche per testo modificato
+o capitoli rimossi. La UI parla di aggiornamenti **archiviati**, non attribuisce
+una data remota ai dump. Più sottoscrizioni corrispondenti producono una sola
+notifica per utente/opera/snapshot. Ricevute individuali evitano di saltare eventi
+committati fuori ordine. Semantica confrontata con
+[Subscription upstream](https://github.com/otwcode/otwarchive/blob/master/app/models/subscription.rb),
+senza riuso di codice Rails e senza email.

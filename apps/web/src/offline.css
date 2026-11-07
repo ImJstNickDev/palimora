@@ -1,0 +1,47 @@
+.offline-banner {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.offline-controls {
+  margin-block: 0.5rem;
+}
+.offline-controls progress {
+  width: 8rem;
+  max-width: 40vw;
+}
+.offline-storage {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.offline-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.library-entries blockquote,
+.bookmark-editor blockquote {
+  overflow-wrap: anywhere;
+}
+.personal-library .library-entries li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.library-tabs {
+  row-gap: 0.35rem;
+}
+@media (max-width: 600px) {
+  .offline-banner {
+    padding: 0.5rem;
+  }
+  .personal-library .library-controls {
+    align-items: flex-start;
+  }
+  .offline-storage {
+    line-height: 1.6;
+  }
+}

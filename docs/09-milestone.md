@@ -37,6 +37,8 @@
 
 ## Milestone 5 — Personal Library
 
+**Stato: implementata e integrata (5A, 5B, 5C), 2026-11-07.** Verifiche e limiti nella chiusura 5C in fondo al documento.
+
 **Deliverable:** bookmark, history/Mark for Later, subscriptions, liste e collezioni ACL condivise, annotazioni, stati/progressi sincronizzati, statistiche personali, visibilità consensuale, notifiche in-app e push, PWA con lettura offline e riconciliazione al ritorno online. La semantica AO3 originale non deve essere duplicata in modelli separati.
 
 **Verifica critica:** un Viewer non modifica una collezione; progresso e annotazioni non si perdono nei cambi di revisione; offline non espone la cache privata dopo cambio account.
@@ -88,6 +90,8 @@ Riproduzione: `./scripts/verify.sh` richiede Node, Docker Linux e Chromium Playw
 Review Sicurezza: verificati anche conferma password, aggiunta passkey da dialogo e wizard 2FA su viewport mobile. La suite HTTP copre attivazione differita, scadenza e vincolo di sessione della conferma, hash dei codici pendenti e recovery monouso; lo smoke browser esegue navigazione dalle card alle viste dedicate, Indietro del browser e ricarica del dettaglio, download dei codici, attivazione e disattivazione con recovery. Verifica completa: 15 test contratti/integrazione e uno smoke browser passati; audit npm senza vulnerabilità segnalate.
 
 Review login: 15 test contratti/integrazione e smoke browser passati con TOTP progressivo, componente OTP condiviso, accesso passkey tramite conditional mediation con autenticatore CTAP2 virtuale e recovery nel campo password. Verificati consumo concorrente monouso, rifiuto del replay, account disabilitati/eliminati e audit del metodo di recupero. API di review aggiornata; audit npm senza vulnerabilità segnalate.
+
+Review accesso — 2026-11-07: aggiornato il comportamento di login secondo [07](07-identita-admin.md#contratto-operativo-foundation). Passate 19 verifiche mirate (`identity`, `login-rate`, `auth-response`) su PostgreSQL isolato: esclusione dei successi e delle richieste 2FA dalla quota, fallimenti concorrenti, scadenza del blocco, isolamento delle quote, TOTP riutilizzabile finché valido, recovery monouso e rollback degli errori interni. Build API/web riuscite; Chromium sul dev verifica pagina di accesso e messaggio con l’attesa ricevuta in `Retry-After`.
 
 ## Verifica Archive Engine — 2026-11-06
 
@@ -829,3 +833,129 @@ Verifica mirata: nessun tentativo durante manutenzione neppure con Online forzat
 scadenze sospese senza ETA, elenco 404/410 distinto dagli errori temporanei.
 Smoke browser con API/PostgreSQL reali: cambio modalità persistente, pausa lavoro,
 selezione media e upload, layout desktop/mobile e tema scuro.
+
+## Personal Library — registro delle slice, 2026-11-07
+
+Prima slice (da sola non completava la Milestone 5): migrazione 028, contratti,
+servizio autenticato, bookmark privati con note/tag/raccomandazione e controllo
+revisione, Mark for Later e cronologia; pagina biblioteca e controlli nel lettore.
+La semantica distingue i [bookmark upstream](https://github.com/otwcode/otwarchive/blob/master/app/models/bookmark.rb)
+dalla [cronologia/Mark for Later](https://github.com/otwcode/otwarchive/blob/master/app/models/reading.rb);
+nessun codice Rails è stato copiato.
+
+Il completamento di collezioni, progressi e annotazioni, dei blocchi 5B/5C e
+della verifica complessiva è riportato nelle sezioni successive.
+
+Verifica della slice: build monorepo riuscita; due test mirati (contratti e
+integrazione PostgreSQL reale) passati; smoke Playwright passato su creazione,
+modifica mobile e rimozione bookmark, Mark for Later e cancellazione cronologia.
+Controllo overflow e screenshot a 390/820/1280 px; ispezione visuale mobile.
+La prova browser usa un DB effimero senza OpenSearch: non verifica la ricerca
+full-text, il cui worker segnala indisponibilità. Nessuna misura di prestazioni
+Personal Library è stata eseguita.
+
+### Blocco collezioni, progressi e annotazioni — 2026-11-07
+
+Implementati schema 029–030, contratti Zod versionati, servizi autenticati e UI:
+
+- Collezioni private/condivise, proprietà immutabile, inviti con accettazione,
+  ruoli Owner/Editor/Viewer, revoca/uscita, gestione metadati e opere, eliminazione
+  logica. ACL transazionali e trigger PostgreSQL impediscono scritture di Viewer;
+  le operazioni sono auditate. Semantica studiata nel modello
+  [Collection upstream](https://github.com/otwcode/otwarchive/blob/master/app/models/collection.rb),
+  senza copia di codice Rails; ruoli e condivisione locale seguono le specifiche Palimora.
+- Progresso automatico per capitolo e offset testuale, percentuale server-side,
+  cinque stati, ripresa nella versione selezionata, conflitti espliciti tra
+  dispositivi. Storia append-only; cronologia e Mark for Later riutilizzati.
+- Riallineamento per identità capitolo, citazione e contesto univoci. Originale
+  conservato, fallback all'inizio del capitolo corrispondente per il progresso;
+  capitoli mancanti o annotazioni ambigue non ricevono posizioni inventate.
+- Annotazioni dalla selezione nel lettore, private oppure condivise attraverso
+  collezioni, modifica riservata all'autore, revoche effettive, riferimenti e
+  revisioni storiche conservati. Condivisione aggiunge l'opera alla collezione.
+
+La lettura predefinita resta sull'ultima head valida. Nessuna funzione della
+Milestone 6, statistica personale, notifica, push o PWA introdotta in questo blocco.
+Alla chiusura di questo blocco la Milestone 5 rimaneva aperta per 5B/5C.
+
+Verifiche mirate del blocco: build monorepo passata; test PostgreSQL su inviti,
+Viewer/Editor/Owner, trigger anti-bypass, revoca della condivisione, scritture
+concorrenti del progresso, ancore originali immutabili, spostamento univoco,
+ambiguità e riscrittura completa del capitolo. Verificati anche i due test della
+slice bookmark esistente. Smoke Playwright con API e pack reali: creazione
+collezione, aggiunta opera, annotazione condivisa dalla selezione, stato persistente,
+autosalvataggio allo scorrimento e riapertura. Controllo responsive desktop,
+390 px e 820 px, screenshot e revisione visuale mobile. OpenSearch non avviato
+nella prova isolata; ricerca full-text esclusa da questa verifica. Nessuna
+prestazione dichiarata o benchmark aggiuntivo eseguito.
+
+### Blocco 5B — esperienza sociale, statistiche e notifiche
+
+Implementati migrazione 031, contratti, servizi e UI: statistiche dai progressi
+esistenti, tempo attivo senza duplicati tra dispositivi, completamenti distinti,
+parole note delle opere completate, fandom e andamento; privacy separata per
+attività/statistiche, destinatari selezionati, consigli privati e liste attraverso
+le collezioni; sottoscrizioni opere/autori/serie; centro notifiche persistente,
+preferenze e aggregazione; Web Push VAPID con dispositivi/revoche e coda durevole.
+L'API resta sulla rete interna; il worker egress esistente consegna i push.
+Nessun kudos/commento locale, email, lettura offline o intervento della Milestone 6.
+
+Verifiche mirate: build monorepo e validazione Compose; PostgreSQL reale su
+privacy/revoca, conteggi distinti e dati mancanti, unione intervalli sovrapposti,
+retry idempotenti, sottoscrizioni sovrapposte, aggregazione e commit concorrenti;
+cifratura/decifratura Web Push e firma VAPID; retry, ack, sessioni revocate e
+blocco endpoint privati. Smoke React/API con due account su preferenze,
+sottoscrizioni, invio consiglio e letto/non letto, desktop/390/820 px.
+La consegna a un dispositivo tramite provider push esterno non è stata attestata:
+trasporto implementato con Web Push reale, protocollo e coda verificati localmente.
+Nessuna misura prestazionale dichiarata. Alla chiusura 5B restava il blocco 5C.
+
+
+### Blocco 5C — PWA, lettura offline e integrazione finale
+
+**Milestone 5 completata e integrata, 2026-11-07.** Manifest e icone installabili,
+shell pubblica versionata, aggiornamento applicativo esplicito, copie locali per
+snapshot con capitoli/Entire Work, Work Skins e media acquisiti; lettore e modalità
+immersiva condivisi con l'online. Gestione download/annullamento/quota, persistenza
+richiedibile, cancellazione e nuove versioni senza sostituire copie valide a metà.
+
+Progresso, stati e annotazioni proprie hanno una coda locale durevole con sequenza
+monotona e ricevute PostgreSQL (032). Replay idempotente, conflitti espliciti,
+conservazione delle ancore e riallineamento condiviso. Separazione utente/sessione,
+logout anche offline con revoca differita, cleanup alla scadenza/revoca e tra schede;
+nessuna risposta privata nella cache del service worker. Riusati bookmark,
+cronologia, collezioni/ACL, statistiche, notifiche e unico worker push.
+
+Revisione UI/UX sulle sezioni 5A/5B/5C: navigazione delle collezioni uniforme,
+percorsi offline coerenti, salvataggi locali e conflitti riconoscibili, conferma
+al logout con modifiche pendenti, controlli compatti e date/numeri localizzati.
+
+Verifiche mirate passate:
+- Build monorepo, build frontend finale e validazione Compose.
+- PostgreSQL reale: ACL collezioni, CAS del progresso, ancore storiche/riallineamento,
+  replay concorrenti e rifiuto di request UUID riutilizzati con payload diverso.
+- Un flusso Chromium sulla build di produzione con CSP del gateway: perdita rete,
+  capitoli/Entire Work, media, Work Skin e tema scuro, lettura immersiva, annotazioni
+  e stati locali, **chiusura e riavvio del processo browser con profilo su disco
+  ancora offline**, riconnessione, conflitto con scrittura remota, replay senza
+  duplicati e ordine conservato con orologio del dispositivo arretrato.
+- Quota browser insufficiente senza perdita della copia precedente, nuova versione
+  con copia originale conservata, aggiornamento del service worker e riapertura;
+  logout offline, secondo account senza copie/annotazioni del primo, revoca remota
+  applicata alla riconnessione e assenza di `/api/` in Cache Storage.
+- Controllo responsive 390/820 px e revisione screenshot di biblioteca, collezioni,
+  statistiche, attività, sottoscrizioni, notifiche, privacy, offline e lettore;
+  flusso principale anche nel viewport desktop.
+
+Riproduzione: dopo `npm run build`, eseguire `npm run test:offline` con
+`TEST_DATABASE_URL` su un database di test vuoto e `ARCHIVE_ROOT` isolato.
+`verify.sh` prepara un database dedicato anche per questa verifica. La configurazione
+Playwright separata serve la build, evitando di testare il precache su moduli HMR.
+
+Limiti verificati/documentati: nessuna installazione su dispositivo fisico Android/
+iOS o Safari attestata; verificati manifest e ciclo di vita in Chromium, non i
+menu d'installazione dei sistemi operativi. Resta non attestata la ricezione Web
+Push tramite provider esterno già indicata in 5B. Revoche remote non conoscibili
+senza rete, coda ripresa mentre l'app è aperta o alla riapertura, tempo di lettura
+offline non stimato. Nessun benchmark aggiuntivo o SLO dichiarato. **Milestone 6
+non iniziata**, nessuna sincronizzazione di account personali AO3 introdotta.

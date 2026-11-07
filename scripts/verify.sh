@@ -27,5 +27,7 @@ docker run -d --name "${name}-redis" --label palimora.test=true --mount type=tmp
 export REDIS_HOST="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${name}-redis")"
 npm run build
 ./scripts/verify-search.sh
+docker exec "$name" createdb -U postgres palimora_offline_test
+TEST_DATABASE_URL="postgresql://postgres:palimora-test@${address}:5432/palimora_offline_test" ARCHIVE_ROOT="$verify_storage/offline" npm run test:offline
 npm audit --audit-level=moderate
 APP_ORIGIN=https://palimora.example.test docker compose -f infra/compose.yaml config --quiet

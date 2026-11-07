@@ -1,3 +1,14 @@
+import { pendingOperations } from "./offline";
+import { OfflineLibrary, OfflineRuntime, useOffline } from "./offline-ui";
+import {
+  Statistics,
+  Activity,
+  Subscriptions,
+  Notifications,
+  SocialSettings,
+} from "./social";
+import { Collections, CollectionDetail } from "./collections";
+import { Library } from "./library";
 import { AO3Monitor } from "./ao3";
 import { Catalog, Browse, Reader, BibliographyPage } from "./catalog";
 import { ArchiveStorage } from "./archive-operations";
@@ -18,8 +29,8 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Notice } from "@palimora/ui";
-import { call, ApiFailure } from "./api";
+import { Button, Notice, Modal } from "@palimora/ui";
+import { call, ApiFailure, settleWrites } from "./api";
 import {
   client,
   Auth,
@@ -33,7 +44,9 @@ import { Setup, Login, Register } from "./access";
 import { Account, Security, Sessions } from "./account";
 import { Users, Invites } from "./admin";
 export function App() {
+  const { offline } = useOffline();
   const [language, setLanguage] = useState("it");
+  const [logoutPending, setLogoutPending] = useState(0);
   const logoutAction = useAction((it, en) => (language === "it" ? it : en));
   const location = useLocation();
   const status = useQuery({
@@ -46,9 +59,10 @@ export function App() {
     enabled: status.data?.state === "active",
   });
   const navigate = useNavigate();
-  const library = /^\/(?:$|works(?:\/|$)|browse\/|bibliography\/)/.test(
-    location.pathname,
-  );
+  const library =
+    /^\/(?:$|works(?:\/|$)|library(?:\/|$)|collections(?:\/|$)|offline$|statistics$|activity$|subscriptions$|notifications$|social-settings$|browse\/|bibliography\/)/.test(
+      location.pathname,
+    );
   function leave() {
     client.clear();
     navigate("/login");
@@ -59,7 +73,11 @@ export function App() {
       navigate("/login");
     };
     window.addEventListener("session-expired", cb);
-    return () => window.removeEventListener("session-expired", cb);
+    window.addEventListener("offline-reset", cb);
+    return () => {
+      window.removeEventListener("session-expired", cb);
+      window.removeEventListener("offline-reset", cb);
+    };
   }, [navigate]);
   useEffect(() => {
     if (me.data) {
@@ -93,6 +111,13 @@ export function App() {
               disabled={logoutAction.busy}
               onClick={() =>
                 void logoutAction.run(async () => {
+                  window.dispatchEvent(new Event("pagehide"));
+                  await settleWrites();
+                  const pending = await pendingOperations().catch(() => []);
+                  if (pending.length) {
+                    setLogoutPending(pending.length);
+                    return;
+                  }
                   await call("logout", {});
                   leave();
                 })
@@ -112,6 +137,48 @@ export function App() {
           </select>
         )}
       </header>
+      <Modal
+        open={logoutPending > 0}
+        onClose={() => setLogoutPending(0)}
+        title={
+          language === "it" ? "Modifiche non sincronizzate" : "Unsynced changes"
+        }
+        closeLabel={language === "it" ? "Chiudi" : "Close"}
+      >
+        <p>
+          {logoutPending}{" "}
+          {language === "it"
+            ? "modifiche locali verranno eliminate insieme alle copie offline."
+            : "local changes will be deleted along with offline copies."}
+        </p>
+        <div className="library-controls">
+          <Button
+            onClick={() => {
+              setLogoutPending(0);
+              navigate("/offline");
+            }}
+          >
+            {language === "it"
+              ? "Gestisci sincronizzazione"
+              : "Manage synchronization"}
+          </Button>
+          <Button
+            tone="danger"
+            disabled={logoutAction.busy}
+            onClick={() =>
+              void logoutAction.run(async () => {
+                await call("logout", {});
+                setLogoutPending(0);
+                leave();
+              })
+            }
+          >
+            {language === "it"
+              ? "Elimina dati locali ed esci"
+              : "Delete local data and sign out"}
+          </Button>
+        </div>
+      </Modal>
       {logoutAction.error && <Notice error>{logoutAction.error}</Notice>}
       {status.isPending ? (
         <main id="main">
@@ -139,12 +206,32 @@ export function App() {
         <Auth.Provider
           value={{ user: me.data.user, refresh: () => me.refetch(), leave }}
         >
+          <OfflineRuntime />
           <div className={library ? "layout library-layout" : "layout"}>
             <Navigation library={library} />
             <main id="main">
               <Routes>
-                <Route path="/" element={<Catalog />} />
-                <Route path="/works" element={<Catalog />} />
+                <Route path="/offline" element={<OfflineLibrary />} />
+                <Route
+                  path="/"
+                  element={
+                    offline ? <Navigate to="/offline" replace /> : <Catalog />
+                  }
+                />
+                <Route
+                  path="/works"
+                  element={
+                    offline ? <Navigate to="/offline" replace /> : <Catalog />
+                  }
+                />
+                <Route path="/library" element={<Library />} />
+                <Route path="/statistics" element={<Statistics />} />
+                <Route path="/activity" element={<Activity />} />
+                <Route path="/subscriptions" element={<Subscriptions />} />
+                <Route path="/notifications" element={<Notifications />} />
+                <Route path="/social-settings" element={<SocialSettings />} />
+                <Route path="/collections" element={<Collections />} />
+                <Route path="/collections/:id" element={<CollectionDetail />} />
                 <Route
                   path="/bibliography/:kind/:id"
                   element={<BibliographyPage />}
@@ -226,8 +313,20 @@ export function App() {
 }
 function Navigation({ library }: { library: boolean }) {
   const location = useLocation();
+  const { offline } = useOffline();
   const t = useText(),
     { user } = useContext(Auth);
+  if (offline)
+    return (
+      <nav
+        className="library-navigation"
+        aria-label={t("Navigazione principale", "Main navigation")}
+      >
+        <NavLink to="/offline">
+          {t("Lettura offline", "Offline reading")}
+        </NavLink>
+      </nav>
+    );
   if (library)
     return (
       <nav
@@ -242,6 +341,8 @@ function Navigation({ library }: { library: boolean }) {
         >
           {t("Opere", "Works")}
         </NavLink>
+        <NavLink to="/library">{t("Biblioteca", "Library")}</NavLink>
+        <NavLink to="/notifications">{t("Notifiche", "Notifications")}</NavLink>
         <NavLink to="/browse/fandom">Fandom</NavLink>
         <NavLink to="/browse/creators">{t("Autori", "Authors")}</NavLink>
         <NavLink to="/browse/freeform">Tag</NavLink>
@@ -265,6 +366,8 @@ function Navigation({ library }: { library: boolean }) {
       aria-label={t("Navigazione principale", "Main navigation")}
     >
       <NavLink to="/works">{t("Opere", "Works")}</NavLink>
+      <NavLink to="/library">{t("Biblioteca", "Library")}</NavLink>
+      <NavLink to="/notifications">{t("Notifiche", "Notifications")}</NavLink>
       <NavLink to="/account">{t("Account", "Account")}</NavLink>
       <NavLink to="/security">{t("Sicurezza", "Security")}</NavLink>
       <NavLink to="/sessions">{t("Dispositivi", "Devices")}</NavLink>

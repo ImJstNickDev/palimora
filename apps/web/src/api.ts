@@ -1,3 +1,5 @@
+import { readAuthResponse } from "./auth-response";
+import { offlineCall } from "./offline";
 import {
   api,
   type Operation,
@@ -11,13 +13,15 @@ export class ApiFailure extends Error {
   constructor(
     public code: ErrorCode,
     public requestId = "",
+    public retryAfterSeconds?: number,
   ) {
     super(code);
   }
 }
-export async function call<K extends Operation>(
+export async function transport<K extends Operation>(
   name: K,
   input: Input<K>,
+  options: { keepalive?: boolean; signal?: AbortSignal } = {},
 ): Promise<Output<K>> {
   const e = api[name];
   let path = e.path;
@@ -37,6 +41,8 @@ export async function call<K extends Operation>(
   const response = await fetch("/api/v1" + path, {
     method: e.method.toUpperCase(),
     credentials: "same-origin",
+    keepalive: options.keepalive,
+    signal: options.signal,
     headers: {
       "Content-Type": "application/json",
       ...(csrf ? { "X-CSRF-Token": csrf } : {}),
@@ -54,10 +60,17 @@ export async function call<K extends Operation>(
       csrf = "";
       window.dispatchEvent(new Event("session-expired"));
     }
-    throw new ApiFailure(json.code, json.requestId);
+    const retryAfter = Number(response.headers.get("retry-after"));
+    throw new ApiFailure(
+      json.code,
+      json.requestId,
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.ceil(retryAfter)
+        : undefined,
+    );
   }
   if ("csrf" in json) {
-    csrf = json.csrf;
+    csrf = readAuthResponse(json).csrf;
     authenticated = true;
   }
   if (["logout", "password", "deleteAccount"].includes(name)) {
@@ -65,4 +78,21 @@ export async function call<K extends Operation>(
     csrf = "";
   }
   return json;
+}
+
+const pendingWrites = new Set<Promise<unknown>>();
+export async function settleWrites() {
+  await Promise.allSettled([...pendingWrites]);
+}
+export function call<K extends Operation>(
+  name: K,
+  input: Input<K>,
+  options: { keepalive?: boolean; signal?: AbortSignal } = {},
+): Promise<Output<K>> {
+  const pending = offlineCall(name, input, transport, options);
+  if (name === "readingSave" || name === "annotationSave") {
+    pendingWrites.add(pending);
+    void pending.finally(() => pendingWrites.delete(pending)).catch(() => {});
+  }
+  return pending;
 }

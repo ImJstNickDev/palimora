@@ -15,7 +15,8 @@
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:browser": "playwright test",
     "dev": "npm run dev -w @palimora/web",
-    "migrate": "npm run migrate -w @palimora/api"
+    "migrate": "npm run migrate -w @palimora/api",
+    "test:offline": "playwright test --config playwright.offline.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

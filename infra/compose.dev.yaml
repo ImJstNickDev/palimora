@@ -35,6 +35,7 @@ services:
       VITE_CACHE_DIR: /tmp/palimora-vite
     volumes:
       - ../apps/web/src:/app/apps/web/src:ro
+      - ../apps/web/public:/app/apps/web/public:ro
       - ../apps/web/index.html:/app/apps/web/index.html:ro
       - ../apps/web/vite.config.ts:/app/apps/web/vite.config.ts:ro
       - ../packages/ui/src:/app/packages/ui/src:ro

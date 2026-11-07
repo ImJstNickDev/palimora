@@ -1,3 +1,8 @@
+import { listOffline } from "./offline";
+import { OfflineSave, useOffline } from "./offline-ui";
+import { Follow } from "./social";
+import { ReadingTools } from "./reading";
+import { ReaderLibrary } from "./library";
 import {
   CatalogFilters,
   activeFilterEntries,
@@ -863,6 +868,9 @@ export function BibliographyPage() {
           : t(...labels[kind])}
       </p>
       <h1 tabIndex={-1}>{item.name}</h1>
+      {(kind === "author" || kind === "series") && (
+        <Follow kind={kind} target={id} />
+      )}
       {item.canonical === true && (
         <small>{t("Tag canonico", "Canonical tag")}</small>
       )}
@@ -1196,6 +1204,7 @@ function ReaderFrame({
   );
 }
 export function Reader() {
+  const { offline } = useOffline();
   const location = useLocation();
   const backTo =
     typeof location.state?.catalogReturn === "string" &&
@@ -1264,6 +1273,28 @@ export function Reader() {
     setImmersive(false);
     setPanel(null);
   }, [id]);
+  useEffect(() => {
+    if (!offline || params.get("local") === "1") return;
+    let disposed = false;
+    void listOffline()
+      .then((copies) => {
+        const saved = copies.find(
+          (w) =>
+            w.id === id &&
+            (!params.get("snapshot") || w.snapshot === params.get("snapshot")),
+        );
+        if (saved && !disposed) {
+          const next = new URLSearchParams(params);
+          next.set("local", "1");
+          next.set("snapshot", saved.snapshot);
+          setParams(next, { replace: true });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  }, [offline, id, params, setParams]);
   const snapshot = params.get("snapshot") ?? undefined,
     chapter = params.get("chapter") ?? undefined;
   const skin = params.get("skin") === "on" ? "on" : "off";
@@ -1321,7 +1352,10 @@ export function Reader() {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
-    if (key === "snapshot") next.delete("chapter");
+    if (key === "snapshot") {
+      next.delete("chapter");
+      if (!value && !offline) next.delete("local");
+    }
     setParams(next, {
       replace: ["skin", "theme", "font", "size"].includes(key),
       state: location.state,
@@ -1407,14 +1441,16 @@ export function Reader() {
     >
       {!immersive && (
         <div className="reader-breadcrumb">
-          <Link to={backTo}>
+          <Link to={offline ? "/offline" : backTo}>
             <Icon name="back" />
-            {backTo !== "/works"
-              ? t("Torna ai risultati", "Back to results")
-              : t("Opere", "Works")}
+            {offline
+              ? t("Copie offline", "Offline copies")
+              : backTo !== "/works"
+                ? t("Torna ai risultati", "Back to results")
+                : t("Opere", "Works")}
           </Link>
           <div className="reader-secondary-actions">
-            {work.data.work.external_id && (
+            {!offline && work.data.work.external_id && (
               <a
                 href={
                   "https://archiveofourown.org/works/" +
@@ -1435,7 +1471,7 @@ export function Reader() {
                 ? t("Versione storica", "Historical version")
                 : t("Versioni", "Versions")}
             </button>
-            {!!work.data.manifest && (
+            {!offline && !!work.data.manifest && (
               <button
                 className="text-button"
                 onClick={() => {
@@ -1459,12 +1495,14 @@ export function Reader() {
                 new Date(selectedVersion.imported_at).toLocaleDateString(
                   t("it", "en"),
                 )}{" "}
-            <button
-              className="text-button"
-              onClick={() => update("snapshot", "")}
-            >
-              {t("Torna alla corrente", "Return to current")}
-            </button>
+            {!offline && (
+              <button
+                className="text-button"
+                onClick={() => update("snapshot", "")}
+              >
+                {t("Torna alla corrente", "Return to current")}
+              </button>
+            )}
           </p>
         )}
         <h1 tabIndex={-1}>{title}</h1>
@@ -1478,6 +1516,10 @@ export function Reader() {
               )}
             </div>
             <WorkStats m={m} />
+            {!offline && <ReaderLibrary id={id} />}
+            {work.data.snapshot && (
+              <OfflineSave id={id} snapshot={work.data.snapshot} />
+            )}
             {m.summary && <p className="work-summary">{m.summary}</p>}
             <details className="reader-metadata">
               <summary>
@@ -1573,6 +1615,13 @@ export function Reader() {
           </div>
         </div>
       )}
+      {work.data.snapshot && (
+        <ReadingTools
+          key={id + work.data.snapshot}
+          id={id}
+          snapshot={work.data.snapshot}
+        />
+      )}
       <div className="reader-paper" aria-busy={content.isFetching}>
         {!work.data.manifest ? (
           <p className="reader-empty">
@@ -1591,7 +1640,7 @@ export function Reader() {
         )}
       </div>
       <div className="reader-chapter-nav">{chapterNav}</div>
-      {!immersive && work.data.manifest && (
+      {!immersive && !offline && work.data.manifest && (
         <Interactions id={id} snapshot={work.data.snapshot ?? undefined} />
       )}
       <Modal
@@ -1673,7 +1722,11 @@ export function Reader() {
               setPanel(null);
             }}
           >
-            <option value="">{t("Corrente", "Current")}</option>
+            <option value="">
+              {offline
+                ? t("Ultima copia locale", "Latest local copy")
+                : t("Corrente", "Current")}
+            </option>
             {snapshot &&
               !(
                 versions.data?.pages.flatMap((p) => p.versions) ??

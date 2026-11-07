@@ -1,3 +1,17 @@
+import {
+  CatalogBibliography,
+  SourceComment,
+  SourceKudos,
+  SourceBibliography,
+} from "./bibliography";
+export {
+  SourceBibliography,
+  SourceTag,
+  SourceEntity,
+  SourceComment,
+  SourceKudos,
+  TagKind,
+} from "./bibliography";
 import { z } from "zod";
 export const Role = z.enum(["Owner", "Admin", "User"]);
 export const Preferences = z.object({
@@ -116,7 +130,220 @@ const work = z.object({
   head_reason: z.string(),
   canonical_work_id: z.string().nullable().optional(),
 });
+const readerSelection = id.extend({ snapshot: z.uuid().optional() });
 export const api = {
+  catalogWorks: endpoint(
+    "get",
+    "/works",
+    z.object({
+      entity: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      tag: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      include: z.string().max(3000).optional(),
+      unclassified: z.string().max(500).optional(),
+      media: z.string().max(500).optional(),
+      category: z.string().max(500).optional(),
+      crossover: z.enum(["true", "false"]).optional(),
+      singleChapter: z.enum(["true"]).optional(),
+      restricted: z.enum(["true", "false"]).optional(),
+      availability: z.enum(["all", "deleted"]).optional(),
+      words: z.string().max(100).optional(),
+      hits: z.string().max(100).optional(),
+      kudos: z.string().max(100).optional(),
+      comments: z.string().max(100).optional(),
+      bookmarks: z.string().max(100).optional(),
+      dateFrom: z.iso.date().optional(),
+      dateTo: z.iso.date().optional(),
+      updatedWithin: z.string().max(100).optional(),
+      fulltext: z.string().max(500).optional(),
+      q: z.string().max(500).optional(),
+      title: z.string().max(500).optional(),
+      creators: z.string().max(500).optional(),
+      fandom: z.string().max(500).optional(),
+      rating: z.string().max(500).optional(),
+      warnings: z.string().max(500).optional(),
+      relationships: z.string().max(500).optional(),
+      characters: z.string().max(500).optional(),
+      freeform: z.string().max(500).optional(),
+      language: z.string().max(3000).optional(),
+      series: z.string().max(500).optional(),
+      collections: z.string().max(500).optional(),
+      exclude: z.string().max(3000).optional(),
+      wordsFrom: z.coerce.number().int().nonnegative().optional(),
+      wordsTo: z.coerce.number().int().nonnegative().optional(),
+      complete: z.string().max(100).optional(),
+      sort: z
+        .enum([
+          "relevance",
+          "creators",
+          "archived",
+          "series",
+          "title",
+          "published",
+          "updated",
+          "words",
+          "kudos",
+          "comments",
+          "hits",
+          "bookmarks",
+        ])
+        .optional(),
+      direction: z.enum(["asc", "desc"]).optional(),
+      cursor: z.string().max(16384).optional(),
+    }),
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.uuid(),
+          snapshot_id: z.uuid().nullable(),
+          metadata: json,
+          bibliography: CatalogBibliography,
+        }),
+      ),
+      next: z.string().nullable(),
+      total: z.number(),
+      indexing: z.boolean(),
+      facets: z.record(
+        z.string(),
+        z.array(z.object({ name: z.string(), count: z.number() })),
+      ),
+    }),
+  ),
+  bibliographyPage: endpoint(
+    "get",
+    "/bibliography/:kind/:id",
+    z.object({
+      kind: z.enum(["tag", "author", "pseud", "series", "collection"]),
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+    z.object({ item: json, relations: z.array(json) }),
+  ),
+  catalogBrowse: endpoint(
+    "get",
+    "/browse",
+    z.object({
+      kind: z.enum([
+        "language",
+        "fandom",
+        "rating",
+        "warnings",
+        "category",
+        "pseuds",
+        "unclassified",
+        "media",
+        "creators",
+        "relationships",
+        "characters",
+        "freeform",
+        "series",
+        "collections",
+      ]),
+      q: z.string().max(500).optional(),
+      cursor: z.string().max(500).optional(),
+    }),
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          works: z.number(),
+          page_kind: z.string(),
+          canonical: z.boolean().nullable().optional(),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+  ),
+  readerWork: endpoint(
+    "get",
+    "/works/:id",
+    readerSelection.extend({ cursor: z.uuid().optional() }),
+    z.object({
+      work: work.omit({ metadata: true }),
+      manifest: z
+        .object({
+          schema: z.string(),
+          state: z.string(),
+          chapters: z.array(
+            z.object({
+              chapter_id: z.uuid(),
+              title: z.string().optional(),
+              scope: z.string().optional(),
+            }),
+          ),
+        })
+        .nullable(),
+      metadata: json,
+      bibliography: CatalogBibliography,
+      snapshot: z.uuid().nullable(),
+      versions: z.array(
+        z.object({
+          id: z.uuid(),
+          state: z.string(),
+          imported_at: z.string(),
+          ordering_uncertain: z.boolean(),
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+  ),
+  readerInteractions: endpoint(
+    "get",
+    "/works/:id/interactions",
+    readerSelection.extend({
+      parent: z.string().max(500).optional(),
+      cursor: z
+        .string()
+        .regex(/^\d{1,12}$/)
+        .optional(),
+      kudosCursor: z
+        .string()
+        .regex(/^\d{1,12}$/)
+        .optional(),
+    }),
+    z.object({
+      available: z.boolean(),
+      comments: z.array(
+        SourceComment.extend({ children: z.number().int().nonnegative() }),
+      ),
+      next: z.string().nullable(),
+      kudos: SourceKudos.nullable(),
+      nextKudos: z.string().nullable(),
+      statistics: SourceBibliography.shape.statistics.unwrap().nullable(),
+    }),
+  ),
+  readerDownload: endpoint(
+    "get",
+    "/works/:id/download",
+    readerSelection.extend({ format: z.enum(["html", "epub", "pdf"]) }),
+    z.object({ mime: z.string() }),
+  ),
+  readerMedia: endpoint(
+    "get",
+    "/works/:id/media/:hash",
+    readerSelection.extend({
+      hash: z.string().regex(/^[a-f0-9]{64}$/),
+      download: z.enum(["true"]).optional(),
+    }),
+    json,
+  ),
+  readerContent: endpoint(
+    "get",
+    "/works/:id/read",
+    readerSelection.extend({
+      chapter: z.uuid().optional(),
+      skin: z.enum(["on", "off"]).default("off"),
+      theme: z.enum(["light", "dark"]).optional(),
+      font: z.enum(["serif", "sans"]).optional(),
+      size: z.coerce.number().int().min(14).max(28).optional(),
+    }),
+    z.object({ document: z.string() }),
+  ),
   archiveDownload: endpoint(
     "get",
     "/admin/archive/blobs/:hash",
@@ -562,6 +789,9 @@ export const ErrorCode = z.enum([
   "RATE_LIMITED",
   "NOT_FOUND",
   "INTERNAL",
+  "SEARCH_UNAVAILABLE",
+  "SEARCH_QUERY_INVALID",
+  "SEARCH_CURSOR_EXPIRED",
   "PASSKEY_INVALID",
   "CHALLENGE_EXPIRED",
 ]);
@@ -627,13 +857,44 @@ export function openapi() {
         200: {
           description: "Success",
           content:
-            name === "archiveDownload"
-              ? {
-                  "application/octet-stream": {
-                    schema: { type: "string", format: "binary" },
-                  },
-                }
-              : { "application/json": { schema: z.toJSONSchema(e.output) } },
+            name === "readerDownload" || name === "readerMedia"
+              ? Object.fromEntries(
+                  (name === "readerDownload"
+                    ? ["text/html", "application/epub+zip", "application/pdf"]
+                    : [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp",
+                        "image/svg+xml",
+                        "audio/mpeg",
+                        "audio/mp4",
+                        "audio/ogg",
+                        "audio/wav",
+                        "audio/webm",
+                        "video/mp4",
+                        "video/webm",
+                        "video/ogg",
+                        "font/woff",
+                        "font/woff2",
+                        "font/ttf",
+                        "font/otf",
+                        "text/vtt",
+                        "application/pdf",
+                        "application/octet-stream",
+                      ]
+                  ).map((mime) => [
+                    mime,
+                    { schema: { type: "string", format: "binary" } },
+                  ]),
+                )
+              : name === "archiveDownload"
+                ? {
+                    "application/octet-stream": {
+                      schema: { type: "string", format: "binary" },
+                    },
+                  }
+                : { "application/json": { schema: z.toJSONSchema(e.output) } },
         },
         default: {
           description: "Error",

@@ -15,6 +15,7 @@ export default defineConfig({
         APP_ORIGIN: "http://localhost:5173",
         PORT: "3000",
         PALIMORA_DEV: "1",
+        OPENSEARCH_URL: process.env.OPENSEARCH_URL!,
       },
     },
     {

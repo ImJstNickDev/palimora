@@ -124,13 +124,13 @@ La rete `prod-frontend` deve già esistere. In NPM configurare il proxy a `http:
 
 `NPM_TRUSTED_PROXY` identifica l'indirizzo Docker esatto di NPM (o una rete amministrata esclusivamente per proxy fidati): il gateway accetta gli IP inoltrati solo da quella sorgente. Il valore iniziale `127.0.0.1` non concede fiducia agli altri container; finché non configurato, audit e rate limit vedono l'indirizzo di NPM. Non cambiare `APP_ORIGIN` senza considerare che le passkey sono legate al dominio originale.
 
-`GET /api/v1/health` verifica PostgreSQL; Compose attende la salute dell'API prima del gateway. Log JSON su stdout con request ID, metodo, stato e durata, senza body, query string o credenziali; rotazione Docker 3 × 10 MiB. Limiti di memoria/CPU sono dichiarati per servizio. Arresto con SIGTERM e periodo di grazia di 30 secondi. Nessun accesso al socket Docker.
+`GET /api/v1/health` verifica PostgreSQL; Compose attende la salute dell'API prima del gateway. Log JSON su stdout con request ID, metodo, stato e durata, senza body, query string o credenziali; rotazione Docker 3 × 10 MiB. Limiti di memoria/CPU sono dichiarati per servizio. `API_MEMORY` (default `1536m`) include il processo di composizione PDF; la prova da 316.000 parole ha raggiunto circa 1,1 GiB di RSS aggregato. Arresto con SIGTERM e periodo di grazia di 30 secondi. Nessun accesso al socket Docker.
 
 Aggiornamenti: ricostruire con `docker compose ... up -d --build`, poi eseguire `docker compose ... restart gateway` per rigenerare e caricare l'eventuale template Nginx modificato. Il gateway risolve API/web via DNS Docker con cache di cinque secondi, anche dopo sostituzione dei container. L'API applica le migrazioni prima di ascoltare. Non modificare una migrazione già distribuita: aggiungerne una nuova. Per lo sviluppo usare un database separato e `DATABASE_URL`, `AUTH_KEY` (64 cifre hex), `APP_ORIGIN=http://localhost:5173`, `PORT=3000`; `npm ci`, `npm run build`, `npm run dev -w @palimora/api` e `npm run dev`. Solo lo sviluppo localhost ammette cookie senza Secure.
 
 ### Ambiente di review UI con live reload
 
-`infra/compose.dev.yaml`, applicato dopo il Compose principale, isola la review nel progetto `palimora-dev`, rete privata `palimora-dev-app` e gateway `palimora-dev-gateway:80`. Avvia PostgreSQL, API, Vite, gateway, Redis e worker ingest; soltanto OpenSearch è opzionale con `--profile full`. I dati di review sono separati dalla produzione, sotto `/mnt/sdb/palimora-dev-data`.
+`infra/compose.dev.yaml`, applicato dopo il Compose principale, isola la review nel progetto `palimora-dev`, rete privata `palimora-dev-app` e gateway `palimora-dev-gateway:80`. Avvia PostgreSQL, API, Vite, gateway, Redis, worker ingest e OpenSearch, necessario per il catalogo AO3. I dati di review sono separati dalla produzione, sotto `/mnt/sdb/palimora-dev-data`.
 
 Per le prove di carico, l’override dev rimuove i limiti Docker di CPU e memoria
 da tutti i servizi e imposta Redis `maxmemory=0`. I container possono utilizzare
@@ -211,3 +211,20 @@ e codec paralleli, senza moltiplicare writer in contesa sullo stesso lock.
 I job di compattazione/recupero spazio sono durevoli in PostgreSQL ed eseguiti dal
 medesimo worker. Copia e sostituzione locator sono transazionali; letture protette
 da lock condiviso e lease persistenti impediscono la rimozione dei pack in uso.
+
+### Motore di consultazione
+
+L'API proietta in batch le code catalogo/full-text PostgreSQL; non richiede un
+nuovo servizio. OpenSearch è una dipendenza healthy dell'API, con heap 1 GiB e
+limite container 3 GiB nel Compose principale. Conserva esclusivamente indici
+ricostruibili nel bind mount dedicato. Chromium e font DejaVu/Noto (anche CJK) nell'immagine API
+servono alla stampa PDF senza rete. Config/cache Chromium usano directory temporanee
+isolate sotto `/tmp`, compatibili con root filesystem read-only e rimosse dopo
+la stampa; il contenuto importato resta in sola lettura.
+Le misure sul corpus di verifica e i limiti della prova sono in 09.
+
+Il container API include [Typst 0.15.1](https://github.com/typst/typst/releases/tag/v0.15.1)
+(Apache-2.0, LICENSE e NOTICE distribuiti) e Chromium. Il binario nativo è
+verificato con SHA-256 per amd64/arm64 da `scripts/install-typesetter.sh`;
+nessun servizio aggiuntivo. Fuori Docker installarlo in una directory locale e
+impostare `TYPST_PATH`; `scripts/verify.sh` prepara automaticamente questa dipendenza.

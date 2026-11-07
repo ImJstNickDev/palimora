@@ -1,6 +1,6 @@
 # Palimora — documentazione autorevole
 
-**Stato:** Milestone 1 — Foundation e Milestone 2 — Archive Engine implementate · **Data:** 2026-11-06 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
+**Stato:** Milestone 1 — Foundation, Milestone 2 — Archive Engine e Milestone 3 — AO3 Experience implementate · **Data:** 2026-11-07 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
 
 Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moderna e privata. Importa i dump disponibili, normalizza e conserva contenuti, media e versioni in un formato proprio, e in seguito si sincronizza responsabilmente con AO3. Non è un fork Rails, non è un servizio ufficiale AO3 e non pubblica opere per conto degli utenti.
 
@@ -49,11 +49,12 @@ Verifica completa su uno ZIP reale e relativi SQLite in
 
 ## Utilizzo e verifica
 
-Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. L’Archive Engine è disponibile agli amministratori. La Milestone 3 non è avviata.
+Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazione utenti e inviti sono implementati end-to-end. L’Archive Engine è disponibile agli amministratori. Catalogo AO3, ricerca OpenSearch, bibliografia, versioni, lettore e download sono integrati. Perimetro e misure della Milestone 3 in [09](docs/09-milestone.md#ao3-experience--completata-2026-11-06). La sincronizzazione rimane nella Milestone 4.
 
 - **Deployment e aggiornamenti:** [procedura autorevole in 02](docs/02-architettura.md#avvio-della-produzione).
 - **Regole di sicurezza e recupero:** [contratto operativo in 07](docs/07-identita-admin.md#contratto-operativo-foundation).
-- **Build:** `npm ci && npm run build`; su Linux servono g++, header Node, libzstd-dev e libssl-dev per codec e preparazione nativa N-API. Il Dockerfile installa le dipendenze di build.
+- **Build:** `npm ci && npm run build`; Node ≥22.12; su Linux servono g++, header Node, libzstd-dev e libssl-dev per codec e preparazione nativa N-API. Il Dockerfile installa le dipendenze di build.
+- **PDF fuori Docker:** `./scripts/install-typesetter.sh "$PWD/.local/bin"` e `export TYPST_PATH="$PWD/.local/bin/typst"`; servono anche Chromium e i font Noto. Docker include entrambe le dipendenze di rendering.
 - **Verifica completa:** `npx playwright install --with-deps chromium` e `./scripts/verify.sh` su Linux con Docker. Crea PostgreSQL e Redis di test temporanei, esegue contratti/integrazione/browser/audit e rimuove i container.
 - **API:** OpenAPI generato su `/api/v1/openapi.json`; tipi condivisi in `packages/contracts`.
 

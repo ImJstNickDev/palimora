@@ -49,16 +49,25 @@ async function seedArchive() {
             Title: "The preserved archive",
             Author: "Archive author",
             Summary: "Two immutable versions",
+            Category: "Preserved fandom",
+            Rating: "General Audiences",
+            Words: 3000,
+            Language: "English",
           },
           state: "valid",
           observed_at: null,
           chapters: [{ name: "chapter.html" }],
           objects: [
             {
+              name: "pixel.png",
+              kind: "asset",
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZaoAAAAASUVORK5CYII=",
+            },
+            {
               name: "chapter.html",
               kind: "chapter_html",
               data: Buffer.from(
-                `<p>Preserved version ${version}</p><script>window.unsafeArchive=true</script>`,
+                `<p>Preserved version ${version}</p><img src="pixel.png" alt="Preserved image"><script>window.unsafeArchive=true</script>`,
               ).toString("base64"),
             },
           ],
@@ -87,7 +96,206 @@ async function seedArchive() {
 }
 export async function archiveFlow(page: Page) {
   const fixture = await seedArchive();
-  await page.getByRole("link", { name: "Importazioni", exact: true }).click();
+  await page.goto("/works?fulltext=Preserved");
+  await expect(
+    page.getByRole("link", { name: "The preserved archive", exact: true }),
+  ).toBeVisible({ timeout: 30000 });
+  const filterPanel = page.locator(".filter-drawer");
+  await filterPanel.locator(":scope > summary").evaluate((el) => {
+    const d = el.parentElement as HTMLDetailsElement;
+    if (!d.open) el.click();
+  });
+  const tagInput = page.getByRole("combobox", {
+    name: "Tag da includere",
+    exact: true,
+  });
+  await expect(
+    page.getByRole("searchbox", { name: "Cerca nei metadati" }),
+  ).toHaveAttribute("autocomplete", "off");
+  await expect(tagInput).toHaveAttribute("data-1p-ignore", "true");
+  await tagInput.fill("Preserved");
+  await expect(
+    page.getByRole("option", { name: /Preserved fandom/ }),
+  ).toBeVisible();
+  await tagInput.press("ArrowDown");
+  await tagInput.press("Enter");
+  await expect(
+    page.getByText("Modifiche da applicare", { exact: true }),
+  ).toBeVisible();
+  expect(new URL(page.url()).searchParams.has("fandom")).toBe(false);
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page).toHaveURL(/fandom=Preserved/);
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+  await page.getByRole("button", { name: "− Escludi", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Tag da escludere", exact: true })
+    .fill("Preserved");
+  await page.getByRole("option", { name: /Preserved fandom/ }).click();
+  await expect(
+    page.locator('.selected-tags [data-excluded="true"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('.selected-tags [data-excluded="false"]'),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page.locator(".work-blurb")).toHaveCount(0);
+  await page.getByRole("button", { name: /Rimuovi filtro: Esclusi:/ }).click();
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+  await page
+    .locator(".filter-group > summary")
+    .filter({ hasText: "Lunghezza" })
+    .click();
+  await page
+    .getByRole("spinbutton", { name: "Parole · Minimo", exact: true })
+    .fill("1000");
+  await page
+    .getByRole("spinbutton", { name: "Parole · Massimo", exact: true })
+    .fill("5000");
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page).toHaveURL(/words=1000-5000/);
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+  await page.getByRole("button", { name: "Azzera", exact: true }).click();
+  await expect(page).toHaveURL(/fulltext=Preserved/);
+  expect(new URL(page.url()).searchParams.has("words")).toBe(false);
+  await page
+    .locator(".filter-group > summary")
+    .filter({ hasText: "Stato e lingua" })
+    .click();
+  const language = page.getByRole("combobox", { name: "Lingua", exact: true });
+  await language.fill("Eng");
+  await expect(page.getByRole("option", { name: /English/ })).toBeVisible();
+  await language.press("ArrowDown");
+  await language.press("Enter");
+  await expect(
+    page.getByRole("list", { name: "Lingue selezionate" }),
+  ).toContainText("English");
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page).toHaveURL(/language=English/);
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+  await language.fill("Italiano");
+  await language.press("Enter");
+  await expect(
+    page.getByRole("list", { name: "Lingue selezionate" }).locator("li"),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page).toHaveURL(/language=English%0AItaliano/);
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+  await page.reload();
+  await expect(
+    page.getByRole("list", { name: "Lingue selezionate" }).locator("li"),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", {
+      name: "Rimuovi filtro: Lingua: English",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/language=Italiano/);
+  await expect(page.locator(".work-blurb")).toHaveCount(0);
+  await language.fill("Eng");
+  await expect(page.getByRole("option", { name: /English/ })).toBeVisible();
+  await language.press("ArrowDown");
+  await language.press("Enter");
+  await page
+    .getByRole("button", { name: "Rimuovi lingua: Italiano", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Applica filtri", exact: true })
+    .click();
+  await expect(page).toHaveURL(/language=English/);
+  await expect(page.locator(".work-blurb")).toHaveCount(1);
+
+  await page
+    .getByRole("link", { name: "The preserved archive", exact: true })
+    .click();
+  await expect(page.frameLocator("iframe").locator("#workskin")).toContainText(
+    "Preserved version 1",
+  );
+  const image = page.frameLocator("iframe").getByAltText("Preserved image");
+  await expect(image).toBeVisible();
+  const media = await image.getAttribute("src");
+  const partial = await page.request.get(media!, {
+    headers: { Range: "bytes=0-7" },
+  });
+  expect(partial.status()).toBe(206);
+  expect(partial.headers()["content-type"]).toBe("image/png");
+  expect((await partial.body()).length).toBe(8);
+  expect(
+    (
+      await page.request.get(media!, { headers: { Range: "bytes=9999-" } })
+    ).status(),
+  ).toBe(416);
+  await page.getByRole("button", { name: "Versioni", exact: true }).click();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Versione", exact: true })
+      .locator("option"),
+  ).toHaveCount(3);
+  const choices = await page
+    .getByRole("combobox", { name: "Versione", exact: true })
+    .locator("option")
+    .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
+  await page
+    .getByRole("combobox", { name: "Versione", exact: true })
+    .selectOption(choices[1]);
+  await expect(page.frameLocator("iframe").locator("#workskin")).toContainText(
+    "Preserved version 2",
+  );
+  await page
+    .getByRole("button", { name: "Versione storica", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Versione", exact: true })
+    .selectOption("");
+  await expect(page.frameLocator("iframe").locator("#workskin")).toContainText(
+    "Preserved version 1",
+  );
+  await expect(page.getByRole("radio", { name: /EPUB/ })).toHaveCount(0);
+  for (const format of ["html", "epub"]) {
+    await page
+      .getByRole("button", { name: "Scarica opera", exact: true })
+      .click();
+    await page
+      .getByRole("radio", { name: new RegExp(format.toUpperCase()) })
+      .check();
+    const received = page.waitForEvent("download");
+    await page
+      .getByRole("button", {
+        name: "Scarica " + format.toUpperCase(),
+        exact: true,
+      })
+      .click();
+    const download = await received;
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    const data = Buffer.concat(chunks);
+    if (format === "html")
+      expect(data.toString()).toContain("Preserved version 1");
+    else expect(data.subarray(0, 2).toString()).toBe("PK");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  expect(
+    await page.evaluate(() => Boolean((window as any).unsafeArchive)),
+  ).toBe(false);
+  await page
+    .getByRole("link", { name: "Torna ai risultati", exact: true })
+    .click();
+  await expect(page).toHaveURL(/language=English/);
+  await expect(page).toHaveURL(/fulltext=Preserved/);
+  await page
+    .getByRole("link", { name: "Amministrazione", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Nuova importazione", exact: true })
     .click();
@@ -153,7 +361,11 @@ export async function archiveFlow(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Versione corrente", exact: true }),
   ).toBeVisible();
-  await page.locator(".archive-component").first().click();
+  await page
+    .locator(".archive-component")
+    .filter({ hasText: "chapter.html" })
+    .first()
+    .click();
   await expect(page.locator(".archive-code")).toContainText(
     "Preserved version",
   );

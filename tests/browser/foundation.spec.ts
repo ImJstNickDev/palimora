@@ -117,6 +117,16 @@ test("Owner setup, invitation registration, account preferences and passkey life
   await expect(
     reader.getByRole("button", { name: "Use a passkey" }),
   ).toHaveCount(0);
+  await expect(
+    reader.getByLabel("Username", { exact: true }),
+  ).not.toHaveAttribute("data-1p-ignore");
+  await expect(reader.getByLabel("Password", { exact: true })).toHaveAttribute(
+    "autocomplete",
+    "current-password",
+  );
+  await expect(
+    reader.getByLabel("Password", { exact: true }),
+  ).not.toHaveAttribute("data-1p-ignore");
   await readerContext.close();
   await page.getByRole("link", { name: "Sicurezza", exact: true }).click();
   await expect(page.locator(".security-cards a")).toHaveCount(3);

@@ -202,6 +202,70 @@ test(
       await assert.rejects(
         pool.query("DELETE FROM archive_snapshots WHERE work_id=$1", [w.id]),
       );
+      const { projectCatalog, catalogOperation } = await import(
+        "../apps/api/src/catalog"
+      );
+      await projectCatalog();
+      const search = await import("../apps/api/src/catalog-search");
+      while (await search.projectText()) {}
+      await search.searchRequest("/" + search.SEARCH_INDEX + "/_refresh");
+      await transaction(async (db) => {
+        const list = await catalogOperation(db, "catalogWorks", {
+          q: "Example",
+        });
+        assert.equal(list.items[0].id, w.id);
+        assert.equal(list.items[0].metadata.kudos, undefined);
+        const detail = await catalogOperation(db, "readerWork", { id: w.id });
+        assert.equal(detail.snapshot, w.current_snapshot_id);
+        const { downloadWork } = await import(
+          "../apps/api/src/reader-download"
+        );
+        const bytes = async (download: any) =>
+          Buffer.concat(
+            (await download.stream.toArray()).map((part: any) =>
+              Buffer.isBuffer(part) ? part : Buffer.from(part),
+            ),
+          );
+        const html = await downloadWork(db, { id: w.id, format: "html" });
+        assert.match((await bytes(html)).toString(), /<p>Archive<\/p>/);
+        const epub = await downloadWork(db, { id: w.id, format: "epub" });
+        const epubBytes = await bytes(epub);
+        assert.equal(epubBytes.subarray(0, 2).toString(), "PK");
+        const { spawnSync } = await import("node:child_process");
+        const zipCheck = spawnSync(
+          "python3",
+          [
+            "-c",
+            "import sys,io,zipfile,xml.etree.ElementTree as E;z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()));assert z.read('mimetype')==b'application/epub+zip';[E.fromstring(z.read(n)) for n in z.namelist() if n.endswith(('.xhtml','.opf','.xml'))]",
+          ],
+          { input: epubBytes },
+        );
+        assert.equal(zipCheck.status, 0, zipCheck.stderr.toString());
+        const pdf = await downloadWork(db, { id: w.id, format: "pdf" });
+        assert.equal((await bytes(pdf)).subarray(0, 4).toString(), "%PDF");
+        const content = await catalogOperation(db, "readerContent", {
+          id: w.id,
+          skin: "off",
+        });
+        assert.match(content.document, /<p>Archive<\/p>/);
+        const historical = await catalogOperation(db, "readerWork", {
+          id: w.id,
+          snapshot: detail.versions.find((v: any) => v.state === "partial").id,
+        });
+        assert.equal(historical.manifest.state, "partial");
+        await assert.rejects(
+          catalogOperation(db, "readerWork", {
+            id: w.id,
+            snapshot: randomUUID(),
+          }),
+        );
+        await assert.rejects(
+          catalogOperation(db, "readerMedia", {
+            id: w.id,
+            hash: "0".repeat(64),
+          }),
+        );
+      });
       // Operational filters and cursor pages use catalog facts, never only the visible UI page.
       await transaction(async (db) => {
         const current = await archiveOperation(db, "archiveWorks", {
@@ -979,6 +1043,7 @@ test(
         delete process.env.PALIMORA_DEV;
       }
     } finally {
+      await (await import("../apps/api/src/reader-pdf")).closePdf();
       await pool.end();
       await setupPool.query(`DROP SCHEMA ${schema} CASCADE`);
       await setupPool.end();

@@ -1,4 +1,4 @@
-header {
+.app-header {
   height: 76px;
   display: flex;
   align-items: center;
@@ -7,7 +7,7 @@ header {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-header > select {
+.app-header > select {
   width: auto;
   margin-left: auto;
 }
@@ -45,11 +45,11 @@ header > select {
   margin: 0 auto;
   min-height: calc(100dvh - 76px);
 }
-nav {
+.main-navigation {
   padding: 2rem 0.8rem;
   border-right: 1px solid var(--line);
 }
-nav a {
+.main-navigation a {
   display: block;
   padding: 0.65rem 0.8rem;
   text-decoration: none;
@@ -57,7 +57,7 @@ nav a {
   min-height: 44px;
   color: var(--muted);
 }
-nav a.active {
+.main-navigation a.active {
   background: var(--soft);
   color: var(--accent);
   font-weight: 650;
@@ -204,7 +204,7 @@ td small {
   border: 0;
 }
 @media (max-width: 760px) {
-  header {
+  .app-header {
     height: 68px;
     padding: 0 1rem;
     gap: 0.65rem;
@@ -215,7 +215,7 @@ td small {
   .layout {
     display: block;
   }
-  nav {
+  .main-navigation {
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem;
@@ -223,7 +223,7 @@ td small {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  nav a {
+  .main-navigation a {
     padding: 0.5rem 0.65rem;
     font-size: 0.9rem;
   }
@@ -259,7 +259,7 @@ td small {
   flex-shrink: 0;
   white-space: nowrap;
 }
-header > .button {
+.app-header > .button {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -270,7 +270,7 @@ header > .button {
   .brand span {
     display: none;
   }
-  header .identity {
+  .app-header .identity {
     min-width: 0;
     max-width: none;
     flex: 1;
@@ -278,7 +278,7 @@ header > .button {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  header > .button {
+  .app-header > .button {
     padding-inline: 0.65rem;
     font-size: 0.85rem;
   }
@@ -409,7 +409,7 @@ main h3 {
 }
 .otp-control:focus-within {
   outline: 2px solid var(--focus);
-  outline-offset: 5px;
+  outline-offset: 2px;
   border-radius: 9px;
 }
 .backup-codes {

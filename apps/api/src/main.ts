@@ -1,3 +1,7 @@
+import { closePdf } from "./reader-pdf";
+import { posix } from "node:path";
+import { byteRange, streamMedia } from "./reader-media";
+import { projectCatalog, projectText } from "./catalog";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { downloadObject } from "./archive-download";
@@ -46,6 +50,59 @@ for (const op of Object.keys(api) as Operation[]) {
         response: res,
         requestId: res.locals.requestId,
       });
+      if (op === "readerMedia") {
+        const descriptor = result as any;
+        if (descriptor.svg)
+          descriptor.size = Buffer.from(descriptor.svg, "base64").length;
+        const range = byteRange(req.headers.range, descriptor.size);
+        res.setHeader("Accept-Ranges", "bytes");
+        if (!range) {
+          res
+            .status(416)
+            .setHeader("Content-Range", `bytes */${descriptor.size}`);
+          res.end();
+          return;
+        }
+        res.setHeader("Content-Type", descriptor.mime);
+        res.setHeader("Content-Length", range.end - range.start + 1);
+        if (
+          (parsed.data as any).download === "true" ||
+          ["application/octet-stream", "application/pdf"].includes(
+            descriptor.mime,
+          )
+        )
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="asset"; filename*=UTF-8''${encodeURIComponent(posix.basename(descriptor.name)).replace(/['()]/g, (c) => "%" + c.charCodeAt(0).toString(16))}`,
+          );
+        if (range.partial) {
+          res.status(206);
+          res.setHeader(
+            "Content-Range",
+            `bytes ${range.start}-${range.end}/${descriptor.size}`,
+          );
+        }
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
+        await pipeline(
+          Readable.from(streamMedia(descriptor, range.start, range.end)),
+          res,
+        );
+        return;
+      }
+      if (op === "readerDownload") {
+        const media = result as { mime: string; stream: Readable };
+        res.setHeader("Content-Type", media.mime);
+        if (op === "readerDownload")
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="palimora.${(parsed.data as any).format}"`,
+          );
+        await pipeline(media.stream, res);
+        return;
+      }
       if (op === "archiveDownload") {
         const { hash } = result as { hash: string };
         res.setHeader("Content-Type", "application/octet-stream");
@@ -108,7 +165,13 @@ class Errors implements ExceptionFilter {
     res.status(status).json({ code, requestId: res.locals.requestId });
   }
 }
-@Module({ controllers: [ApiController], providers: [Identity] })
+@Module({
+  controllers: [ApiController],
+  providers: [
+    Identity,
+    { provide: "PDF_LIFECYCLE", useValue: { onApplicationShutdown: closePdf } },
+  ],
+})
 class AppModule {}
 export async function start() {
   validateConfig();
@@ -170,6 +233,34 @@ export async function start() {
   );
   await app.get(Identity).initialize();
   app.enableShutdownHooks();
+  let projecting = false;
+  const catalogTimer = setInterval(async () => {
+    if (projecting) return;
+    projecting = true;
+    try {
+      await projectCatalog();
+    } catch {
+      console.error(JSON.stringify({ event: "catalog_projection_failed" }));
+    } finally {
+      projecting = false;
+    }
+  }, 1000);
+  catalogTimer.unref();
+  let indexing = false;
+  let searchRetryAt = 0;
+  const searchTimer = setInterval(async () => {
+    if (indexing || Date.now() < searchRetryAt) return;
+    indexing = true;
+    try {
+      await projectText();
+    } catch {
+      searchRetryAt = Date.now() + 60000;
+      console.error(JSON.stringify({ event: "catalog_fulltext_failed" }));
+    } finally {
+      indexing = false;
+    }
+  }, 1000);
+  searchTimer.unref();
   const cleanup = setInterval(() => {
     void pool
       .query(
@@ -181,6 +272,8 @@ export async function start() {
   await app.listen(Number(process.env.PORT ?? 3000), "0.0.0.0");
   const close = async () => {
     clearInterval(cleanup);
+    clearInterval(catalogTimer);
+    clearInterval(searchTimer);
     await app.close();
     await pool.end();
   };

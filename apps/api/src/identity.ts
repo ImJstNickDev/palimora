@@ -1,3 +1,5 @@
+import { downloadWork } from "./reader-download";
+import { catalogOperation } from "./catalog";
 import { archiveOperation } from "./archive-admin";
 import { Injectable } from "@nestjs/common";
 import type { Request, Response } from "express";
@@ -151,7 +153,7 @@ export class Identity {
           );
         }
         const result = await this.run(db, op, input, c);
-        return serialize(result);
+        return op === "readerDownload" ? result : serialize(result);
       });
     } catch (e) {
       if (api[op].method !== "get") {
@@ -292,6 +294,16 @@ export class Identity {
     c: Context,
   ): Promise<unknown> {
     switch (op) {
+      case "readerDownload":
+        return downloadWork(db, x);
+      case "readerInteractions":
+      case "bibliographyPage":
+      case "catalogWorks":
+      case "catalogBrowse":
+      case "readerWork":
+      case "readerMedia":
+      case "readerContent":
+        return catalogOperation(db, op, x);
       case "archiveDownload":
       case "archiveInventory":
       case "ingestReport":

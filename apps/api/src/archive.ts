@@ -1,3 +1,4 @@
+import { SourceBibliography } from "@palimora/contracts";
 import { findObjects } from "./archive-catalog";
 import { documentHashes } from "./archive-native";
 import { prepareIngest } from "./archive-ingest";
@@ -193,6 +194,7 @@ async function insertObjects(db: DB, records: Locator[]) {
   }
 }
 export function normalizeMetadata(raw: Record<string, unknown>) {
+  if (raw.ao3 !== undefined) SourceBibliography.parse(raw.ao3);
   const names: Record<string, string> = {
     Title: "title",
     Author: "creators",

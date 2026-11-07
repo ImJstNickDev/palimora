@@ -7,6 +7,18 @@ export const devArchiveEnabled = () => process.env.PALIMORA_DEV === "1";
 
 // Explicit scope: never CASCADE into identity or future library tables.
 const tables = [
+  "catalog_work_filters",
+  "catalog_snapshot_views",
+  "catalog_snapshot_pending",
+  "catalog_tags",
+  "catalog_tag_edges",
+  "catalog_entities",
+  "catalog_entity_works",
+  "catalog_work_tags",
+  "catalog_graph_pending",
+  "catalog_pending",
+  "catalog_text_pending",
+  "catalog_documents",
   "archive_admin_requests",
   "archive_paths",
   "archive_entries",
@@ -85,6 +97,9 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
             "INSERT INTO archive_payloads VALUES(sha256(convert_to('{}','UTF8')),0,NULL,2,convert_to('{}','UTF8'))",
           );
           await db.query("DELETE FROM archive_jobs WHERE id<>$1", [job.id]);
+          await db.query(
+            "UPDATE catalog_search_state SET epoch=gen_random_uuid() WHERE id=1",
+          );
           await db.query("UPDATE archive_jobs SET result=$2 WHERE id=$1", [
             job.id,
             { catalog_cleared: true },

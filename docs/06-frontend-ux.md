@@ -11,6 +11,17 @@ React + TypeScript + Vite, libreria di componenti accessibili adattata nel nostr
 - Accessibilità concreta: tastiera, focus, screen reader, zoom elevato, contrasto, touch target, prefers-reduced-motion; non appesantire l'interfaccia normale con controlli non necessari.
 - IT/EN iniziale, i18n espandibile; preferenza UI separata dalla lingua delle opere.
 
+I campi `Input`/`Field` non destinati all’autenticazione disattivano il
+completamento e dichiarano l’esclusione ai gestori password (`data-1p-ignore`,
+`data-bwignore`, `data-lpignore`, `data-form-type="other"`). Password, username,
+email di registrazione e codici mantengono gli attributi `autocomplete` pertinenti.
+Le esclusioni sono indicazioni alle estensioni, non un blocco imposto dal sito.
+Riferimenti: [1Password](https://www.1password.dev/web/compatible-website-design),
+[Bitwarden](https://bitwarden.com/help/releasenotes/#2021-06-29),
+[Dashlane](https://support.dashlane.com/hc/en-us/articles/4420122792594-Optimize-your-web-forms-for-Dashlane-autofill).
+Il focus usa il colore del tema: contorno da 2 px aderente ai campi, distanziato
+sui pulsanti e sui link. Gli avvisi mantengono un colore distinto dal focus.
+
 ## Pagine principali
 
 | Pagina | Funzione e comportamento |
@@ -26,7 +37,7 @@ React + TypeScript + Vite, libreria di componenti accessibili adattata nel nostr
 | Profilo | sicurezza account, dispositivi/sessioni, temi, visibilità attività, statistiche personali |
 | Admin | layout tecnico distinto ma stesso design system; vedere `07-identita-admin.md` |
 
-La ricerca ordinaria combina metadati e filtri in PostgreSQL; la ricerca full-text dei **capitoli** usa OpenSearch con analizzatori per lingua e stemming (non ricerca semantica cross-lingua nella v1). L'indice non diventa fonte canonica e va ricostruito senza scaricare nuovamente il corpus. Il layout alternativo con copertine è opzionale e usa copertine vere, **mai generate artificialmente**.
+La ricerca ordinaria usa la proiezione bibliografica PostgreSQL e query/filtri OpenSearch; la ricerca full-text dei **capitoli** usa lo stesso indice con analizzatori per lingua e stemming (non ricerca semantica cross-lingua nella v1). L'indice non diventa fonte canonica e va ricostruito senza scaricare nuovamente il corpus. Il layout alternativo con copertine è opzionale e usa copertine vere, **mai generate artificialmente**.
 
 ## Versioni e lettura
 
@@ -80,3 +91,95 @@ da React Query e refetch al ritorno. Le viste operative mostrano ora dell’ulti
 aggiornamento, refresh manuale e fallimento di aggiornamento; nessun avanzamento
 inventato quando il totale è ignoto. I dettagli immutabili si caricano alla
 selezione, senza polling dei contenuti.
+
+## Consultazione AO3 implementata
+
+`/works` usa elenchi densi, filtri condivisibili nell'URL, gruppi include/exclude,
+faceting, sintassi AO3 e ordinamenti originali più data di archiviazione. I filtri
+si richiudono su mobile; risultati, navigazione e lettore usano l'intera larghezza
+disponibile. L'indicizzazione in corso aggiorna la lista automaticamente.
+`/browse/:kind` e `/bibliography/:kind/:id` collegano fandom, tassonomia,
+autori/pseudonimi, serie e collezioni; canonicalità, relazioni, profili e statistiche
+compaiono solo se acquisiti. Le serie rispettano le posizioni sorgente.
+
+`/works/:id` apre current oppure lo snapshot esplicito, Entire Work o capitolo,
+con navigazione precedente/successiva, modalità immersiva, tema/font/dimensione
+e Work Skin disattivabile. Le note dei capitoli sono ricostruite agli offset
+originali e verificate; il layout preservato distingue note iniziali e finali.
+Kudos nominativi/guest e commenti con risposte sono paginati e di sola lettura.
+Le opere eliminate da AO3 restano consultabili; testo assente e statistiche
+sconosciute non vengono sostituiti con contenuti o zeri inventati.
+
+HTML filtrato, CSP e iframe sandbox senza script isolano il testo. Le risorse
+locali sono autenticate e vincolate allo snapshot: immagini, SVG sanitizzati,
+audio/video con Range, tracce, font e allegati. CSS preserva media query, selettori,
+keyframe e font locali; gli import sono espansi solo da oggetti già acquisiti.
+URL esterni, dichiarazioni eseguibili, variabili e posizione fixed sono rimossi.
+Nessun fetch remoto avviene durante consultazione o download. HTML ed EPUB
+trasmettono i media in streaming; il PDF usa composizione nativa e, per layout
+HTML/CSS non rappresentabili, Chromium senza JavaScript/rete.
+Le preferenze di lettura sono nell'URL: progressi, offline, annotazioni e altre
+funzioni personali appartengono alla Milestone 5.
+
+### Revisione di consultazione — 2026-11-07
+
+La biblioteca usa navigazione orizzontale; account e amministrazione conservano
+le proprie viste operative. Conteggio e ordinamento affiancano il titolo «Opere»,
+sopra la barra di ricerca; sui piccoli schermi vanno a capo sotto il titolo.
+Su desktop il conteggio segue il bordo sinistro dell’elenco; pannello Filtri
+ed elenco opere condividono lo stesso bordo superiore;
+su mobile i filtri precedono l’elenco. Selezioni rimovibili e filtri raggruppati.
+Gli elenchi privilegiano titolo, autore, fandom, avvertenze, riassunto e statistiche;
+relazioni/tag estesi e riassunti troncati sono espandibili senza lasciare la lista.
+
+Il pannello filtri distingue le scelte in preparazione dai risultati applicati.
+Il selettore di tag offre inclusione/esclusione, categoria, suggerimenti dal
+catalogo e conteggi esplicitamente riferiti ai risultati attuali o alla biblioteca.
+Supporta frecce, Invio ed Escape; un tag può anche essere inserito come testo esatto.
+La stessa scelta spostata nel gruppo opposto viene rimossa dal gruppo precedente.
+Tag e criteri applicati sono rimovibili singolarmente. Parole e statistiche usano
+minimo/massimo con validazione, mantenendo disponibile la sintassi AO3; stato,
+lingua e date hanno controlli dedicati. «Azzera» conserva ricerca e contesto
+bibliografico; l'ordinamento applica anche le scelte in preparazione. Su mobile e
+tablet, applicare richiude il pannello e porta ai risultati. URL e cronologia
+restano la rappresentazione dei filtri applicati, senza preferenze personali.
+
+Tag e lingue condividono lo stesso combobox: freccia di apertura, ricerca,
+conteggi, selezione da tastiera/touch e valori rimovibili. Le lingue si selezionano
+insieme: basta che l’opera appartenga a una delle lingue scelte (OR), mantenendo
+in AND gli altri filtri. La ricerca consulta tutte le lingue realmente presenti nel catalogo,
+anche quando i risultati correnti sono già filtrati. Il pannello Filtri è l’unico
+punto di selezione dei criteri: suggerimenti e conteggi restano nei selettori,
+senza un secondo menu «Filtra nei risultati». Le pagine di esplorazione riusano gerarchia,
+ricerca e paginazione del catalogo; aprire un'opera conserva il collegamento ai
+risultati di provenienza anche dopo un cambio di capitolo, versione o aspetto.
+La paginazione aperta da un link diretto propone «Prima pagina» senza rimandare
+a una pagina esterna. Conteggi e date delle versioni seguono la lingua UI.
+
+Il lettore dispone titolo e informazioni bibliografiche sopra una pagina continua:
+l'iframe isolato si adatta al contenuto, inclusi media caricati successivamente.
+La barra di lettura resta raggiungibile durante lo scorrimento. Aspetto e versioni
+si aprono in dialoghi dedicati; la modalità concentrazione occupa lo schermo,
+esclude la navigazione sottostante dal focus e si chiude anche con Escape.
+I cambi di aspetto mantengono il contenuto visibile durante la richiesta.
+
+Il tema iniziale segue il sito, salvo scelta esplicita nell'URL. Sfondo, colore e
+geometria della pagina appartengono al lettore: in scuro la palette prevale anche
+sui colori espliciti delle Work Skins e sugli stili inline. Struttura e media
+restano preservati; in chiaro le decorazioni interne della skin restano visibili.
+Nessuno script importato viene abilitato per il ridimensionamento dell'iframe.
+
+«Scarica opera» è distinto dai comandi di lettura: apre la scelta EPUB/HTML/PDF,
+poi avvia il download soltanto dal pulsante del formato selezionato. L'operazione
+usa sempre l'opera intera nello snapshot visualizzato; preparazione ed errori
+sono espliciti e non vengono proposti download per opere prive di testo.
+
+### PDF da lettura
+
+Formato libro 170 × 250 mm: titolo e autori centrati nel frontespizio, riassunto
+e soli metadati disponibili; indice navigabile su pagina separata, poi testo,
+note e media canonici. Numeri di pagina e rimandi dell’indice sono reali.
+Prosa giustificata con rientro e ultima riga naturale; righe brevi, interruzioni
+esplicite, citazioni e impaginazioni strette non vengono allargate artificialmente.
+Le Work Skins complesse conservano il rendering HTML; la geometria della pagina
+è propria del PDF. HTML ed EPUB mantengono la loro impaginazione.

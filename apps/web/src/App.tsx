@@ -1,3 +1,4 @@
+import { Catalog, Browse, Reader, BibliographyPage } from "./catalog";
 import { ArchiveStorage } from "./archive-operations";
 import {
   Ingest,
@@ -44,6 +45,9 @@ export function App() {
     enabled: status.data?.state === "active",
   });
   const navigate = useNavigate();
+  const library = /^\/(?:$|works(?:\/|$)|browse\/|bibliography\/)/.test(
+    location.pathname,
+  );
   function leave() {
     client.clear();
     navigate("/login");
@@ -74,7 +78,7 @@ export function App() {
       <a className="skip" href="#main">
         {language === "it" ? "Vai al contenuto" : "Skip to content"}
       </a>
-      <header>
+      <header className="app-header">
         <NavLink className="brand" to="/">
           Palimora<span aria-hidden="true"> / </span>
         </NavLink>
@@ -134,10 +138,18 @@ export function App() {
         <Auth.Provider
           value={{ user: me.data.user, refresh: () => me.refetch(), leave }}
         >
-          <div className="layout">
-            <Navigation />
+          <div className={library ? "layout library-layout" : "layout"}>
+            <Navigation library={library} />
             <main id="main">
               <Routes>
+                <Route path="/" element={<Catalog />} />
+                <Route path="/works" element={<Catalog />} />
+                <Route
+                  path="/bibliography/:kind/:id"
+                  element={<BibliographyPage />}
+                />
+                <Route path="/works/:id" element={<Reader />} />
+                <Route path="/browse/:kind" element={<Browse />} />
                 {me.data.user.role !== "User" && (
                   <>
                     <Route
@@ -210,12 +222,47 @@ export function App() {
     </Locale.Provider>
   );
 }
-function Navigation() {
+function Navigation({ library }: { library: boolean }) {
   const location = useLocation();
   const t = useText(),
     { user } = useContext(Auth);
+  if (library)
+    return (
+      <nav
+        className="library-navigation"
+        aria-label={t("Navigazione principale", "Main navigation")}
+      >
+        <NavLink
+          to="/works"
+          className={({ isActive }) =>
+            isActive || location.pathname === "/" ? "active" : ""
+          }
+        >
+          {t("Opere", "Works")}
+        </NavLink>
+        <NavLink to="/browse/fandom">Fandom</NavLink>
+        <NavLink to="/browse/creators">{t("Autori", "Authors")}</NavLink>
+        <NavLink to="/browse/freeform">Tag</NavLink>
+        <NavLink to="/browse/series">{t("Serie", "Series")}</NavLink>
+        <NavLink to="/browse/collections">
+          {t("Collezioni", "Collections")}
+        </NavLink>
+        <NavLink className="library-account" to="/account">
+          Account
+        </NavLink>
+        {user.role !== "User" && (
+          <NavLink to="/admin/ingest">
+            {t("Amministrazione", "Administration")}
+          </NavLink>
+        )}
+      </nav>
+    );
   return (
-    <nav aria-label={t("Navigazione principale", "Main navigation")}>
+    <nav
+      className="main-navigation"
+      aria-label={t("Navigazione principale", "Main navigation")}
+    >
+      <NavLink to="/works">{t("Opere", "Works")}</NavLink>
       <NavLink to="/account">{t("Account", "Account")}</NavLink>
       <NavLink to="/security">{t("Sicurezza", "Security")}</NavLink>
       <NavLink to="/sessions">{t("Dispositivi", "Devices")}</NavLink>

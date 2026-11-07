@@ -668,3 +668,133 @@ checkpoint sono verificati, non vengono promessi throughput o latenze a quella s
 Report locali in `.local/pack-audit/` (`before.json`, `after.json`, `target*.json`,
 `compression.json`, `crash.json`, `compact-resume.json`, `dev-integrity.json`,
 `dev-after-restart-integrity.json`, `tests.log`, `final-lock-tests.log`); reingest in `.local/optimization/pack-reprocess.json`.
+
+## AO3 Experience — completata, 2026-11-06
+
+**Milestone 3 chiusa il 2026-11-07**, incluse le revisioni UI/UX e la
+composizione PDF documentate sotto. Ulteriori confronti fra motori PDF sono
+ottimizzazioni separate; la Milestone 4 non è avviata.
+
+Implementati catalogo, navigazione per fandom/tassonomia e pagine bibliografiche,
+ricerca AO3 e full-text OpenSearch, reader current/storico/Entire Work/immersivo,
+Work Skins e media locali, interazioni originali di sola lettura e download
+HTML/EPUB/PDF. Nessuna acquisizione/sync AO3 o funzione personale delle milestone
+successive è stata anticipata.
+
+| Dominio | Comportamento implementato |
+|---|---|
+| Ricerca | Query booleane/frasi/wildcard/campi, include/exclude, filtri numerici/date/lingua/stato, ordinamenti AO3 e serie, stemming, faceting, PIT oltre 10.000 risultati |
+| Tassonomia | Tag canonici, sinonimi, metatag e parent; ricerca e conteggi condividono la chiusura; categorie mancanti restano sconosciute |
+| Bibliografia | Autori e pseudonimi sorgente, profili, serie ordinate, collezioni e gerarchie, relazioni fra opere e link locali/AO3 |
+| Interazioni | Statistiche note, kudos nominativi/guest, commenti radice/risposte/cancellazioni e versione storica; nessuna interazione locale |
+| Lettura e media | Capitoli/Entire Work, versioni, lettura immersiva e aspetto; CSS isolato, immagini/SVG/audio/video/font/tracce/allegati, segmenti e HTTP Range |
+| Download | HTML/EPUB con asset in streaming, EPUB con indice e metadati, PDF tipografico nativo con fallback Chromium isolato |
+
+Riferimento: [OTW Archive, commit 452391b](https://github.com/otwcode/otwarchive/tree/452391b648f2fb06b55c36133812449747634504),
+`work_search_form.rb`, `work_query.rb`, `taggable_query.rb`, `search_range.rb`,
+`work_indexer.rb`, `work.rb`, `tag.rb`, `work_skin.rb`, `fandom_crossover.rb` e
+frontespizio dei download. Implementazione nuova, senza riuso di codice GPL.
+Contratti e gestione dell'assenza di metadati in 03/10; resa e isolamento in 06.
+
+Verifiche: build TypeScript/Vite e immagini Docker; 28 test backend/contratti con
+PostgreSQL e OpenSearch reali, seguiti dai controlli mirati delle modifiche finali;
+due smoke Chromium, inclusi bootstrap/ACL esistenti, ricerca su dati importati,
+cambio versione, Range 206/416, download HTML/EPUB autenticati e isolamento CSS/JS.
+Audit npm senza vulnerabilità segnalate; Compose valido. I casi strutturati di
+wrangling/commenti/kudos/media passano attraverso ingest e pack canonici, senza
+mock del motore di ricerca. Verificati anche HTML, XML EPUB e PDF di un'opera del
+corpus via HTTP autenticato. Schermate reali controllate a 1440, 768 e 390 px.
+
+Misura su copia isolata delle **11.032 opere realmente importate**, senza mount
+dei dump. **552 pagine** percorse senza duplicati o troncamenti. OpenSearch 2.19.4,
+heap 1 GiB, container 2 CPU/3 GiB; host condiviso, cache calda. Cento richieste per
+misura, mix ricerca metadati/full-text/filtri/ordinamento; lettura Entire Work.
+
+| Percorso | p50 | p95 |
+|---|---:|---:|
+| Ricerca backend, sequenziale | 71 ms | 112 ms |
+| Lettura backend, sequenziale | 33 ms | 79 ms |
+| Ricerca backend, concorrenza 10 | 310 ms | 514 ms |
+| Ricerca HTTP autenticata, concorrenza 10 | 245 ms | 580 ms |
+
+Indice circa **1,04 GiB**; RSS rilevata nel processo della prova circa **254 MiB**,
+OpenSearch circa **2,33 GiB** dopo il carico. Le prove iniziali hanno rilevato
+pressione memoria: il controllo generazione ora usa doc values, evitando di
+decomprimere il testo completo per ogni risultato. Questi numeri includono
+PostgreSQL/OpenSearch locali; HTTP attraversa il proxy locale di verifica,
+senza NPM/TLS. Sono misure del presente corpus, non garanzie a milioni di opere.
+
+Log e artefatti locali in `.local/m3/`: `verify.log`, `targeted-final.log`,
+`series-test.log`, `browser-verify.log`, `benchmark.log`, `downloads.log`,
+`docker-build.log`, screenshot e download reali. I documenti canonici e le
+versioni preesistenti non vengono riscritti dalle proiezioni.
+
+Integrata anche nel dev: **11.032 opere** indicizzate, code current/storico/testo
+vuote; verificati ricerca full-text, paginazione, lettura e pagina autore dopo
+il riavvio. PDF generato nel container con filesystem in sola lettura. I cinque
+pack canonici hanno SHA-256 invariati; preservati l'account esistente e tutti
+gli 11.032 snapshot. Aggiornati soltanto i servizi Palimora. Evidenze in
+`dev-validate.log`, `container-pdf-final.log`, `dev-packs-before.json` e
+`dev-after.log` nella medesima directory locale.
+
+### Revisione UI/UX — 2026-11-07
+
+Catalogo e lettore rivisti secondo [06](06-frontend-ux.md#revisione-di-consultazione--2026-11-07):
+navigazione bibliografica separata dall'admin, ricerca e filtri compatti, dettagli
+espandibili, lettura continua e concentrazione, download con scelta esplicita del
+formato. Risolto il conflitto fra tema scuro e sfondo bianco delle Work Skins,
+verificato sull'opera AO3 **85167866** con la skin attiva.
+
+Build TypeScript/Vite e Docker, test mirato di sanitizzazione e smoke browser
+esistenti superati. Controllati catalogo, ricerca combinata metadati/full-text,
+ordinamento, bibliografia, reader, Escape e download reale su copia isolata del
+corpus di 11.032 opere; schermate a 1440, 768 e 390 px e temi chiaro/scuro.
+Integrata nel dev; verificato il reader dell'opera segnalata dopo il riavvio.
+Nessuna migrazione dati o modifica ai pack. Evidenze in `.local/ui/`.
+
+Filtri successivamente resi guidati: suggerimenti reali per categoria, selezioni
+include/exclude, intervalli minimo/massimo e stato delle modifiche da applicare.
+Esteso lo smoke esistente con selezione da tastiera, esclusione, rimozione,
+intervallo e azzeramento; superati build web e due smoke browser. Verifica visiva
+su copia del corpus reale in `.local/filters/`, senza modifiche alle API o ai dati.
+
+Uniformati i selettori tag/lingua mediante un componente condiviso, inclusi
+conteggi, tastiera/touch e apertura dei suggerimenti nello spazio disponibile.
+`catalogBrowse` esteso alle lingue realmente acquisite: sul corpus di verifica
+sono 36, consultabili anche oltre le prime faccette. Allineate esplorazione,
+filtri rapidi, conteggi localizzati, paginazione da link diretto e ritorno dal
+reader ai risultati filtrati. Build e smoke esistenti aggiornati; controllati
+anche navigazione, cambio aspetto e selezione/rimozione lingua su dati reali.
+Evidenze in `.local/consistency/`; nessuna migrazione o acquisizione AO3.
+
+Il filtro lingua supporta ora selezioni multiple in OR, con chip indipendenti,
+URL ripristinabile e compatibilità con i link a lingua singola. Verificati nel
+test di integrazione esistente nomi/codici, duplicati, metadati assenti e
+combinazione con altri criteri; nello smoke selezione, ricarica e rimozione.
+Evidenze in `.local/languages/`.
+
+### Composizione PDF — 2026-11-07
+
+Impaginazione da libro e percorso nativo descritti in [06](06-frontend-ux.md#pdf-da-lettura)
+e [10](10-contratti.md). La lentezza principale era composizione/stampa nel browser,
+non lettura dai pack. Confronto sullo stesso host e corpus, prima generazione
+senza cache: opera da **316.297 parole**, **9,73 s → 4,94 s**; opera da **23.650
+parole**, **1,07 s → 0,84 s**. HTML/EPUB della prima: circa **0,34 s**.
+
+Prova aggiuntiva con tutto il testo lungo raccolto in memoria in **un solo
+capitolo**, senza cambiare i dati canonici: vecchio renderer **9,74–9,96 s**,
+nuovo **5,37–5,67 s**. RSS aggregato dei processi circa **1731 → 1132 MiB**
+(non PSS). Questi sono campioni locali, non garanzie di latenza; skin complesse
+usano ancora Chromium. La cache separata restituisce i campioni in **6–12 ms**.
+Con limite effettivo di **2 CPU/1536 MiB**, il documento lungo è stato
+completato in **6,04 s**, picco cgroup **1239 MiB**, senza swap.
+
+Verificati visivamente frontespizio, indice e prosa; confronto integrale di
+**1.377.528 caratteri alfanumerici** fra testo canonico e PDF lungo identico,
+escludendo frontespizio/indice/folii e normalizzando Unicode. Test mirati su
+rimandi reali, Unicode, media locali, isolamento, cache e scelta del renderer;
+integrazione canonica HTML/EPUB/PDF nello smoke archivistico esistente.
+Dopo il deploy nel dev: API healthy, esportazioni reali **1,05 s / 5,75 s**
+(opera media/lunga), cache **7–14 ms**; verificato anche il fallback su layout
+CSS applicato in memoria. Evidenze locali in `.local/pdf/`. Nessuna migrazione
+o modifica dei pack.

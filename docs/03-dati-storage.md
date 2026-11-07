@@ -213,3 +213,38 @@ Il consumatore outbox le preserva come `palimora-admin-decision-v1` e registra l
 revisioni dei metadati selezionati prima di confermare la consegna. L’API mantiene
 lo storage in sola lettura. Le anteprime testuali sono limitate a 64 KiB; il download
 verificato rimane completo e in streaming per i media segmentati.
+
+## Proiezione di consultazione
+
+Le migrazioni `021–024` aggiungono documenti correnti, viste degli snapshot,
+tassonomia, entità bibliografiche e appartenenze. Sono proiezioni ricostruibili:
+pack, manifest, revisioni e head canoniche restano l'autorità. Code PostgreSQL
+con lock `SKIP LOCKED` invalidano le proiezioni al cambio di head, identità o
+tassonomia. Un advisory lock serializza gli upsert bibliografici condivisi fra
+opere; l'indicizzazione testo mantiene la concorrenza per opera; ogni commit conserva il lavoro ancora pendente. La generazione del
+documento impedisce di restituire corrispondenze OpenSearch diventate obsolete.
+Il reset dev include le proiezioni e cambia l'epoch dell'indice.
+
+Il campo opzionale `metadata.ao3`, validato da `SourceBibliography` nel package
+contratti, usa `schema: "palimora-ao3-v1"`: tag con identità sorgente, canonicalità,
+sinonimo e relazioni; autori/pseudonimi, serie e collezioni con profilo e posizioni;
+relazioni fra opere; commenti con ID/parent/capitolo e stato di cancellazione;
+kudos nominativi/guest, statistiche e data di osservazione; disponibilità e
+riferimenti URL→oggetto locale. Questi dati viaggiano nei metadati canonici dello
+snapshot, senza cambiare `pack-v1`. Campi assenti restano sconosciuti; timestamp
+di acquisizione e osservazione non sono intercambiabili. Commenti ciclici o ID
+duplicati vengono rifiutati. Non esistono scritture locali di kudos/commenti.
+
+`catalog_tags` è l'unica tassonomia di consultazione. I sinonimi risolvono il
+filtro canonico; i metatag ereditano i discendenti; i collegamenti parent restano
+descrittivi. La chiusura alimenta insieme ricerca e conteggi di navigazione.
+Categorie e relazioni sono accettate solo da evidenze classificate: il campo
+aggregato Genre resta «Tag sorgente» finché una classificazione acquisita non
+lo risolve univocamente. Crossover/OTP con più tag richiedono la tassonomia
+acquisita oppure il valore sorgente esplicito.
+
+Le identità bibliografiche usano ID o URL AO3 acquisiti; un semplice nome senza
+identità rimane circoscritto all'opera, senza unire omonimi. I link dei frontespizi
+già preservati possono ricostruire serie, collezioni e posizioni esplicite. Le
+pagine storiche conservano metadati, attribuzioni, posizioni e interazioni della
+versione scelta. La classificazione corrente dei tag è condivisa fra versioni.

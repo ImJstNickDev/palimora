@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.12"
   },
   "scripts": {
     "build": "npm run build -w @palimora/contracts && npm run build -w @palimora/ui && npm run build -w @palimora/api && npm run build -w @palimora/web",

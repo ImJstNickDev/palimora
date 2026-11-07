@@ -334,6 +334,7 @@ export function Register({ onDone }: { onDone: () => Promise<void> }) {
             label={t("Email", "Email")}
             name="email"
             type="email"
+            autoComplete="email"
             defaultValue={invite.data.email ?? ""}
             readOnly={!!invite.data.email}
             required={!!invite.data.email}

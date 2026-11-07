@@ -148,3 +148,65 @@ Il trasporto interno ingest accetta gruppi omogenei di record o tag (massimo
 committati. Gli oggetti in staging includono offset e taglia del segmento.
 `index_progress` nel dettaglio sorgente indica le righe dell’indice SQLite
 derivato durante la costruzione, senza avanzare il checkpoint di acquisizione.
+
+## API di consultazione
+
+Route autenticate nel registro Zod condiviso: `catalogWorks`, `catalogBrowse`,
+`bibliographyPage`, `readerWork`, `readerContent`, `readerInteractions`,
+`readerMedia`, `readerDownload`. Snapshot, capitoli e asset sono verificati entro
+l'identità opera; nessun hash arbitrario è leggibile tramite la route media.
+`readerWork` restituisce metadati/bibliografia e un indice capitoli leggero;
+`readerInteractions` pagina commenti radice/risposte e utenti kudos separatamente.
+I campi sorgente opzionali sono definiti in `bibliography.ts`, non reinterpretati
+come dati personali. Nessun endpoint acquisisce dati da AO3.
+
+`catalogWorks.language` accetta uno o più nomi/codici separati da newline
+(massimo 3000 caratteri), combinati in OR; gli altri criteri restano in AND.
+I link esistenti con una sola lingua rimangono validi.
+
+`catalogBrowse` accetta anche `kind=language`: nomi e conteggi provengono dalla
+proiezione corrente, escludendo identità collegate e metadati lingua assenti.
+Ricerca per nome e cursore ordinato consentono suggerimenti oltre le prime
+lingue delle faccette OpenSearch, senza introdurre un catalogo di lingue fittizie.
+
+`catalogWorks` combina query metadati `q`, titolo/autori, `fulltext` capitoli,
+include/exclude per tag e categoria, lingua, completamento, crossover, capitolo
+singolo previsto, restrizione e disponibilità. Numeri: esatti, `<`, `>`, `<=`,
+`>=`, intervalli; date aggiornamento assolute o relative (`< 3 months`,
+`1-2 years ago`). Query con AND/OR/NOT, parentesi, frasi, wildcard e campi AO3
+(`creator`, `creators`, `id`, `word_count`, `kudos_count`, `complete`, `series.title`,
+ID sorgente dei tag/autori/collezioni quando presenti). I filtri positivi sono
+congiunti, le esclusioni negate singolarmente; i valori sconosciuti non soddisfano
+filtri numerici o booleani. `sort` espone rilevanza, titolo, autori, pubblicazione,
+aggiornamento, parole, hit, kudos, commenti, bookmark, archiviazione e posizione
+nella serie; `direction` è esplicita. Articoli iniziali e ordinamento autori
+seguono la semantica AO3.
+
+`OPENSEARCH_URL` predefinito `http://opensearch:9200`; indice derivato
+`palimora-works-v2`, query_string AND e analizzatori per lingua (standard per le
+lingue senza stemming disponibile). PIT + search_after paginano oltre 10.000
+risultati: cursore legato a query/ordinamento, rinnovo di cinque minuti. Errori
+`SEARCH_QUERY_INVALID` (400), `SEARCH_CURSOR_EXPIRED` (410) e `SEARCH_UNAVAILABLE`
+(503) sono recuperabili dalla UI. PostgreSQL verifica epoch/generazione e
+restituisce metadati autorevoli; `indexing` segnala proiezioni pendenti. La perdita
+dell'indice accoda automaticamente tutti i documenti per ricostruzione dai pack.
+
+Media: GET/HEAD, Accept-Ranges, 206 per intervallo singolo valido, 416 per
+intervallo non soddisfacibile, tipo rilevato dai byte; sconosciuti e allegati
+usano Content-Disposition attachment. Segmenti e checksum sono verificati dal
+lettore canonico. HTML/EPUB/PDF on demand leggono lo stesso snapshot e sono
+risposte binarie documentate in OpenAPI, distinte dall'export archivistico M6.
+HTML/EPUB non accumulano i media in RAM. Il PDF usa Typst 0.15.1 per HTML
+semantico e stylesheet convenzionali; CSS/layout non rappresentabili passano
+integralmente a Chromium. Nessuna suddivisione o parallelizzazione per capitoli.
+Template fisso e testo JSON senza valutazione di codice, root temporanea privata,
+asset canonici (SVG già sanitizzati), nessun import/fetch remoto. Il fallback ha
+JavaScript disabilitato e consente solo risorse locali dello snapshot. Timeout
+60 s, pulizia dei temporanei e arresto del browser con l’API.
+
+Una generazione PDF attiva per processo; richieste contemporanee dello stesso
+snapshot condividono il risultato, altre ricevono `CONFLICT`. Cache privata in
+RAM per opera/snapshot: massimo 8 PDF/32 MiB, scadenza 10 minuti. Autorizzazione e
+risoluzione dello snapshot precedono sempre la cache. Il browser del fallback è
+riutilizzato e chiuso dopo 60 s di inattività. Nessun nuovo oggetto archivistico,
+nessuna modifica a versioni o pack.

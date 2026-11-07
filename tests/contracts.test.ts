@@ -34,12 +34,10 @@ test("OpenAPI is generated for every runtime operation with success and error sc
   );
   assert.equal(operations.length, Object.keys(api).length);
   for (const op of operations as any[]) {
-    assert(
-      (
-        op.responses["200"].content["application/json"] ??
-        op.responses["200"].content["application/octet-stream"]
-      ).schema,
-    );
+    const content = op.responses["200"].content;
+    assert(Object.keys(content).length > 0);
+    for (const representation of Object.values(content) as any[])
+      assert(representation.schema);
     assert(op.responses.default);
   }
 });

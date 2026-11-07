@@ -59,7 +59,7 @@ services:
       redis: { condition: service_healthy }
   opensearch:
     <<: *dev-resources
-    profiles: [full]
+    profiles: !reset []
   postgres:
     <<: *dev-resources
     shm_size: 1g

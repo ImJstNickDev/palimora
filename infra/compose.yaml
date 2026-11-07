@@ -59,6 +59,7 @@ services:
     networks: [app]
     depends_on:
       postgres: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
     healthcheck:
       test:
         [
@@ -77,7 +78,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 30s
-    mem_limit: 768m
+    mem_limit: ${API_MEMORY:-1536m}
     cpus: 2
     logging: *logging
   ingest:
@@ -193,7 +194,7 @@ services:
       node.store.allow_mmap: "false"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
       DISABLE_SECURITY_PLUGIN: "true"
-      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
     volumes:
       - type: bind
         source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/opensearch
@@ -212,7 +213,7 @@ services:
       timeout: 10s
       start_period: 60s
       retries: 10
-    mem_limit: 1536m
+    mem_limit: 3g
     cpus: 2
     logging: *logging
 networks:

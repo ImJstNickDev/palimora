@@ -35,6 +35,18 @@ export function errorText(error: unknown, t: ReturnType<typeof useText>) {
         ? "PASSWORD_MISMATCH"
         : "";
   const messages: Record<string, string> = {
+    SEARCH_UNAVAILABLE: t(
+      "Ricerca temporaneamente non disponibile. Riprova.",
+      "Search is temporarily unavailable. Try again.",
+    ),
+    SEARCH_QUERY_INVALID: t(
+      "Sintassi di ricerca non valida. Controlla operatori e intervalli.",
+      "Invalid search syntax. Check operators and ranges.",
+    ),
+    SEARCH_CURSOR_EXPIRED: t(
+      "La pagina dei risultati è scaduta. Ricomincia la ricerca.",
+      "The results page has expired. Start the search again.",
+    ),
     INVALID_INPUT: t(
       "Controlla i campi inseriti.",
       "Check the entered fields.",

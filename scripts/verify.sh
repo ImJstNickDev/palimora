@@ -6,6 +6,10 @@ browser_libs="$PWD/.local/browser-libs/root/usr/lib/$(uname -m)-linux-gnu"
 if [[ -d "$browser_libs" ]]; then
  export LD_LIBRARY_PATH="$browser_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
+if [[ -z "${TYPST_PATH:-}" ]]; then
+ ./scripts/install-typesetter.sh "$PWD/.local/bin"
+ export TYPST_PATH="$PWD/.local/bin/typst"
+fi
 name="palimora-test-${RANDOM}-$$"
 verify_storage="$(mktemp -d -t palimora-verify-storage-XXXXXX)"
 export ARCHIVE_ROOT="$verify_storage"
@@ -22,7 +26,6 @@ export TEST_DATABASE_URL="postgresql://postgres:palimora-test@${address}:5432/pa
 docker run -d --name "${name}-redis" --label palimora.test=true --mount type=tmpfs,destination=/data redis:7.4.6-alpine >/dev/null
 export REDIS_HOST="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${name}-redis")"
 npm run build
-npm test
-npm run test:browser
+./scripts/verify-search.sh
 npm audit --audit-level=moderate
 APP_ORIGIN=https://palimora.example.test docker compose -f infra/compose.yaml config --quiet

@@ -94,10 +94,10 @@
 }
 .archive-status.warning {
   color: var(--text);
-  background: color-mix(in srgb, var(--focus) 14%, transparent);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
 }
 .archive-status.warning > span {
-  background: var(--focus);
+  background: var(--warning);
 }
 .archive-empty {
   padding: 3rem 1.5rem;

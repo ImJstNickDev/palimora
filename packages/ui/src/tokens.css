@@ -17,7 +17,8 @@
   --on-accent: #fff;
   --soft: #e7edf1;
   --danger: #a32929;
-  --focus: #b36b00;
+  --warning: #b36b00;
+  --focus: var(--accent);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -32,7 +33,7 @@ html[data-theme="dark"] {
   --on-accent: #142536;
   --soft: #2d3d4c;
   --danger: #ffaaa4;
-  --focus: #ffc666;
+  --warning: #ffc666;
 }
 html[data-skin="forest"] {
   --accent: #286044;
@@ -55,7 +56,7 @@ html[data-theme="dark"][data-skin="forest"] {
     --on-accent: #142536;
     --soft: #2d3d4c;
     --danger: #ffaaa4;
-    --focus: #ffc666;
+    --warning: #ffc666;
   }
   html[data-theme="auto"][data-skin="forest"] {
     --accent: #a4d8b7;
@@ -152,8 +153,13 @@ small {
   color: var(--danger);
 }
 :focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 3px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
 }
 h1,
 h2,

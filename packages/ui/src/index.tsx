@@ -1,6 +1,26 @@
 import React, { useId, useRef, useLayoutEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import "./tokens.css";
+export function Input({
+  autoComplete,
+  type,
+  ...props
+}: React.ComponentPropsWithRef<"input">) {
+  const autofill =
+    type === "password" ||
+    (autoComplete !== undefined && !["off", "on"].includes(autoComplete));
+  return (
+    <input
+      type={type}
+      autoComplete={autofill ? autoComplete : "off"}
+      data-1p-ignore={autofill ? undefined : "true"}
+      data-bwignore={autofill ? undefined : "true"}
+      data-lpignore={autofill ? undefined : "true"}
+      data-form-type={autofill ? undefined : "other"}
+      {...props}
+    />
+  );
+}
 export function Button({
   tone = "normal",
   ...props
@@ -21,7 +41,7 @@ export function Field({
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input
+      <Input
         id={id}
         aria-describedby={hint ? id + "-hint" : undefined}
         {...props}

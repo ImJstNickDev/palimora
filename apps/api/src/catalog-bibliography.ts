@@ -179,9 +179,10 @@ export async function projectGraph(db: DB) {
 }
 async function tagEdges(db: DB, t: any) {
   const child = (
-    await db.query("SELECT id FROM catalog_tags WHERE source_id=$1", [
-      String(t.id),
-    ])
+    await db.query(
+      "SELECT id FROM catalog_tags WHERE source_id=$1 OR (left($1,5)='name:' AND name=substring($1 from 6))",
+      [String(t.id)],
+    )
   ).rows[0]?.id;
   if (!child) return;
   const fields: [string, string, unknown][] = [
@@ -196,7 +197,7 @@ async function tagEdges(db: DB, t: any) {
     ) as any[];
     const parents = (
       await db.query(
-        "SELECT id FROM catalog_tags WHERE source_id=ANY($1::text[]) AND id<>$2",
+        "SELECT id FROM catalog_tags WHERE (source_id=ANY($1::text[]) OR ('name:'||name)=ANY($1::text[])) AND id<>$2",
         [ids.map(String), child],
       )
     ).rows.map((r) => r.id);

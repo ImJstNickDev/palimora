@@ -248,3 +248,18 @@ identità rimane circoscritto all'opera, senza unire omonimi. I link dei frontes
 già preservati possono ricostruire serie, collezioni e posizioni esplicite. Le
 pagine storiche conservano metadati, attribuzioni, posizioni e interazioni della
 versione scelta. La classificazione corrente dei tag è condivisa fra versioni.
+
+### Acquisizioni AO3 e media
+
+`025–026` estendono il catalogo senza riscrivere pack o revisioni precedenti.
+Acquisizioni live e localizzazione media riusano `ingestRecords` e i suoi lock,
+seal, dedup e pubblicazione atomica. I callback interni registrano completamento
+sync e osservazione nella medesima transazione; acquisizioni fallite lasciano
+immutata la head. La localizzazione verifica sotto lock la head da cui deriva:
+una modifica concorrente impone di rileggere il current.
+
+`ao3_observations` e `ao3_media_revisions` hanno protezione SQL contro mutazioni.
+I binding URL→oggetto sono versionati nei manifest; chunk e asset condividono gli
+hash globali esistenti. Credenziali/sessioni tecniche appartengono soltanto al DB
+operativo cifrato, mai ai documenti canonici. Staging upload e checkpoint sono
+ripristinabili col database, indipendenti dai dump. Policy e stati in 05.

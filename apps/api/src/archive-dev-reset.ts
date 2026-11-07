@@ -7,6 +7,14 @@ export const devArchiveEnabled = () => process.env.PALIMORA_DEV === "1";
 
 // Explicit scope: never CASCADE into identity or future library tables.
 const tables = [
+  "ao3_watch",
+  "ao3_upload_chunks",
+  "ao3_uploads",
+  "ao3_observations",
+  "ao3_runs",
+  "ao3_jobs",
+  "ao3_media_revisions",
+  "ao3_media",
   "catalog_work_filters",
   "catalog_snapshot_views",
   "catalog_snapshot_pending",
@@ -63,7 +71,8 @@ const tables = [
 export async function resetDevArchive(clearQueues: () => Promise<void>) {
   if (!devArchiveEnabled()) throw Error("DEV_ONLY");
   const leader = await pool.connect();
-  let ownsLeader = false;
+  let ownsLeader = false,
+    ownsSync = false;
   try {
     if (
       !(await leader.query("SELECT pg_try_advisory_lock(70210403) AS yes"))
@@ -77,6 +86,10 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
       )
     ).rows[0];
     if (!job) return;
+    ownsSync = (
+      await leader.query("SELECT pg_try_advisory_lock(70210423) AS yes")
+    ).rows[0].yes;
+    if (!ownsSync) return;
     await pool.query("UPDATE archive_jobs SET state='running' WHERE id=$1", [
       job.id,
     ]);
@@ -92,6 +105,12 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
           await db.query("SET LOCAL lock_timeout='5s'");
           await db.query(
             "TRUNCATE " + tables.map((name) => '"' + name + '"').join(","),
+          );
+          await db.query(
+            "UPDATE ao3_control SET seed_cursor=NULL,seed_complete=false",
+          );
+          await db.query(
+            "INSERT INTO ao3_jobs(kind,target,priority) VALUES('discovery','recent',10),('backfill','history',80)",
           );
           await db.query(
             "INSERT INTO archive_payloads VALUES(sha256(convert_to('{}','UTF8')),0,NULL,2,convert_to('{}','UTF8'))",
@@ -134,6 +153,7 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
       );
     }
   } finally {
+    if (ownsSync) await leader.query("SELECT pg_advisory_unlock(70210423)");
     if (ownsLeader) await leader.query("SELECT pg_advisory_unlock(70210403)");
     leader.release();
   }

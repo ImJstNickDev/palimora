@@ -1,3 +1,5 @@
+import { syncAdmin } from "./ao3-admin";
+import { ao3MonitorOperation, recordAO3Open } from "./ao3-monitor";
 import { downloadWork } from "./reader-download";
 import { catalogOperation } from "./catalog";
 import { archiveOperation } from "./archive-admin";
@@ -81,7 +83,12 @@ export class Identity {
       "inviteInfo",
     ].includes(op);
     const buckets = [
-      { key: "ip:" + digest(c.request.ip ?? ""), limit: sensitive ? 40 : 180 },
+      {
+        key:
+          (op === "ao3UploadChunk" ? "media-ip:" : "ip:") +
+          digest(c.request.ip ?? ""),
+        limit: op === "ao3UploadChunk" ? 6000 : sensitive ? 40 : 180,
+      },
     ];
     if (op === "login")
       buckets.push({
@@ -294,6 +301,43 @@ export class Identity {
     c: Context,
   ): Promise<unknown> {
     switch (op) {
+      case "ao3UploadStart":
+      case "ao3UploadChunk":
+      case "ao3UploadFinish":
+      case "ao3Jobs":
+      case "ao3Manual":
+      case "ao3JobControl":
+      case "ao3Account":
+      case "ao3Priorities": {
+        const result = await syncAdmin(db, op, x);
+        if (op !== "ao3Jobs" && op !== "ao3UploadChunk")
+          await this.audit(db, c, op, x.id, {
+            kind: x.kind,
+            action: x.action,
+            remove: x.remove,
+          });
+        return result;
+      }
+
+      case "ao3Status":
+      case "ao3Control": {
+        const result = await ao3MonitorOperation(db, op, x);
+        if (op === "ao3Control") await this.audit(db, c, op, undefined, x);
+        return result;
+      }
+      case "readerOpen": {
+        if (
+          !(
+            await db.query("SELECT 1 FROM archive_work_heads WHERE id=$1", [
+              x.id,
+            ])
+          ).rowCount
+        )
+          fail("NOT_FOUND", 404);
+        await recordAO3Open(db, x.id);
+        return { ok: true };
+      }
+
       case "readerDownload":
         return downloadWork(db, x);
       case "readerInteractions":

@@ -798,3 +798,25 @@ Dopo il deploy nel dev: API healthy, esportazioni reali **1,05 s / 5,75 s**
 (opera media/lunga), cache **7–14 ms**; verificato anche il fallback su layout
 CSS applicato in memoria. Evidenze locali in `.local/pdf/`. Nessuna migrazione
 o modifica dei pack.
+
+### Milestone 4 — integrazione AO3, 2026-11-07
+
+Implementati discovery/backfill a checkpoint, scheduler persistente BullMQ/PostgreSQL,
+watchlist oraria, acquisizioni canoniche atomiche, profili/tag/serie, interazioni,
+account tecnico cifrato, media in streaming/versionati e upload manuale, controlli
+amministrativi e recupero dopo indisponibilità. Contratto operativo e restrizioni
+in [05](05-sincronizzazione.md#implementazione-operativa--2026-11-07).
+
+Verifiche locali mirate con PostgreSQL isolato e sorgenti HTTP controllate:
+maintenance HTTP 200, cooldown/override, dedup discovery, modifiche silenziose,
+A→B→A, rifiuto acquisizioni incomplete, orologio watchlist, login/revoca account,
+SSRF, media segmentati/CSS, localizzazione offline, interruzione di stream e
+ripresa dei thread profondi dei commenti. Dispatcher verificato con Redis reale.
+Smoke browser desktop/mobile su API reale per controllo modalità, accodamento e
+pausa e upload; artefatti locali in `.local/m4/`. Nessuna acquisizione ufficiale attestata.
+
+**Limite operativo esterno:** il riferimento upstream vieta mediante robots le
+query dell'indice usate dalla discovery. La policy effettiva viene controllata a
+runtime e, se conferma il divieto, il lavoro resta sospeso con errore esplicito.
+Non si dichiara verificata né completata una scansione remota vietata o non eseguita.
+Nessuna implementazione della Milestone 5, nessuna modifica ai dump originali.

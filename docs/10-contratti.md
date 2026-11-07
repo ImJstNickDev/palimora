@@ -210,3 +210,26 @@ RAM per opera/snapshot: massimo 8 PDF/32 MiB, scadenza 10 minuti. Autorizzazione
 risoluzione dello snapshot precedono sempre la cache. Il browser del fallback è
 riutilizzato e chiuso dopo 60 s di inattività. Nessun nuovo oggetto archivistico,
 nessuna modifica a versioni o pack.
+
+### Sincronizzazione AO3
+
+`GET /api/v1/admin/ao3` espone il monitor; `GET /admin/ao3/jobs` code e cronologia,
+con cursori UUID e filtro per lavoro. Le POST `control`, `manual`, `priorities`,
+`account` e `jobs/:id` applicano ACL admin/CSRF/audit. I segreti dell'account non
+sono restituiti. Upload tramite `uploads`, `uploads/:id/chunk` e `finish`:
+ID idempotente, offset contiguo, retry identico verificato byte per byte, dimensione
+finale verificata prima dell'accodamento. Nessuna scrittura pack dall'API.
+
+`POST /api/v1/works/:id/open` rinnova soltanto la watchlist autenticata; il worker
+rispetta un avvio per opera/ora. `ao3_jobs` è l'autorità e outbox del dispatch,
+con unicità `(kind,target)`, generazione Redis, checkpoint e retry persistenti.
+Il lock 70210423 serializza l'esecuzione e coordina il reset; 70210421 coordina
+le richieste AO3 e il monitor; 70210422 serializza il seeding. Il commit canonico
+accetta la precedenza remota solo tramite opzione interna, mai da un envelope dump
+né da un endpoint amministrativo di editing. Dettagli e stati operativi in 05.
+
+`metadata.ao3.comments_coverage` e `kudos_coverage` sono estensioni opzionali
+`unknown|partial|complete`. Le risposte `readerInteractions` espongono sempre la
+copertura, con default sconosciuto per le vecchie acquisizioni; nessuna riscrittura
+dei pack v1. La proiezione della disponibilità corrente deriva dalle osservazioni
+sync, mantenendo immutabile quella degli snapshot scelti esplicitamente.

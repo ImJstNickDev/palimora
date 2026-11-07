@@ -90,7 +90,7 @@ export async function tick(batchId?: string) {
     ownsLeader = true;
     const batch = (
       await pool.query(
-        "SELECT * FROM ingest_batches WHERE state IN ('pending','scanning','running') AND ($1::uuid IS NULL OR id=$1) ORDER BY created_at LIMIT 1",
+        "SELECT * FROM ingest_batches WHERE source_kind='dump' AND state IN ('pending','scanning','running') AND ($1::uuid IS NULL OR id=$1) ORDER BY created_at LIMIT 1",
         [batchId ?? null],
       )
     ).rows[0];

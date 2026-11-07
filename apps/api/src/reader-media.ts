@@ -14,8 +14,15 @@ export function resourceRef(manifest: any, base: string, url: string) {
   } catch {
     return null;
   }
+  let absolute = url;
+  try {
+    absolute = new URL(
+      url,
+      /^https?:\/\//.test(base) ? base : "https://archiveofourown.org",
+    ).href;
+  } catch {}
   const mapped = manifest.metadata?.ao3?.media?.find(
-    (r: any) => r.url === url,
+    (r: any) => r.url === url || r.url === absolute,
   )?.object;
   const name = posix.normalize(posix.join(posix.dirname(base), decoded));
   return (
@@ -278,7 +285,11 @@ export async function workStyles(
   const sheet = async (o: any): Promise<string> => {
     if (seen.has(o.hash)) return "";
     seen.add(o.hash);
-    const text = (await readObject(db, o.hash)).toString();
+    const text = (
+      await (o.kind === "css"
+        ? readObject(db, o.hash)
+        : assetBytes(db, manifest, o.hash))
+    ).toString();
     let imports = "";
     try {
       const ast = css.parse(text);
@@ -304,7 +315,7 @@ export async function workStyles(
       });
       for (const ref of refs) {
         const local = resourceRef(manifest, o.name, ref.url);
-        if (local?.kind === "css") {
+        if (local) {
           const nested = await sheet(local);
           imports += ref.media ? `@media ${ref.media}{${nested}}` : nested;
         }

@@ -259,6 +259,179 @@ export const api = {
       next: z.string().nullable(),
     }),
   ),
+  ao3UploadStart: endpoint(
+    "post",
+    "/admin/ao3/uploads",
+    id.extend({
+      url: z.url(),
+      size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+      mime: z.string().max(200),
+    }),
+    z.object({ received: z.number() }),
+    "admin",
+  ),
+  ao3UploadChunk: endpoint(
+    "post",
+    "/admin/ao3/uploads/:id/chunk",
+    id.extend({
+      offset: z.number().int().nonnegative(),
+      data: z.string().max(700000),
+    }),
+    ok,
+    "admin",
+  ),
+  ao3UploadFinish: endpoint(
+    "post",
+    "/admin/ao3/uploads/:id/finish",
+    id,
+    ok,
+    "admin",
+  ),
+  ao3Jobs: endpoint(
+    "get",
+    "/admin/ao3/jobs",
+    z.object({
+      cursor: z.uuid().optional(),
+      job: z.uuid().optional(),
+      state: z
+        .enum(["all", "pending", "running", "retry", "idle", "blocked"])
+        .default("all"),
+    }),
+    z.object({
+      control: z.object({
+        auth_state: z.string(),
+        priorities: z.record(z.string(), z.number()),
+        spacing_ms: z.number(),
+        seed_complete: z.boolean(),
+      }),
+      jobs: z.array(
+        z.object({
+          id: z.uuid(),
+          kind: z.string(),
+          target: z.string(),
+          state: z.string(),
+          priority: z.number(),
+          due_at: z.string(),
+          started_at: z.string().nullable(),
+          checked_at: z.string().nullable(),
+          attempts: z.number(),
+          error: z.string().nullable(),
+          availability: z.string(),
+          checkpoint: json,
+        }),
+      ),
+      counts: z.array(z.object({ state: z.string(), count: z.number() })),
+      runs: z.array(
+        z.object({
+          id: z.string(),
+          job_id: z.uuid(),
+          kind: z.string(),
+          target: z.string(),
+          started_at: z.string(),
+          finished_at: z.string().nullable(),
+          outcome: z.string(),
+          detail: json,
+        }),
+      ),
+      next: z.string().nullable(),
+    }),
+    "admin",
+  ),
+  ao3Manual: endpoint(
+    "post",
+    "/admin/ao3/manual",
+    z.object({
+      kind: z.enum(["discovery", "backfill", "work", "entity", "media"]),
+      target: z.string().max(2000),
+      priority: z.number().int().min(1).max(100).default(10),
+    }),
+    ok,
+    "admin",
+  ),
+  ao3JobControl: endpoint(
+    "post",
+    "/admin/ao3/jobs/:id",
+    id.extend({ action: z.enum(["pause", "resume"]) }),
+    ok,
+    "admin",
+  ),
+  ao3Account: endpoint(
+    "post",
+    "/admin/ao3/account",
+    z.discriminatedUnion("remove", [
+      z.object({ remove: z.literal(true) }),
+      z.object({
+        remove: z.literal(false),
+        username: z.string().min(1).max(200),
+        password: z.string().min(1).max(500),
+      }),
+    ]),
+    ok,
+    "admin",
+  ),
+  ao3Priorities: endpoint(
+    "post",
+    "/admin/ao3/priorities",
+    z.object({
+      priorities: z.object({
+        discovery: z.number().int().min(1).max(100),
+        work: z.number().int().min(1).max(100),
+        entity: z.number().int().min(1).max(100),
+        media: z.number().int().min(1).max(100),
+        backfill: z.number().int().min(1).max(100),
+      }),
+    }),
+    ok,
+    "admin",
+  ),
+  ao3Status: endpoint(
+    "get",
+    "/admin/ao3",
+    empty,
+    z.object({
+      control: z.object({
+        mode: z.enum(["auto", "force_online", "force_offline"]),
+        paused: z.boolean(),
+        observed_state: z.enum([
+          "online",
+          "maintenance",
+          "rate_limited",
+          "blocked",
+          "unreachable",
+          "unknown",
+        ]),
+        checked_at: z.string().nullable(),
+        next_probe_at: z.string(),
+        cooldown_until: z.string().nullable(),
+        failures: z.number(),
+        eligible: z.boolean(),
+      }),
+      history: z.array(
+        z.object({
+          id: z.string(),
+          started_at: z.string(),
+          finished_at: z.string(),
+          state: z.string(),
+          http_status: z.number().nullable(),
+          retry_at: z.string().nullable(),
+          duration_ms: z.number(),
+        }),
+      ),
+      watching: z.number(),
+    }),
+    "admin",
+  ),
+  ao3Control: endpoint(
+    "post",
+    "/admin/ao3/control",
+    z.object({
+      mode: z.enum(["auto", "force_online", "force_offline"]),
+      paused: z.boolean(),
+    }),
+    ok,
+    "admin",
+  ),
+  readerOpen: endpoint("post", "/works/:id/open", id, ok),
   readerWork: endpoint(
     "get",
     "/works/:id",
@@ -308,6 +481,8 @@ export const api = {
     }),
     z.object({
       available: z.boolean(),
+      commentsCoverage: z.enum(["unknown", "partial", "complete"]),
+      kudosCoverage: z.enum(["unknown", "partial", "complete"]),
       comments: z.array(
         SourceComment.extend({ children: z.number().int().nonnegative() }),
       ),

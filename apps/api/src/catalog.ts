@@ -77,6 +77,14 @@ export async function projectCatalog() {
         w,
         await enrichBibliography(db, w.metadata, manifest),
       );
+      const availability = (
+        await db.query(
+          "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",
+          [w.external_id],
+        )
+      ).rows[0]?.availability;
+      if (availability && availability !== "unknown")
+        projected.metadata.availability = availability;
       const details = {
         ...projected.details,
         filterTags: projected.filterTags,
@@ -215,6 +223,8 @@ export async function catalogOperation(
     const users = source?.kudos?.users ?? [];
     return {
       available: source?.comments !== undefined,
+      commentsCoverage: source?.comments_coverage ?? "unknown",
+      kudosCoverage: source?.kudos_coverage ?? "unknown",
       comments: selected.slice(offset, offset + 30).map((c: any) => ({
         ...c,
         html: c.deleted ? "" : safeInlineHtml(c.html),
@@ -263,6 +273,16 @@ export async function catalogOperation(
         true,
       );
       view = { metadata: projected.metadata, bibliography: projected.details };
+    }
+    if (!x.snapshot) {
+      const availability = (
+        await db.query(
+          "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",
+          [data.work.external_id],
+        )
+      ).rows[0]?.availability;
+      if (availability && availability !== "unknown")
+        view.metadata = { ...view.metadata, availability };
     }
     const relations = [];
     for (const rel of view.bibliography.relations ?? []) {

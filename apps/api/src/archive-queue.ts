@@ -1,3 +1,6 @@
+import { runSyncQueue } from "./ao3-scheduler";
+import { executeSync } from "./ao3-worker";
+import { monitorAO3 } from "./ao3-monitor";
 import { maintenanceTick } from "./archive-maintenance";
 import { devArchiveEnabled, resetDevArchive } from "./archive-dev-reset";
 
@@ -104,8 +107,18 @@ export async function runQueue(
     console.error(JSON.stringify({ event: "ingest_queue_unavailable" })),
   );
   queue.on("error", () => {});
+  const syncLoop = runSyncQueue((id) => executeSync(id, stopped), stopped);
+  let probing: Promise<void> | undefined;
   try {
     while (!stopped()) {
+      if (!probing)
+        probing = monitorAO3(stopped)
+          .catch(() =>
+            console.error(JSON.stringify({ event: "ao3_monitor_retry" })),
+          )
+          .finally(() => {
+            probing = undefined;
+          });
       try {
         if (
           devArchiveEnabled() &&
@@ -130,7 +143,7 @@ export async function runQueue(
         await maintenanceTick(stopped);
         const batches = (
           await pool.query(
-            "SELECT id,generation FROM ingest_batches WHERE state IN ('pending','scanning','running')",
+            "SELECT id,generation FROM ingest_batches WHERE source_kind='dump' AND state IN ('pending','scanning','running')",
           )
         ).rows;
         for (const b of batches) {
@@ -194,6 +207,8 @@ export async function runQueue(
       await new Promise((r) => setTimeout(r, 1000));
     }
   } finally {
+    await probing;
+    await syncLoop;
     await worker.close();
     await eventWorker.close();
     await queue.close();

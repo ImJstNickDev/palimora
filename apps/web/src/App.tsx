@@ -1,3 +1,4 @@
+import { AO3Monitor } from "./ao3";
 import { Catalog, Browse, Reader, BibliographyPage } from "./catalog";
 import { ArchiveStorage } from "./archive-operations";
 import {
@@ -156,6 +157,7 @@ export function App() {
                       path="/admin/archive/storage"
                       element={<ArchiveStorage />}
                     />
+                    <Route path="/admin/ao3" element={<AO3Monitor />} />
                     <Route path="/admin/ingest" element={<Ingest />} />
                     <Route
                       path="/admin/ingest/:id"
@@ -272,6 +274,7 @@ function Navigation({ library }: { library: boolean }) {
             {t("Amministrazione", "Administration")}
           </span>
           <NavLink to="/admin/ingest">{t("Importazioni", "Imports")}</NavLink>
+          <NavLink to="/admin/ao3">AO3</NavLink>
           <NavLink to="/admin/archive/storage">
             {t("Storage", "Storage")}
           </NavLink>

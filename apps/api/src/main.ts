@@ -210,6 +210,7 @@ export async function start() {
     }),
   );
   app.use(cookieParser());
+  app.use("/api/v1/admin/ao3/uploads", express.json({ limit: "1mb" }));
   app.use(express.json({ limit: "32kb" }));
   app.use((req: Request, _res: Response, next: NextFunction) => {
     if (

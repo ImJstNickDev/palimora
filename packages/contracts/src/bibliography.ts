@@ -98,6 +98,8 @@ export const SourceBibliography = z
       )
       .optional(),
     comments: z.array(SourceComment).optional(),
+    comments_coverage: z.enum(["unknown", "partial", "complete"]).optional(),
+    kudos_coverage: z.enum(["unknown", "partial", "complete"]).optional(),
     kudos: SourceKudos.optional(),
     statistics: z
       .object({

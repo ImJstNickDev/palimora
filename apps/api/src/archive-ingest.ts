@@ -23,6 +23,7 @@ export async function prepareIngest(
   source: any,
   envelopes: any[],
   events: any[],
+  authoritative = false,
 ) {
   const groups: Record<string, any[]> = {};
   const progress: any[] = [];
@@ -253,6 +254,7 @@ export async function prepareIngest(
           refs.push({ name: o.name, kind: o.kind, hash });
           await preserve(db, [{ kind: o.kind, bytes: b }]);
         }
+        const verifiedRemote = authoritative && r.state === "valid";
         const normalized = e.normalized,
           confidence = r.state === "metadata_only" ? "index" : "document";
         const selected = selections.get(w.id) ?? {};
@@ -294,6 +296,7 @@ export async function prepareIngest(
               locator: e.locator,
             });
           if (
+            verifiedRemote ||
             !selected[field] ||
             (selected[field].confidence === "index" &&
               confidence === "document")
@@ -302,9 +305,11 @@ export async function prepareIngest(
               confidence,
               source_path: source.path,
               locator: e.locator,
-              reason: selected[field]
-                ? "document_over_index"
-                : "first_evidence",
+              reason: verifiedRemote
+                ? "verified_ao3_observation"
+                : selected[field]
+                  ? "document_over_index"
+                  : "first_evidence",
             };
             metadata[field] = value;
           }
@@ -393,7 +398,9 @@ export async function prepareIngest(
           !!r.source_hash &&
           !!w.current_snapshot_id &&
           acquisition.has(key(w.current_snapshot_id, r.source_hash));
-        const publish = r.state === "valid" && (!w.current_snapshot_id || same);
+        const publish =
+          r.state === "valid" &&
+          (verifiedRemote || !w.current_snapshot_id || same);
         if (same && r.state === "partial") {
           events.push({
             event: "work.snapshot.validation_changed",
@@ -418,9 +425,11 @@ export async function prepareIngest(
           });
         if (publish) {
           w.current_snapshot_id = snapshot;
-          w.head_reason = same
-            ? "parser_revalidation"
-            : "first_verified_copy; chronology_unknown";
+          w.head_reason = verifiedRemote
+            ? "verified_ao3_observation"
+            : same
+              ? "parser_revalidation"
+              : "first_verified_copy; chronology_unknown";
           events.push({
             event: "work.snapshot.published",
             payload: { work_id: w.id, snapshot_id: snapshot },

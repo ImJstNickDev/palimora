@@ -1091,6 +1091,11 @@ function Interactions({ id, snapshot }: { id: string; snapshot?: string }) {
       {data.kudos && (
         <>
           <h2>Kudos</h2>
+          {data.kudosCoverage !== "complete" && (
+            <small>
+              {t("Elenco acquisito parzialmente", "Partially acquired list")}
+            </small>
+          )}
           <p>
             {q.data.pages
               .flatMap((p) => (p.kudos?.users ?? []) as any[])
@@ -1123,6 +1128,14 @@ function Interactions({ id, snapshot }: { id: string; snapshot?: string }) {
       {data.available && (
         <>
           <h2>{t("Commenti AO3", "AO3 comments")}</h2>
+          {data.commentsCoverage !== "complete" && (
+            <small>
+              {t(
+                "Copertura dei commenti parziale o sconosciuta",
+                "Partial or unknown comment coverage",
+              )}
+            </small>
+          )}
           <CommentThread id={id} snapshot={snapshot} />
         </>
       )}
@@ -1272,6 +1285,19 @@ export function Reader() {
     queryKey: ["reader", id, snapshot],
     queryFn: () => call("readerWork", { id, snapshot }),
   });
+  useEffect(() => {
+    if (!id || !work.isSuccess) return;
+    let recorded = false;
+    const opened = () => {
+      if (recorded || document.visibilityState !== "visible") return;
+      recorded = true;
+      void call("readerOpen", { id }).catch(() => {});
+    };
+    opened();
+    document.addEventListener("visibilitychange", opened);
+    return () => document.removeEventListener("visibilitychange", opened);
+  }, [id, work.isSuccess]);
+
   const versions = useInfiniteQuery({
     queryKey: ["versions", id],
     initialPageParam: undefined as string | undefined,

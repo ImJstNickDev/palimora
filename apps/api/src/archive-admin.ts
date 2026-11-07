@@ -377,7 +377,7 @@ export async function archiveOperation(
         CROSS JOIN LATERAL (SELECT count(*)::int AS sources,coalesce(sum(imported),0)::text AS processed,
           coalesce(sum(gaps),0)::text AS gaps,count(*) FILTER(WHERE state IN ('ingested','missing_source','incomplete_transfer','corrupt_source'))::int AS done_sources
           FROM ingest_sources WHERE batch_id=b.id) s
-        WHERE ($1::uuid IS NULL OR (b.created_at,b.id)<(SELECT created_at,id FROM ingest_batches WHERE id=$1))
+        WHERE b.source_kind='dump' AND ($1::uuid IS NULL OR (b.created_at,b.id)<(SELECT created_at,id FROM ingest_batches WHERE id=$1))
           AND ($2='all' OR ($2='active' AND b.state IN ('pending','scanning','running'))
           OR ($2='attention' AND b.state IN ('paused','parser_blocked','failed_global','completed_with_gaps'))
           OR ($2='finished' AND b.state IN ('completed','completed_with_gaps')))

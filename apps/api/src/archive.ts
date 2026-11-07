@@ -309,7 +309,15 @@ export async function objectBytes(o: any, db?: DB) {
 export async function ingestRecord(source: any, envelope: any) {
   return ingestRecords(source, [envelope]);
 }
-export async function ingestRecords(source: any, envelopes: any[]) {
+export async function ingestRecords(
+  source: any,
+  envelopes: any[],
+  options?: {
+    authoritative?: boolean;
+    before?: (db: DB) => Promise<void>;
+    finalize?: (db: DB) => Promise<void>;
+  },
+) {
   if (!envelopes.length) return;
   await prepareStaging(store.root, envelopes);
   const hashes = await documentHashes(
@@ -334,10 +342,17 @@ export async function ingestRecords(source: any, envelopes: any[]) {
   ]);
   for (let attempt = 0; ; attempt++) {
     try {
-      await archiveTransaction(
-        (db) => prepareIngest(db, source, envelopes, pendingEvents.get(db)!),
-        keys,
-      );
+      await archiveTransaction(async (db) => {
+        await options?.before?.(db);
+        await prepareIngest(
+          db,
+          source,
+          envelopes,
+          pendingEvents.get(db)!,
+          options?.authoritative === true,
+        );
+        await options?.finalize?.(db);
+      }, keys);
       return;
     } catch (error: any) {
       if (attempt >= 3 || !["40P01", "40001"].includes(error.code)) throw error;

@@ -56,3 +56,97 @@ Dopo commit di una nuova versione verificata, generare eventi per opere/autori/s
 ## Operazioni admin
 
 Stato AO3 e override; job queue con priorità/pausa; manual sync di singola opera, serie, autore o tag; scansione aggiuntiva; backlog; cronologia breve con contatori e motivi dei retry; revisione per errore anomalo; controllo media; timeline tecnica di un'opera. No edit manuale dei valori canonici AO3 salvo correzioni di associazione tracciate e senza cancellazione della provenienza.
+
+## Implementazione operativa — 2026-11-07
+
+Le migrazioni `025–026` aggiungono controllo globale, lavori PostgreSQL, cronologia,
+osservazioni immutabili, watchlist, media e upload. Il worker esistente usa
+`palimora-ao3-v1` in BullMQ; i record PostgreSQL sono l'outbox rieseguibile.
+Un lock di sessione serializza l'esecuzione anche fra processi; il riavvio registra
+le esecuzioni interrotte e riprende i checkpoint. SIGTERM interrompe nuove
+richieste e acquisizioni media, conservando il lavoro pendente. Il reset dev
+coordina anche il worker AO3 e include esclusivamente i relativi dati archivistici.
+
+Discovery: finestra sovrapposta degli ultimi due giorni, ordinamento sorgente
+per pubblicazione, pagine e contatori persistenti, nuovo ciclo un'ora dopo la
+conclusione. Backfill: finestre giornaliere retrocedenti e intervallo finale per
+opere datate prima dell'apertura dell'archivio. Il catalogo locale viene percorso
+a gruppi di 256 identità, inclusi record senza current; il cursore riparte dopo
+l'esaurimento per intercettare nuovi ingest. Nessuna ricerca nei dump originali.
+La ricerca AO3 non fornisce snapshot transazionali: finestre sovrapposte e
+riconciliazione ripetuta recuperano variazioni della paginazione, senza attestare
+una completezza remota non osservabile.
+
+Priorità predefinite: discovery 10, opere 30, entità 40, media 50, backfill 80;
+numeri inferiori precedono, con invecchiamento del backlog. Nuove opere scoperte
+e watchlist ricevono precedenza; i controlli ordinari passano da 6 ore a 24 ore o
+7 giorni per opere inattive, da 7 a 30 giorni per opere concluse. La watchlist
+rinnova 48 ore dall'apertura visibile, porta l'eleggibilità a un'ora e mantiene
+un limite globale di un avvio per opera per ora, anche per richieste manuali.
+Aperture e prefetch non fanno richieste alla fonte; opere confermate eliminate
+non entrano in watchlist. Le pause individuali non vengono annullate dalla discovery.
+
+La sonda `/works/search` richiede un form riconoscibile; HTTP 200 e branding non
+bastano. Manutenzione, blocchi, 429, errori di rete e stato sconosciuto restano
+distinti. Monitor e client condividono un lock e budget persistente: una richiesta
+alla volta, distanza iniziale 10 secondi, rallentamento su errori, recupero graduale,
+`Retry-After` e cooldown non aggirabili dall'override Online. Offline sospende
+il traffico AO3; la pausa sospende anche le elaborazioni locali. L'upload manuale
+può essere acquisito con AO3 offline. Timeout HTML 25 secondi, budget memoria
+64 MiB per documento/commenti; le sonde restano limitate a 1 MiB e 20 secondi.
+
+**Restrizioni della fonte:** il client legge e memorizza per 24 ore `robots.txt`,
+applicandolo a path **e query string**, oltre ai controlli HTTP. Il riferimento
+[upstream robots.public.txt](https://github.com/otwcode/otwarchive/blob/master/public/robots.public.txt)
+vieta `/works?` e le ricerche con query: se la policy effettivamente servita
+mantiene questi divieti, discovery/backfill si sospendono con `ROBOTS_DISALLOWED`.
+Non vengono usati URL alternativi, identità o proxy per eluderli. Il codice della
+pipeline è verificabile con sorgenti controllate; l'esecuzione sulla fonte richiede
+che questa consenta il percorso. Non è stata verificata la policy remota attuale.
+
+L'acquisizione HTML controlla identità, numero e corpi dei capitoli, conserva note,
+CSS e componenti indipendenti e usa **lo stesso ingest canonico**. Soltanto il
+chiamante interno verificato può promuovere una nuova osservazione AO3; pack,
+head, osservazione, outbox e completamento del job condividono il commit. I batch
+con `source_kind=ao3` sono provenienza dello stesso motore, esclusi dal dispatcher
+e dalla lista delle importazioni dump. Acquisizioni incomplete non sostituiscono
+il current. Il checkpoint dei commenti conserva l'acquisizione in corso,
+incluse le pagine separate dei thread profondi previste dal [template upstream](https://github.com/otwcode/otwarchive/blob/master/app/views/comments/_comment_thread.html.erb); le liste
+kudos paginate vengono lette tramite endpoint HTML, senza eseguire JavaScript.
+Copertura `unknown/partial/complete` è esplicita nel reader, separata dai totali
+ufficiali. Statistiche invariate non producono snapshot duplicati.
+
+Autori, serie e tag hanno lavori dedicati: profili, canonicalità, sinonimi e
+relazioni vengono preservati, la tassonomia riutilizza `archive_tags` e
+`catalog_tags`, le opere correlate vengono riaccodate. I nomi tag acquisiti senza
+ID numerico usano il namespace `name:`; le associazioni al catalogo esistente
+mantengono gli ID già presenti. Le pagine bibliografiche non creano utenti locali.
+Un 404 generico non prova una cancellazione; solo evidenza esplicita/410 produce
+`deleted`. La disponibilità osservata aggiorna la proiezione corrente e il filtro
+Eliminate, senza riscrivere gli snapshot storici.
+
+L'account tecnico è configurabile dall'admin, cifrato AES-GCM con la chiave
+Foundation condivisa in sola lettura col worker. Login con CSRF, cookie limitati
+all'origine AO3, verifica del login e invalidazione alla rimozione/cambio account.
+Credenziali e cookie non entrano in log, risposte API o osservazioni canoniche.
+Nessuna sincronizzazione di account personali.
+
+Media: DNS verificato e fissato alla connessione, indirizzi non pubblici e
+redirect pericolosi rifiutati, nessun cookie AO3 verso terzi. Streaming in chunk
+di 8 MiB con verifica spazio, hash globali e manifest canonico esistente;
+nessun limite totale fisso al file. Import CSS, URL relativi e `srcset` alimentano
+la stessa coda; il parsing CSS ha un budget di 64 MiB. Budget per host e `Retry-After` persistenti.
+404/410 o contenuti non allegabili restano errori visibili con retry diradato;
+non vengono sostituiti i byte precedenti. Upload admin a segmenti da 512 KiB,
+ripresa idempotente, staging PostgreSQL e commit nel worker: API mantiene storage
+in sola lettura. I segmenti vengono rimossi solo dopo acquisizione verificata.
+Nuove revisioni media aggiornano i binding degli snapshot correnti senza fetch
+AO3 e senza perdere media storici; conflitti sul current provocano un retry.
+
+`/admin/ao3` espone disponibilità, override, pausa globale, priorità, account tecnico,
+code paginate, errori, scadenze, cronologia, pausa/ripresa individuale, sincronizzazione
+manuale di opera/autore/serie/tag e upload media. Una verifica manuale dell'opera
+riparte dalla pagina corrente se il lavoro non è in esecuzione; il retry della
+coda conserva invece il checkpoint. Gli endpoint usano ACL admin,
+CSRF e audit esistenti. Le notifiche personali restano nella Milestone 5;
+il commit emette già gli eventi canonici senza introdurre abbonamenti paralleli.

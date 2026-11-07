@@ -87,6 +87,7 @@ services:
     restart: unless-stopped
     environment:
       DB_PASSWORD_FILE: /run/secrets/database
+      AUTH_KEY_FILE: /run/secrets/auth
       ARCHIVE_RESERVE_BYTES: ${ARCHIVE_RESERVE_BYTES:-268435456}
       INGEST_GROUP_RECORDS: ${INGEST_GROUP_RECORDS:-256}
       INGEST_PARSER_WORKERS: ${INGEST_PARSER_WORKERS:-2}
@@ -95,6 +96,11 @@ services:
       ARCHIVE_ZSTD_LEVEL: ${ARCHIVE_ZSTD_LEVEL:-3}
       ARCHIVE_PACK_MIB: ${ARCHIVE_PACK_MIB:-64}
     volumes:
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/auth
+        target: /run/secrets/auth
+        read_only: true
+        bind: { create_host_path: false }
       - type: bind
         source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/database
         target: /run/secrets/database

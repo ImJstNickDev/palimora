@@ -115,7 +115,7 @@ services:
         target: /dumps/ao3_stories
         read_only: true
         bind: { create_host_path: false }
-    networks: [app]
+    networks: [app, egress]
     depends_on:
       api: { condition: service_healthy }
     init: true
@@ -226,6 +226,8 @@ networks:
   app:
     name: palimora-app
     internal: true
+  egress:
+    driver: bridge
   frontend:
     name: prod-frontend
     external: true

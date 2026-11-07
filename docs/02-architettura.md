@@ -80,7 +80,7 @@ sync/media worker — palimora-egress (bridge non internal) → AO3/media estern
 
 - **Solo `palimora-gateway`** entra in `prod-frontend`. NPM raggiunge `palimora-gateway:80` per nome DNS Docker. Nessun servizio Palimora usa `ports:`; `expose` è metadato interno, non pubblicazione host.
 - `palimora-app` con `internal: true` per API, DB, cache, motore ricerca, frontend/gateway. PostgreSQL/Redis/OpenSearch non aderiscono a `prod-frontend` e non hanno egress non necessario.
-- `palimora-egress` non interna per i worker che leggono AO3/media e inviano push, pur mantenendo la rete applicativa privata. Accesso in ingresso sempre attraverso il gateway e l'API autorizzata.
+- La rete `egress` del progetto Compose, non interna, serve i worker che leggono AO3/media e inviano push, pur mantenendo la rete applicativa privata. Accesso in ingresso sempre attraverso il gateway e l'API autorizzata.
 - Limiti di CPU, memoria, I/O e numero worker all'interno delle risorse assegnate ai container Palimora. Nessuna metrica o riallocazione globale dell'host o di container esterni.
 
 ## Bootstrap e produzione
@@ -228,3 +228,10 @@ Il container API include [Typst 0.15.1](https://github.com/typst/typst/releases/
 verificato con SHA-256 per amd64/arm64 da `scripts/install-typesetter.sh`;
 nessun servizio aggiuntivo. Fuori Docker installarlo in una directory locale e
 impostare `TYPST_PATH`; `scripts/verify.sh` prepara automaticamente questa dipendenza.
+
+### Integrazione deployment AO3
+
+Il worker `ingest` aderisce alle reti `app` ed `egress`; solo il gateway resta su
+`prod-frontend`. I gateway dev e produzione ammettono body da 1 MiB soltanto sotto
+`/api/v1/admin/ao3/uploads/`, per i segmenti media da 512 KiB codificati base64.
+Gli altri endpoint mantengono il limite di 32 KiB.

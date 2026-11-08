@@ -58,10 +58,13 @@ async function counts() {
 (async () => {
   await migrate();
   if (["ingest", "reingest", "resume", "incremental"].includes(mode)) {
-    const finish = await require("./ingest-profiler.cjs").start({
-      archive,
-      pool,
-    });
+    const finish =
+      process.env.BENCH_DETAIL === "0"
+        ? async () => null
+        : await require("./ingest-profiler.cjs").start({
+            archive,
+            pool,
+          });
     let records = 0;
     const original = archive.ingestRecords;
     archive.ingestRecords = async (...args) => {
@@ -131,6 +134,12 @@ async function counts() {
       if (n % 100 === 0) console.error("catalog batches", n);
     }
     result.catalog_seconds = (performance.now() - t) / 1000;
+    if (process.env.P0_SNAPSHOTS === "1")
+      require("node:child_process").execFileSync(
+        process.execPath,
+        ["scripts/performance-snapshot.cjs", "after-catalog"],
+        { env: { ...process.env, NODE_OPTIONS: "", P0_PROFILE: "" } },
+      );
     t = performance.now();
     n = 0;
     let count;

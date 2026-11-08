@@ -41,6 +41,7 @@ mantengono le [licenze e attribuzioni proprie](THIRD_PARTY_NOTICES.md).
 | [`docs/09-milestone.md`](docs/09-milestone.md) | Sequenza di consegna, qualità mirata, lavoro con Codex |
 | [`docs/10-contratti.md`](docs/10-contratti.md) | Contratti tra moduli, stati e invarianti cross-cutting |
 | [`docs/10-performance-report.md`](docs/10-performance-report.md) | Benchmark 6C sul corpus reale, risorse e configurazione ingest |
+| [`docs/11-performance-overhaul.md`](docs/11-performance-overhaul.md) | Diagnosi P0, baseline end-to-end e priorità per P1–P5 |
 
 **Precedenza in caso di discrepanze:** le decisioni esplicite di prodotto in `01-prodotto.md` prevalgono; `03–08` specializzano ciascun dominio; `02` definisce la topologia; `10-contratti` impone gli invarianti tecnici; `09` organizza il lavoro. Non duplicare logiche per lo stesso concetto.
 

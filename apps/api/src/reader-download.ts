@@ -200,6 +200,7 @@ async function buildDownload(db: DB, x: any, m: any, snapshot: string) {
   const html = readerDocument(
     preface + chapters.map((c) => c.body).join("<hr>"),
     style,
+    { language: languageCode(strings(metadata.language)[0] || "und") },
   );
   const byToken = new Map([...assets.values()].map((a) => [a.token, a]));
   async function* htmlStream() {

@@ -7,7 +7,7 @@ import {
   bibliographyPage,
   bibliography,
 } from "./catalog-bibliography";
-import { searchWorks } from "./catalog-search";
+import { searchWorks, languageCode } from "./catalog-search";
 export { projectText } from "./catalog-search";
 import { posix } from "node:path";
 import { createHash } from "node:crypto";
@@ -395,6 +395,7 @@ export async function catalogOperation(
         body += `<aside class="notes">${await renderNote(note)}</aside>`;
     return {
       document: readerDocument(body, style, {
+        language: languageCode(strings(m.metadata.language)[0] || "und"),
         theme: x.theme,
         font: x.font,
         size: x.size,

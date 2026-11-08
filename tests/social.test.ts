@@ -131,6 +131,41 @@ test(
       );
       const op = (name: string, input: any, user = alice) =>
         transaction((db) => socialOperation(db, name, input, user, session));
+      await transaction(async (db) => {
+        await db.query("SAVEPOINT recipient_directory");
+        await db.query("UPDATE users SET disabled=true WHERE id=$1", [bob]);
+        await db.query("UPDATE users SET soft_deleted_at=now() WHERE id=$1", [
+          carol,
+        ]);
+        await db.query(`INSERT INTO users(id,username,password_hash,role)
+          SELECT gen_random_uuid(),'reader'||lpad(n::text,3,'0'),'test','User' FROM generate_series(0,51) n`);
+        const directory = (input = {}) =>
+          socialOperation(
+            db,
+            "recommendationRecipients",
+            input,
+            alice,
+            session,
+          );
+        const first = await directory();
+        assert.equal(first.items.length, 50);
+        assert.equal(first.items[0].username, "reader000");
+        assert.equal(first.next, "reader049");
+        assert.deepEqual(Object.keys(first.items[0]), ["username"]);
+        const second = await directory({ cursor: first.next });
+        assert.deepEqual(
+          second.items.map((u: any) => u.username),
+          ["reader050", "reader051"],
+        );
+        assert.equal(second.next, null);
+        assert.equal((await directory({ q: "READER00" })).items.length, 10);
+        assert.equal((await directory({ q: "%" })).items.length, 0);
+        await db.query(
+          "INSERT INTO personal_settings(user_id,recommendations) SELECT id,false FROM users WHERE username='reader000'",
+        );
+        assert.equal((await directory({ q: "reader000" })).items.length, 0);
+        await db.query("ROLLBACK TO SAVEPOINT recipient_directory");
+      });
       const p = await op("socialPreferences", {});
       await assert.rejects(
         op("personalStatistics", { username: "alice" }, bob),
@@ -142,10 +177,13 @@ test(
         push: true,
         grouping: 0,
       });
-      assert.equal(
-        (await op("personalStatistics", { username: "alice" }, bob)).completed,
-        0,
+      await assert.rejects(
+        op("personalStatistics", { username: "alice" }, bob),
       );
+      assert.equal((await op("personalStatistics", {}, bob)).completed, 0);
+      const privateSettings = await op("socialPreferences", {});
+      assert.equal("statistics" in privateSettings, false);
+      assert.equal("statistics_users" in privateSettings, false);
       await assert.rejects(op("personalActivity", { username: "alice" }, bob));
       await assert.rejects(
         op("personalStatistics", { username: "alice" }, carol),
@@ -342,6 +380,15 @@ test(
         username: "alice",
         note: "Private recommendation",
       };
+      const carolPreferences = await op("socialPreferences", {}, carol);
+      await op(
+        "socialPreferencesSave",
+        { ...carolPreferences, recommendations: false },
+        carol,
+      );
+      await assert.rejects(
+        op("recommendWork", { ...recommendation, username: "carol" }, bob),
+      );
       await op("recommendWork", recommendation, bob);
       await op("recommendWork", recommendation, bob);
       assert.equal(

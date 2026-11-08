@@ -1,11 +1,12 @@
+import { createPortal } from "react-dom";
 import { useOffline } from "./offline-ui";
 import { pendingOperations } from "./offline";
 import { useReadingTime } from "./reading-time";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Modal, Notice, Select } from "@palimora/ui";
-import type { Input, Output } from "@palimora/contracts";
+import { readingPercent, type Input, type Output } from "@palimora/contracts";
 import { call, ApiFailure } from "./api";
 import { client, useText, useAction, Loading, QueryError } from "./shared";
 type Anchor = Input<"readingSave">["anchor"];
@@ -49,7 +50,7 @@ function anchorAt(snapshot: string, range: Range): Anchor | null {
     suffix: text.slice(offset + quote.length, offset + quote.length + 32),
   };
 }
-function capture(snapshot: string, selection = false): Anchor | null {
+export function capture(snapshot: string, selection = false): Anchor | null {
   const doc = frameDocument();
   if (!doc) return null;
   if (selection) {
@@ -60,35 +61,66 @@ function capture(snapshot: string, selection = false): Anchor | null {
   }
   const frame = doc.defaultView?.frameElement as HTMLIFrameElement | null;
   if (!frame) return null;
-  const box = frame.getBoundingClientRect(),
-    y = Math.max(
-      8,
-      Math.min(
-        doc.documentElement.clientHeight - 8,
-        Math.max(0, -box.top) + 80,
-      ),
-    );
-  const caret = (
-    doc as Document & {
-      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  const box = frame.getBoundingClientRect();
+  const toolbar = document
+    .querySelector(".reader-toolbar")
+    ?.getBoundingClientRect();
+  const top = frame.closest(".immersive")
+    ? box.top
+    : Math.max(0, toolbar?.bottom ?? 0);
+  const bottom = Math.min(box.bottom, window.innerHeight);
+  if (bottom <= top || box.top >= window.innerHeight) return null;
+  const y = Math.max(0, top - box.top) + 16;
+  const content = doc.getElementById("workskin")?.getBoundingClientRect();
+  const x = content
+    ? (Math.max(0, content.left) +
+        Math.min(doc.documentElement.clientWidth, content.right)) /
+      2
+    : doc.documentElement.clientWidth / 2;
+  const api = doc as Document & {
+    caretPositionFromPoint?: (
+      x: number,
+      y: number,
+    ) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  let caret = api.caretRangeFromPoint?.(x, y);
+  if (!caret) {
+    const position = api.caretPositionFromPoint?.(x, y);
+    if (position) {
+      caret = doc.createRange();
+      caret.setStart(position.offsetNode, position.offset);
+      caret.collapse(true);
     }
-  ).caretRangeFromPoint?.(
-    Math.min(doc.documentElement.clientWidth / 2, 200),
-    y,
-  );
+  }
   if (caret) {
+    const rect = caret.getBoundingClientRect();
     const anchor = anchorAt(snapshot, caret);
-    if (anchor) return anchor;
+    // Some engines return the start of a block for a point in its margins.
+    if (anchor && rect.bottom >= y - 2 && rect.top <= y + 32) return anchor;
   }
   for (const section of doc.querySelectorAll("section.chapter")) {
-    if (section.getBoundingClientRect().bottom + box.top < 0) continue;
+    const bounds = section.getBoundingClientRect();
+    if (bounds.bottom < y || bounds.top + box.top > bottom) continue;
     const walker = doc.createTreeWalker(section, NodeFilter.SHOW_TEXT);
     let node: Node | null;
     while ((node = walker.nextNode())) {
       if (!node.textContent?.trim()) continue;
       const range = doc.createRange();
       range.selectNodeContents(node);
-      if (range.getBoundingClientRect().bottom + box.top < 0) continue;
+      const bounds = range.getBoundingClientRect();
+      if (!bounds.height || bounds.bottom < y || bounds.top + box.top > bottom)
+        continue;
+      // Find the visible line even when one text node spans a whole chapter.
+      let low = 0,
+        high = node.textContent.length;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        range.setEnd(node, mid + 1);
+        if (range.getBoundingClientRect().bottom < y) low = mid + 1;
+        else high = mid;
+      }
+      range.setStart(node, low);
       range.collapse(true);
       return anchorAt(snapshot, range);
     }
@@ -113,9 +145,18 @@ export function scrollToAnchor(anchor: Anchor) {
         frame.classList.contains("reader-frame") &&
         frame.closest(".immersive")
       )
-        doc.defaultView!.scrollBy(0, y - 70);
+        doc.defaultView!.scrollBy(0, y - 16);
       else {
-        window.scrollBy(0, frame.getBoundingClientRect().top + y - 70);
+        const toolbar = document
+          .querySelector(".reader-toolbar")
+          ?.getBoundingClientRect();
+        window.scrollBy(
+          0,
+          frame.getBoundingClientRect().top +
+            y -
+            Math.max(0, toolbar?.height ?? 0) -
+            16,
+        );
       }
       return true;
     }
@@ -126,7 +167,13 @@ export function scrollToAnchor(anchor: Anchor) {
 export function ReadingTools({
   id,
   snapshot,
+  chapter,
+  immersive,
+  onPosition,
 }: {
+  onPosition: (chapter: string) => void;
+  immersive: boolean;
+  chapter?: string;
   id: string;
   snapshot: string;
 }) {
@@ -139,6 +186,44 @@ export function ReadingTools({
   const t = useText(),
     action = useAction(t),
     [params, setParams] = useSearchParams();
+  const positionCallback = useRef(onPosition);
+  positionCallback.current = onPosition;
+  const chapterRef = useRef(chapter);
+  const sampledChapter = useRef(chapter);
+  chapterRef.current = chapter;
+  const [livePercent, setLivePercent] = useState<number | null>(null);
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const panel = useRef<HTMLDetailsElement>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [entryHost, setEntryHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setEntryHost(document.getElementById("reader-start-actions"));
+    setHost(document.getElementById("reader-tools-host"));
+  }, [id, immersive]);
+  const closePanel = () => {
+    if (panel.current) {
+      panel.current.open = false;
+      panel.current
+        .querySelector<HTMLElement>("summary")
+        ?.focus({ preventScroll: true });
+    }
+  };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        panel.current?.open &&
+        !document.querySelector('[role="dialog"]')
+      ) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closePanel();
+      }
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, []);
+
   const progress = useQuery({
     queryKey: ["reading", id, snapshot],
     queryFn: () => call("readingProgress", { id, snapshot }),
@@ -150,6 +235,13 @@ export function ReadingTools({
       call("annotationList", { id, snapshot, cursor: pageParam }),
     getNextPageParam: (p) => p.next ?? undefined,
   });
+  const [annotationSelection, setAnnotationSelection] = useState<Anchor | null>(
+    null,
+  );
+  const [selectionPoint, setSelectionPoint] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const [selection, setSelection] = useState<Anchor | null>(null),
     [edit, setEdit] = useState<
       Output<"annotationList">["items"][number] | "new" | null
@@ -165,6 +257,69 @@ export function ReadingTools({
       mounted.current = false;
     };
   }, []);
+  useEffect(() => {
+    setSelection(null);
+    const clear = () => setSelection(null);
+    window.addEventListener("reading-frame-ready", clear);
+    return () => window.removeEventListener("reading-frame-ready", clear);
+  }, [id, snapshot, chapter]);
+  useLayoutEffect(() => {
+    let doc: Document | null = null;
+    const measure = () => {
+      const frame = document.querySelector<HTMLIFrameElement>(".reader-frame");
+      const selection = frame?.contentDocument?.getSelection();
+      const anchored = capture(snapshot, true);
+      setSelection((old) =>
+        JSON.stringify(old) === JSON.stringify(anchored) ? old : anchored,
+      );
+      if (!frame || !selection?.rangeCount || selection.isCollapsed) {
+        setSelectionPoint(null);
+        return;
+      }
+      const rect = selection.getRangeAt(0).getBoundingClientRect(),
+        box = frame.getBoundingClientRect();
+      const toolbar = document
+        .querySelector(".reader-toolbar")
+        ?.getBoundingClientRect();
+      const top = Math.max(box.top, toolbar?.bottom ?? 0, 0);
+      const bottom = Math.min(box.bottom, innerHeight - (immersive ? 64 : 8));
+      if (rect.bottom + box.top < top || rect.top + box.top > bottom) {
+        setSelectionPoint(null);
+        return;
+      }
+      const left = Math.max(
+        8,
+        Math.min(innerWidth - 176, box.left + rect.left + rect.width / 2 - 80),
+      );
+      const above = box.top + rect.top - 52;
+      setSelectionPoint({
+        left,
+        top:
+          above >= top
+            ? above
+            : Math.min(bottom - 48, box.top + rect.bottom + 8),
+      });
+    };
+    const bind = () => {
+      doc?.removeEventListener("selectionchange", measure);
+      doc?.removeEventListener("scroll", measure, true);
+      doc = frameDocument() ?? null;
+      doc?.addEventListener("selectionchange", measure);
+      doc?.addEventListener("scroll", measure, true);
+      measure();
+    };
+    bind();
+    window.addEventListener("reading-frame-ready", bind);
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      doc?.removeEventListener("selectionchange", measure);
+      doc?.removeEventListener("scroll", measure, true);
+      window.removeEventListener("reading-frame-ready", bind);
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [immersive, snapshot]);
   const current = useRef(progress.data),
     busy = useRef(false),
     conflicted = useRef(false),
@@ -218,16 +373,41 @@ export function ReadingTools({
     conflicted.current = false;
     setPending(null);
     setSelection(null);
-    let stable = 0;
+    let stable = 0,
+      transitioning = false;
+    const begin = () => {
+      transitioning = true;
+    };
+    const end = () => {
+      const anchor = capture(snapshot);
+      last.current = anchor ? anchor.chapter + ":" + anchor.offset : "";
+      stable = 0;
+      transitioning = false;
+      if (anchor) {
+        positionCallback.current(anchor.chapter);
+        if (sampledChapter.current !== chapterRef.current) {
+          desired.current = anchor;
+          const percent = readingPercent(
+            current.current?.chapter_lengths ?? [],
+            anchor,
+          );
+          if (percent !== null) setLivePercent(percent);
+        }
+        sampledChapter.current = chapterRef.current;
+      }
+    };
+    window.addEventListener("reading-transition-start", begin);
+    window.addEventListener("reading-transition-end", end);
     const timer = window.setInterval(() => {
+      if (transitioning) return;
       const selected = capture(snapshot, true);
-      if (selected)
-        setSelection((old) =>
-          JSON.stringify(old) === JSON.stringify(selected) ? old : selected,
-        );
+      setSelection((old) =>
+        JSON.stringify(old) === JSON.stringify(selected) ? old : selected,
+      );
       if (document.visibilityState !== "visible" || !current.current) return;
       const a = capture(snapshot);
       if (!a) return;
+      positionCallback.current(a.chapter);
       const key = a.chapter + ":" + a.offset;
       if (!last.current) {
         last.current = key;
@@ -236,6 +416,18 @@ export function ReadingTools({
       if (key !== last.current) {
         last.current = key;
         desired.current = a;
+        const lengths =
+          current.current.chapter_lengths ??
+          (!chapterRef.current
+            ? [
+                ...(frameDocument()?.querySelectorAll("section.chapter") ?? []),
+              ].map((el) => ({
+                chapter: el.id.slice(8),
+                length: el.textContent?.length ?? 0,
+              }))
+            : []);
+        const percent = readingPercent(lengths, a);
+        if (percent !== null) setLivePercent(percent);
         stable = 0;
       } else if (
         desired.current &&
@@ -277,6 +469,8 @@ export function ReadingTools({
     document.addEventListener("visibilitychange", hidden);
     return () => {
       clearInterval(timer);
+      window.removeEventListener("reading-transition-start", begin);
+      window.removeEventListener("reading-transition-end", end);
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", hidden);
       flush();
@@ -293,75 +487,76 @@ export function ReadingTools({
       setTimeout(() => clearInterval(timer), 5000);
     }
   }
-  if (progress.isPending) return <Loading />;
+  if (!host) return null;
+  if (progress.isPending) return createPortal(<Loading />, host);
   if (progress.isError)
-    return <QueryError retry={() => void progress.refetch()} />;
+    return createPortal(
+      <QueryError retry={() => void progress.refetch()} />,
+      host,
+    );
   const p = progress.data;
-  return (
-    <section
+  const pendingLocal = pendingQueue.data?.some((q) => q.input.id === id);
+  const status = desired.current
+    ? t("Da salvare", "Unsaved")
+    : saving
+      ? t("Salvataggio…", "Saving…")
+      : pendingLocal
+        ? t("Salvato sul dispositivo", "Saved on this device")
+        : p.revision
+          ? t("Salvato", "Saved")
+          : "";
+  const annotate = () => {
+    setAnnotationSelection(selection);
+    setEdit("new");
+  };
+
+  return createPortal(
+    <div
       className="reading-tools"
       aria-label={t("Lettura e annotazioni", "Reading and annotations")}
     >
-      <div className="library-controls">
-        <Select
-          label={t("Stato di lettura", "Reading state")}
-          value={p.state}
-          disabled={saving}
-          onChange={(e) => {
-            const a = capture(snapshot) ?? p.aligned.anchor;
-            if (a) void save(a, e.target.value as State);
-          }}
-        >
-          {states.map(([value, it, en]) => (
-            <option key={value} value={value}>
-              {t(it, en)}
-            </option>
-          ))}
-        </Select>
-        <span>
-          {Math.round(p.percent)}% ·{" "}
-          {saving
-            ? t("Salvataggio…", "Saving…")
-            : pendingQueue.data?.some((q) => q.input.id === id)
-              ? t("Salvato sul dispositivo", "Saved on this device")
-              : p.revision
-                ? t("Salvato", "Saved")
-                : ""}
-        </span>
-        {p.aligned.anchor && (
-          <Button onClick={() => resume(p.aligned.anchor!)}>
-            {t("Riprendi lettura", "Resume reading")}
-          </Button>
-        )}
-        {p.anchor && p.aligned.status === "unresolved" && (
-          <>
-            <span>
-              {t(
-                "Posizione originale conservata; passaggio non riallineato.",
-                "Original position preserved; passage could not be aligned.",
-              )}
-            </span>
-            <a
-              href={
-                "/works/" +
-                id +
-                "?snapshot=" +
-                p.anchor.snapshot +
-                "&chapter=" +
-                p.anchor.chapter
+      {entryHost &&
+        createPortal(
+          <Button
+            tone="primary"
+            onClick={() => {
+              if (p.aligned.anchor) resume(p.aligned.anchor);
+              else {
+                document
+                  .getElementById("reading-start")
+                  ?.scrollIntoView({ block: "start" });
+                const doc = frameDocument();
+                const first = doc?.querySelector<HTMLElement>(".chapter");
+                if (first) {
+                  first.tabIndex = -1;
+                  first.focus({ preventScroll: true });
+                }
               }
-            >
-              {t("Versione originale", "Original version")}
-            </a>
-          </>
+            }}
+          >
+            {p.aligned.anchor
+              ? t("Riprendi lettura", "Resume reading")
+              : t("Leggi", "Read")}
+          </Button>,
+          entryHost,
         )}
-        <Button disabled={!selection} onClick={() => setEdit("new")}>
+      <span className="reader-progress-status" role="status">
+        {Math.round(livePercent ?? p.percent)}% {t("dell’opera", "of the work")}
+        {status ? " · " + status : ""}
+      </span>
+      {selection && selectionPoint && !panelOpen && !edit && (
+        <Button
+          className="button reader-annotate-selection"
+          style={selectionPoint}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={annotate}
+        >
           {t("Annota selezione", "Annotate selection")}
         </Button>
-      </div>
+      )}
       {pendingQueue.data?.some((q) => q.input.id === id && q.error) && (
         <Notice error>
-          <Link to="/offline">
+          <Link to="/library/offline">
             {t(
               "Risolvi le modifiche offline in conflitto",
               "Resolve conflicting offline changes",
@@ -370,103 +565,178 @@ export function ReadingTools({
         </Notice>
       )}
       {error && <Notice error>{error}</Notice>}
-      {pending && (
-        <div className="library-controls">
-          <Button
-            onClick={() => void save(pending, pendingState.current, true)}
-            disabled={saving}
-          >
-            {t("Usa questa posizione", "Use this position")}
-          </Button>
-          <Button
-            onClick={() =>
-              void action.run(async () => {
-                const latest = await progress.refetch();
-                if (latest.data) {
-                  conflicted.current = false;
-                  desired.current = null;
-                  setPending(null);
-                  setError("");
-                  if (latest.data.aligned.anchor)
-                    resume(latest.data.aligned.anchor);
-                }
-              })
-            }
-          >
-            {t("Usa posizione salvata", "Use saved position")}
-          </Button>
-        </div>
-      )}
-      <details>
-        <summary>{t("Annotazioni", "Annotations")}</summary>
-        {notes.isPending ? (
-          <Loading />
-        ) : notes.isError ? (
-          <QueryError retry={() => void notes.refetch()} />
-        ) : (
-          <>
-            <ul className="library-entries">
-              {notes.data.pages
-                .flatMap((p) => p.items)
-                .map((a) => (
-                  <li key={a.id}>
-                    <blockquote>{a.anchor.quote}</blockquote>
-                    <p className="bookmark-notes">{a.body}</p>
-                    <small>
-                      {a.username} ·{" "}
-                      {a.collection_id
-                        ? t("Condivisa", "Shared")
-                        : t("Privata", "Private")}
-                    </small>
-                    <div className="library-controls">
-                      {a.aligned.anchor ? (
-                        <Button onClick={() => resume(a.aligned.anchor!)}>
-                          {t("Vai al passaggio", "Go to passage")}
-                        </Button>
-                      ) : (
-                        <span>
-                          {t(
-                            "Passaggio non riallineato",
-                            "Passage not aligned",
-                          )}
-                        </span>
-                      )}
-                      <a
-                        href={
-                          "/works/" +
-                          id +
-                          "?snapshot=" +
-                          a.anchor.snapshot +
-                          "&chapter=" +
-                          a.anchor.chapter
-                        }
-                      >
-                        {t("Versione originale", "Original version")}
-                      </a>
-                      {a.editable && (
-                        <Button onClick={() => setEdit(a)}>
-                          {t("Modifica", "Edit")}
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-            </ul>
-            {!notes.data.pages[0].items.length && (
-              <p>
-                {t(
-                  "Nessuna annotazione. Seleziona un passaggio nel testo.",
-                  "No annotations. Select a passage in the text.",
-                )}
-              </p>
+      <details
+        ref={panel}
+        className="reading-panel"
+        open={pending ? true : undefined}
+        onToggle={(e) => setPanelOpen(e.currentTarget.open)}
+      >
+        <summary>
+          <span>{t("Lettura e annotazioni", "Reading and annotations")}</span>
+        </summary>
+        <div
+          className="reading-panel-content"
+          role="region"
+          aria-label={t("Strumenti di lettura", "Reading tools")}
+        >
+          <div className="reading-panel-heading">
+            <h2>{t("Lettura e annotazioni", "Reading and annotations")}</h2>
+            <Button
+              onClick={closePanel}
+              aria-label={t(
+                "Chiudi strumenti di lettura",
+                "Close reading tools",
+              )}
+            >
+              ×
+            </Button>
+          </div>
+          <div className="library-controls">
+            <Select
+              label={t("Stato di lettura", "Reading state")}
+              value={p.state}
+              disabled={saving}
+              onChange={(e) => {
+                const a = capture(snapshot) ?? p.aligned.anchor;
+                if (a) void save(a, e.target.value as State);
+              }}
+            >
+              {states.map(([value, it, en]) => (
+                <option key={value} value={value}>
+                  {t(it, en)}
+                </option>
+              ))}
+            </Select>
+            {p.anchor && p.aligned.status === "unresolved" && (
+              <>
+                <span>
+                  {t(
+                    "Posizione originale conservata; passaggio non riallineato.",
+                    "Original position preserved; passage could not be aligned.",
+                  )}
+                </span>
+                <a
+                  href={
+                    "/works/" +
+                    id +
+                    "?snapshot=" +
+                    p.anchor.snapshot +
+                    "&chapter=" +
+                    p.anchor.chapter
+                  }
+                >
+                  {t("Versione originale", "Original version")}
+                </a>
+              </>
             )}
-            {notes.hasNextPage && (
-              <Button onClick={() => void notes.fetchNextPage()}>
-                {t("Altre annotazioni", "More annotations")}
+            <Button disabled={!selection} onClick={annotate}>
+              {t("Annota selezione", "Annotate selection")}
+            </Button>
+          </div>
+          {pending && (
+            <div className="library-controls">
+              <Button
+                onClick={() => void save(pending, pendingState.current, true)}
+                disabled={saving}
+              >
+                {t("Usa questa posizione", "Use this position")}
               </Button>
+              <Button
+                onClick={() =>
+                  void action.run(async () => {
+                    const latest = await progress.refetch();
+                    if (latest.data) {
+                      conflicted.current = false;
+                      desired.current = null;
+                      setPending(null);
+                      setError("");
+                      if (latest.data.aligned.anchor)
+                        resume(latest.data.aligned.anchor);
+                    }
+                  })
+                }
+              >
+                {t("Usa posizione salvata", "Use saved position")}
+              </Button>
+            </div>
+          )}
+          <section className="reader-notes-list">
+            <h3>{t("Annotazioni", "Annotations")}</h3>
+            {notes.isPending ? (
+              <Loading />
+            ) : notes.isError ? (
+              <QueryError retry={() => void notes.refetch()} />
+            ) : (
+              <>
+                <ul className="library-entries">
+                  {notes.data.pages
+                    .flatMap((p) => p.items)
+                    .map((a) => (
+                      <li key={a.id}>
+                        <blockquote>{a.anchor.quote}</blockquote>
+                        <p className="bookmark-notes">{a.body}</p>
+                        <small>
+                          {a.username} ·{" "}
+                          {a.collection_id
+                            ? t("Condivisa", "Shared")
+                            : t("Privata", "Private")}
+                        </small>
+                        <div className="library-controls">
+                          {a.aligned.anchor ? (
+                            <Button
+                              onClick={() => {
+                                closePanel();
+                                resume(a.aligned.anchor!);
+                              }}
+                            >
+                              {t("Vai al passaggio", "Go to passage")}
+                            </Button>
+                          ) : (
+                            <span>
+                              {t(
+                                "Passaggio non riallineato",
+                                "Passage not aligned",
+                              )}
+                            </span>
+                          )}
+                          <a
+                            href={
+                              "/works/" +
+                              id +
+                              "?snapshot=" +
+                              a.anchor.snapshot +
+                              "&chapter=" +
+                              a.anchor.chapter
+                            }
+                          >
+                            {t("Versione originale", "Original version")}
+                          </a>
+                          {a.editable && (
+                            <Button onClick={() => setEdit(a)}>
+                              {t("Modifica", "Edit")}
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+                {!notes.data.pages[0].items.length && (
+                  <p>
+                    {t(
+                      "Nessuna annotazione. Seleziona un passaggio nel testo.",
+                      "No annotations. Select a passage in the text.",
+                    )}
+                  </p>
+                )}
+                {notes.hasNextPage && (
+                  <Button onClick={() => void notes.fetchNextPage()}>
+                    {t("Altre annotazioni", "More annotations")}
+                  </Button>
+                )}
+              </>
             )}
-          </>
-        )}
+          </section>
+        </div>
       </details>
       <Modal
         open={!!edit}
@@ -477,8 +747,9 @@ export function ReadingTools({
         {edit && (
           <AnnotationEditor
             id={id}
-            anchor={edit === "new" ? selection! : edit.anchor}
+            anchor={edit === "new" ? annotationSelection! : edit.anchor}
             existing={edit === "new" ? undefined : edit}
+            onCancel={() => setEdit(null)}
             onDone={async () => {
               setEdit(null);
               await client.invalidateQueries({ queryKey: ["annotations", id] });
@@ -487,7 +758,8 @@ export function ReadingTools({
         )}
       </Modal>
       {action.error && <Notice error>{action.error}</Notice>}
-    </section>
+    </div>,
+    host,
   );
 }
 function AnnotationEditor({
@@ -495,7 +767,9 @@ function AnnotationEditor({
   anchor,
   existing,
   onDone,
+  onCancel,
 }: {
+  onCancel: () => void;
   id: string;
   anchor: Anchor;
   existing?: Output<"annotationList">["items"][number];
@@ -527,13 +801,16 @@ function AnnotationEditor({
     });
   return (
     <form
-      className="bookmark-editor"
+      className="annotation-editor"
       onSubmit={(e) => {
         e.preventDefault();
         save();
       }}
     >
-      <blockquote>{anchor.quote}</blockquote>
+      <div className="annotation-excerpt">
+        <span>{t("Passaggio selezionato", "Selected passage")}</span>
+        <blockquote>{anchor.quote}</blockquote>
+      </div>
       <label>
         {t("Nota", "Note")}
         <textarea
@@ -541,7 +818,12 @@ function AnnotationEditor({
           onChange={(e) => setBody(e.target.value)}
           required
           maxLength={10000}
-          rows={5}
+          rows={6}
+          autoFocus
+          placeholder={t(
+            "Scrivi la tua annotazione…",
+            "Write your annotation…",
+          )}
         />
       </label>
       <Select
@@ -575,8 +857,13 @@ function AnnotationEditor({
       {collections.isError && (
         <QueryError retry={() => void collections.refetch()} />
       )}
-      <div className="library-controls">
-        <Button disabled={action.busy}>{t("Salva", "Save")}</Button>
+      <div className="annotation-editor-actions">
+        <Button type="button" onClick={onCancel}>
+          {t("Annulla", "Cancel")}
+        </Button>
+        <Button tone="primary" disabled={action.busy}>
+          {t("Salva", "Save")}
+        </Button>
         {existing && (
           <Button
             type="button"

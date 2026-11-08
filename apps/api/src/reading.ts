@@ -1,4 +1,4 @@
-import { alignAnchor } from "@palimora/contracts";
+import { alignAnchor, readingPercent } from "@palimora/contracts";
 export { alignAnchor } from "@palimora/contracts";
 import { createHash } from "node:crypto";
 import { Parser } from "htmlparser2";
@@ -54,13 +54,12 @@ async function validateAnchor(db: DB, id: string, anchor: Anchor) {
     text = v.texts.get(anchor.chapter);
   if (!text || alignAnchor(anchor, v.texts, anchor.snapshot).status !== "exact")
     fail("INVALID_INPUT", 400);
-  let before = 0,
-    total = 0;
-  for (const [chapter, t] of v.texts) {
-    if (chapter === anchor.chapter) before = total + anchor.offset;
-    total += t.length;
-  }
-  return total ? (before / total) * 100 : 0;
+  return (
+    readingPercent(
+      [...v.texts].map(([chapter, text]) => ({ chapter, length: text.length })),
+      anchor,
+    ) ?? 0
+  );
 }
 async function resultProgress(
   db: DB,
@@ -94,7 +93,14 @@ async function resultProgress(
         suffix: text.slice(80, 112),
       };
   }
-  return { ...p, aligned };
+  return {
+    ...p,
+    aligned,
+    chapter_lengths: [...v.texts].map(([chapter, text]) => ({
+      chapter,
+      length: text.length,
+    })),
+  };
 }
 export async function readingOperation(
   db: DB,

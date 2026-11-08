@@ -19,8 +19,18 @@ Le esclusioni sono indicazioni alle estensioni, non un blocco imposto dal sito.
 Riferimenti: [1Password](https://www.1password.dev/web/compatible-website-design),
 [Bitwarden](https://bitwarden.com/help/releasenotes/#2021-06-29),
 [Dashlane](https://support.dashlane.com/hc/en-us/articles/4420122792594-Optimize-your-web-forms-for-Dashlane-autofill).
-Il focus usa il colore del tema: contorno da 2 px aderente ai campi, distanziato
-sui pulsanti e sui link. Gli avvisi mantengono un colore distinto dal focus.
+Il focus automatico continua a gestire tastiera e screen reader, senza disegnare
+riquadri sui titoli o sugli elementi di destinazione dopo reload e cambi di stato.
+Mouse e touch non attivano contorni di focus; digitare in un campo raggiunto col
+puntatore non cambia questa modalità. Tab e i comandi di navigazione da tastiera
+abilitano un indicatore neutro da 1 px: bordo del campo per gli input, linea
+inferiore per le ricerche senza bordo, contorno leggermente distanziato per
+pulsanti e link. I controlli con input nascosti
+(selezioni e OTP) mostrano l'indicatore sul controllo visibile. Le selezioni
+persistenti, come un'opera salvata, restano distinte dal focus temporaneo.
+Al reload la modalità riparte senza indicatori; il primo Tab li riattiva. Con
+colori forzati si mantiene un contorno di sistema visibile. Gli avvisi restano
+distinti dal focus e non cambiano colore.
 
 ## Pagine principali
 
@@ -118,8 +128,9 @@ URL esterni, dichiarazioni eseguibili, variabili e posizione fixed sono rimossi.
 Nessun fetch remoto avviene durante consultazione o download. HTML ed EPUB
 trasmettono i media in streaming; il PDF usa composizione nativa e, per layout
 HTML/CSS non rappresentabili, Chromium senza JavaScript/rete.
-Le preferenze di lettura sono nell'URL: progressi, offline, annotazioni e altre
-funzioni personali appartengono alla Milestone 5.
+Tema, font, dimensione e interlinea sono salvati sul dispositivo per account;
+l'URL può sovrascriverli. Progressi, offline e annotazioni sono integrati nella
+Milestone 5.
 
 ### Revisione di consultazione — 2026-11-07
 
@@ -163,7 +174,7 @@ si aprono in dialoghi dedicati; la modalità concentrazione occupa lo schermo,
 esclude la navigazione sottostante dal focus e si chiude anche con Escape.
 I cambi di aspetto mantengono il contenuto visibile durante la richiesta.
 
-Il tema iniziale segue il sito, salvo scelta esplicita nell'URL. Sfondo, colore e
+Il tema Automatico segue il sito; una scelta esplicita persiste sul dispositivo. Sfondo, colore e
 geometria della pagina appartengono al lettore: in scuro la palette prevale anche
 sui colori espliciti delle Work Skins e sugli stili inline. Struttura e media
 restano preservati; in chiaro le decorazioni interne della skin restano visibili.
@@ -202,19 +213,34 @@ verificati non vengono presentati come irrecuperabili.
 
 ### Biblioteca personale: prima integrazione
 
-`/library` espone bookmark, Mark for Later e cronologia tramite viste nell'URL,
-filtri e paginazione. Il lettore riusa lo stesso editor dei bookmark della
-biblioteca: note testuali, tag personali (uno per riga) e raccomandazione.
-I bookmark creati da questa UI sono privati. Il modulo conserva il testo in caso
-di conflitto e richiede di riaprire la versione aggiornata prima di salvare.
-Collezioni, progressi e annotazioni sono descritti nella sezione successiva.
+`/library` espone Opere salvate, Mark for Later e cronologia tramite viste
+nell'URL, filtri e paginazione. «Salva in biblioteca» salva immediatamente senza
+richiedere note o tag. Il menu mostra le collezioni disponibili, «Nuova collezione»
+come prima scelta di organizzazione e un segno sulle collezioni che contengono
+l'opera. Le voci sono toggle: un secondo clic rimuove l'opera dalla collezione.
+Il menu resta aperto per organizzare più collezioni. Ogni aggiunta salva
+anche l'opera nella biblioteca personale di chi agisce, nella stessa transazione.
+
+«Note e tag personali», nel menu dell'opera salvata, apre i dettagli privati:
+note testuali, tag (uno per riga) e raccomandazione. Il modulo conserva il testo in
+caso di conflitto e richiede di riaprire la versione aggiornata prima di salvare.
+La voce «Salva in biblioteca» diventa «Salvato in biblioteca», con bookmark
+pieno; un secondo clic rimuove il salvataggio. La conferma compare soltanto se
+sono presenti note, tag o stato «Consigliata» da eliminare. Collezioni, progressi
+e annotazioni rimangono disponibili. Il comando separato di rimozione scompare.
+Il bookmark è pieno anche sul pulsante che apre il menu; le voci toggle espongono
+lo stato selezionato alle tecnologie assistive e si aggiornano dopo la conferma
+server, mantenendo lo stato precedente in caso di errore.
+I vecchi bookmark sono le opere salvate: nessuna migrazione o duplicazione dei
+dati. Le collezioni preesistenti restano accessibili con gli stessi contenuti.
 
 ### Collezioni, progressi e annotazioni
 
-La biblioteca collega `/collections` e il lettore/editor bookmark offre
-«Aggiungi a collezione». Dettagli, opere, inviti e membri condividono i componenti
+La biblioteca comprende `/library/collections`; il lettore offre il solo menu di salvataggio
+per organizzare le opere. Dettagli, opere, inviti e membri condividono i componenti
 esistenti; le azioni dipendono dal ruolo restituito dal server. L'eliminazione
-richiede conferma e conserva le opere archiviate.
+richiede conferma e conserva opere archiviate e salvataggi personali. Rimuovere
+un'opera da una collezione non la rimuove dalla biblioteca personale.
 
 Il lettore campiona la posizione testuale dopo lo scorrimento e salva dopo una
 breve stabilizzazione. Stato e percentuale sono visibili anche in biblioteca.
@@ -228,9 +254,19 @@ alla versione originale. Il mancato riallineamento rimane visibile.
 
 La biblioteca collega statistiche, attività, sottoscrizioni e centro notifiche.
 Opere, autori e serie offrono lo stesso controllo di sottoscrizione; il comando
-«Consiglia» nelle opere salvate e nel lettore invia una nota privata. Preferenze
-con destinatari distinti per attività e statistiche; profili non autorizzati non
-rivelano dati. Elenchi condivisi attraverso le collezioni esistenti.
+«Consiglia» nelle opere salvate e nel lettore invia un consiglio privato a uno o più utenti. Preferenze
+di condivisione per la sola attività; profili non autorizzati non rivelano dati.
+La pagina Attività di lettura in Biblioteca mostra la propria attività, senza
+barra di ricerca utenti; i vecchi parametri `username` vengono rimossi dall’URL.
+Le statistiche in Biblioteca riguardano esclusivamente l'utente autenticato,
+senza ricerca di altri utenti e senza impostazioni di condivisione. I vecchi
+parametri `username` nella pagina vengono rimossi. Admin/Owner aprono invece
+`/admin/users/:id` dalla lista utenti: tab Account per le azioni di gestione
+esistenti e tab Statistiche (`/admin/users/:id/statistics`) per la consultazione
+amministrativa, anche degli account disabilitati o eliminati logicamente. Ricerca
+e pagina della lista utenti restano nell’URL passando fra scheda e tab, così il
+ritorno alla lista le conserva anche dopo un reload. Elenchi condivisi attraverso
+le collezioni esistenti.
 
 Statistiche con etichette che distinguono opere completate, parole di quelle opere
 e tempo attivo misurato; andamento dei completamenti in UTC. Notifiche persistenti
@@ -260,3 +296,122 @@ Revisione della biblioteca: navigazione personale uniforme anche nelle collezion
 nessun collegamento duplicato alle collezioni, stato locale visibile nel lettore,
 conferma prima di eliminare modifiche non inviate al logout. Installazione e
 aggiornamento applicativo non modificano le copie delle opere.
+
+### Revisione visiva dopo la milestone 5
+
+Il reader mantiene titolo serif e tema del foglio indipendente dal sito. Le azioni
+personali sono visibili sotto titolo e statistiche, con icone e nomi accessibili:
+offline e «Salva in biblioteca» precedono più tardi, consiglio e sottoscrizione.
+Su telefono le azioni restano centrate sotto le statistiche. AO3, versioni e
+download sono allineati verticalmente e passano insieme alla riga successiva
+quando non c'è spazio accanto al ritorno all'elenco. I comandi del reader usano
+icone con nomi accessibili e target di almeno 44 px; il selettore capitoli cede
+spazio ai comandi e tronca i titoli lunghi senza allargare la pagina.
+Il pulsante di salvataggio diventa «Salvato in biblioteca» quando l'opera è salvata.
+Collezioni e dettagli personali stanno nello stesso menu ancorato, senza oscurare
+la pagina. Il retry di creazione riusa l'identità della collezione creata.
+Consiglio privato e sottoscrizione usano lo stesso tipo di menu.
+«Consiglia» mostra subito i nomi utente disponibili, in ordine alfabetico, con
+ricerca, selezione multipla e pulsante «Invia», senza campo nota. Sono esclusi sé
+stessi, account disattivati/eliminati e utenti che non accettano consigli.
+Le selezioni restano visibili filtrando o caricando altre pagine. Gli invii
+riusciti vengono marcati; gli errori rimangono accanto al destinatario e «Riprova»
+invia soltanto i consigli rimasti. Una conferma finale elenca i destinatari.
+La sottoscrizione mostra tre scelte dirette, evidenzia quella selezionata e
+conferma il salvataggio. Le icone di salvataggio e sottoscrizione indicano lo stato
+attivo. Si apre un solo menu per volta; Escape chiude e restituisce il focus al
+pulsante, l'apertura porta il focus al primo campo o alla scelta corrente.
+I menu restano entro il viewport e scorrono internamente se necessario.
+«Leggi» o «Riprendi lettura» precede i dettagli; avvertenze e rating restano
+visibili, il riassunto è espandibile.
+
+Il selettore capitoli occupa lo spazio del comando corrente, con un limite per i
+titoli lunghi. In concentrazione capitolo/aspetto/uscita stanno sopra il testo;
+percentuale e «Lettura e annotazioni» stanno nella barra inferiore, fra precedente
+e successivo. In Opera intera questi pulsanti scorrono fra i capitoli senza
+cambiare modalità. La percentuale visibile segue l'offset testuale durante lo
+scorrimento; «Da salvare», «Salvataggio…», «Salvato» e salvataggio locale distinguono
+la posizione in vista dalla conferma di persistenza.
+
+Il pannello annotazioni non sposta il testo: stato in alto, note direttamente
+visibili con citazione e azioni per il passaggio. Ha chiusura esplicita ed Escape;
+resta possibile selezionare il testo. Il pulsante «Annota selezione» segue la
+selezione nell'iframe, resta nei limiti dello schermo e scompare quando il
+passaggio non è visibile. L'editor separa citazione, nota, visibilità e azioni.
+Il campionamento continua a pannello chiuso; errori e conflitti offline restano
+visibili. Un conflitto di posizione apre i controlli di risoluzione.
+
+Ingresso/uscita dalla concentrazione e cambi di aspetto conservano l'ancora
+visibile senza sovrascrivere il progresso con lo spostamento causato dal layout.
+Font, dimensione e interlinea aggiornano l'iframe senza ricaricarlo; tema e skin
+ripristinano l'ancora dopo il caricamento. Dimensione da 14 a 28 px e interlinea
+compatta/normale/ampia (1,55/1,7/1,85), con etichette accessibili. Automatico
+ripristina il legame con il tema del sito. Il documento dichiara la lingua
+catalogata, o `und` quando non riconosciuta.
+
+Cambiare capitolo azzera la selezione precedente e porta il focus al testo senza
+contorni sul titolo, sul capitolo o sull’iframe. La regola viene applicata nel
+documento isolato del reader, anche alle copie già salvate; i link mantengono il
+proprio focus da tastiera. L'editor conserva la selezione usata per aprirlo.
+Versione corrente, versione storica e copia offline sono distinte confrontando lo
+snapshot effettivo con quello corrente, anche quando lo snapshot corrente è
+esplicito nell'URL.
+
+Controlli condivisi con raggio 8 px e target minimo 44 px; spaziature su passi
+di 4 px, navigazione personale con lo stesso indicatore di selezione, etichette
+in sentence case e titoli a peso 500. Si conservano palette ink/forest, temi
+light/dark/auto e font locali. Nessuna immagine decorativa nel reader.
+
+La verifica della revisione copre desktop 1440 px, tablet 820 px e mobile 390 px,
+modalità immersiva/Esc, dettagli personali e tema scuro del testo. I test Chromium
+su database temporaneo verificano l'ancora visibile e la revisione salvata durante
+i cambi di modalità/aspetto, assenza di richieste per modifiche tipografiche,
+ripresa, focus dei capitoli, selezioni invalidate e controlli senza spostamenti
+del testo. Coprono inoltre annotazioni, isolamento Work Skin e il percorso offline
+completo con riavvio, conflitti e separazione degli account.
+La regressione Firefox copre anche paragrafi con nodi testuali lunghi: il calcolo
+usa le API caret disponibili oppure cerca la riga visibile nel nodo, senza
+ripiegare sull'inizio del paragrafo. Verificati su Firefox anche il contenuto
+locale dell'opera AO3 85167866, i menu e la posizione dell'azione di annotazione;
+i contenuti dell'opera non sono inclusi nei fixture del repository.
+Lo story video in `unslop-story/palimora.mp4` (9,2 s, 2160 × 2160, 30 fps)
+mostra la trasformazione su contenuto sintetico; `story.html` ne conserva le
+fasi CSS. Metodo e renderer: Unslop di Damir Sokolovsky (@heydamir), CC BY 4.0.
+
+### Biblioteca personale: navigazione e stile Fandom
+
+Biblioteca e tutte le sottopagine personali riusano `catalog-heading` e lo stile
+delle tab della pagina Fandom (`/browse/fandom`): contesto «Biblioteca
+personale», titolo serif della vista corrente, selezione con superficie tenue.
+Un solo selettore comprende Opere salvate, Da leggere più tardi, Cronologia,
+Collezioni, Offline, Statistiche, Attività, Sottoscrizioni, Notifiche e Privacy e
+notifiche. Le destinazioni sono `/library` (salvate), `/library/later`,
+`/library/history`,
+`/library/collections` (con dettagli `/:id`), `/library/offline`,
+`/library/statistics`, `/library/activity`, `/library/subscriptions`,
+`/library/notifications` e `/library/settings`. `kind` resta un filtro del
+contratto API per i tre elenchi di opere. Le vecchie route e `/library?kind=…`
+reindirizzano sostituendo la voce nella cronologia, preservando query, frammento
+e stato di navigazione. I collegamenti interni e Web Push usano gli URL canonici.
+Soltanto la vista corrente ha `aria-current`, anche dopo reload o navigazione
+nella cronologia del browser.
+I dettagli di una collezione mantengono selezionata Collezioni. Senza rete resta
+solo Offline, come nella navigazione principale.
+
+Intestazione, larghezza disponibile, separatori e ricerca seguono Fandom anche
+nelle sottopagine. Le barre di ricerca mantengono label accessibili, filtri e
+invio da tastiera e azzeramento esplicito. Su smartphone ricerca e invio stanno
+sulla stessa riga, il tag personale sulla seconda. La navigazione personale è
+una riga scorrevole con frecce, titoli testuali e sezione attiva sempre in vista.
+Le azioni delle righe usano icone con nome accessibile, tooltip e target 44 px;
+conferme e moduli mantengono testi espliciti. Gli elenchi mantengono note, tag e
+progressi. Il filtro notifiche non lette è nell'URL e sopravvive al reload.
+Statistiche a quattro colonne su desktop e due su telefono, senza card decorative.
+La PWA parte da `/library/offline`; conserva `/` come identità applicativa
+per non duplicare le installazioni esistenti.
+
+Verifica: dieci destinazioni personali, redirect dai vecchi indirizzi con filtri
+preservati, ricerca da tastiera e selezione unica dopo reload e avanti/indietro.
+Controlli a 320/390/820 px e lista opere anche a 1280 px; tab attiva visibile dopo
+ridimensionamento. Build web e test browser biblioteca, collezioni/annotazioni,
+funzioni sociali e ciclo offline con riavvio e isolamento account superati.

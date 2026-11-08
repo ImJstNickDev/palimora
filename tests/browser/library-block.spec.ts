@@ -27,9 +27,17 @@ test("collection management and reader progress with anchored annotations on mob
       record: {
         external_id: "456789",
         source_entry: "work",
-        metadata: { title: ["Reading fixture"] },
-        chapters: [{ name: "chapter" }],
+        metadata: { title: ["Reading fixture"], language: ["English"] },
+        chapters: [
+          { name: "chapter" },
+          { name: "second", title: "Second chapter" },
+        ],
         objects: [
+          {
+            name: "second",
+            kind: "chapter_html",
+            data: Buffer.from("<p>A separate chapter.</p>").toString("base64"),
+          },
           {
             name: "chapter",
             kind: "chapter_html",
@@ -76,11 +84,57 @@ test("collection management and reader progress with anchored annotations on mob
       page.getByRole("heading", { name: "Reading group" }),
     ).toBeVisible();
     await page.goto("/works/" + work);
-    await page.getByRole("button", { name: "Aggiungi a collezione" }).click();
+    await expect(page.locator(".reader-library-actions")).toBeVisible();
+    await expect(page.locator(".reading-panel")).not.toHaveAttribute("open");
+    await expect(page.locator(".reader-toolbar + .reader-paper")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Leggi", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("reader-desktop.png") });
+    const toolbarHeight = await page
+      .locator(".reader-toolbar")
+      .evaluate((el) => el.getBoundingClientRect().height);
+    await page
+      .frameLocator(".reader-frame")
+      .locator("p")
+      .first()
+      .evaluate((el) => {
+        const range = el.ownerDocument.createRange();
+        range.selectNodeContents(el);
+        const selection = el.ownerDocument.getSelection()!;
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+    await expect(
+      page.getByRole("button", { name: "Annota selezione" }),
+    ).toBeVisible();
+    expect(
+      await page
+        .locator(".reader-toolbar")
+        .evaluate((el) => el.getBoundingClientRect().height),
+    ).toBe(toolbarHeight);
+    await page
+      .frameLocator(".reader-frame")
+      .locator("p")
+      .first()
+      .evaluate((el) => el.ownerDocument.getSelection()!.removeAllRanges());
+    await expect(
+      page.getByRole("button", { name: "Annota selezione" }),
+    ).toBeHidden();
+    await page.locator(".reading-panel > summary").click();
+    await page
+      .getByRole("button", { name: "Salva in biblioteca", exact: true })
+      .click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Reading group" })
       .click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Salvato in biblioteca", exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     const frame = page.frameLocator(".reader-frame");
     await expect(frame.locator("p").first()).toBeVisible();
     await frame
@@ -122,7 +176,9 @@ test("collection management and reader progress with anchored annotations on mob
           ).rows[0]?.state,
       )
       .toBe("paused");
-    await page.getByText("Annotazioni", { exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Annotazioni", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Preserve this reference")).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
@@ -134,6 +190,7 @@ test("collection management and reader progress with anchored annotations on mob
       path: testInfo.outputPath("reading-mobile.png"),
       fullPage: false,
     });
+    await page.locator(".reading-panel > summary").click();
     await frame.locator("p").nth(20).scrollIntoViewIfNeeded();
     await expect
       .poll(async () =>
@@ -147,8 +204,238 @@ test("collection management and reader progress with anchored annotations on mob
         ),
       )
       .toBeGreaterThan(20);
+    const visibleParagraph = () =>
+      page.locator(".reader-frame").evaluate((el) => {
+        const f = el as HTMLIFrameElement,
+          box = f.getBoundingClientRect();
+        const top = f.closest(".immersive")
+          ? box.top
+          : Math.max(
+              0,
+              document.querySelector(".reader-toolbar")!.getBoundingClientRect()
+                .bottom,
+            );
+        return [...f.contentDocument!.querySelectorAll("p")].findIndex(
+          (p) => p.getBoundingClientRect().bottom + box.top > top + 16,
+        );
+      });
+    const beforePanel = await visibleParagraph();
+    await page.locator(".reading-panel > summary").click();
+    expect(await visibleParagraph()).toBe(beforePanel);
+    await page
+      .getByRole("button", { name: "Chiudi strumenti di lettura" })
+      .click();
+    expect(await visibleParagraph()).toBe(beforePanel);
+    await page.waitForTimeout(3000);
+    const beforeMode = await visibleParagraph();
+    const savedBeforeMode = (
+      await pool.query(
+        "SELECT revision,anchor FROM library_progress WHERE work_id=$1",
+        [work],
+      )
+    ).rows[0];
+    await page
+      .getByRole("button", { name: "Lettura immersiva", exact: true })
+      .click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.waitForTimeout(3000);
+    expect(
+      (
+        await pool.query(
+          "SELECT revision,anchor FROM library_progress WHERE work_id=$1",
+          [work],
+        )
+      ).rows[0],
+    ).toEqual(savedBeforeMode);
+    await page
+      .getByRole("button", {
+        name: "Esci dalla lettura immersiva",
+        exact: true,
+      })
+      .click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.waitForTimeout(3000);
+    expect(
+      (
+        await pool.query(
+          "SELECT revision,anchor FROM library_progress WHERE work_id=$1",
+          [work],
+        )
+      ).rows[0],
+    ).toEqual(savedBeforeMode);
+    await page
+      .getByRole("button", { name: "Lettura immersiva", exact: true })
+      .click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.screenshot({
+      path: testInfo.outputPath("reader-immersive-mobile.png"),
+    });
+    await page.locator(".reading-panel > summary").click();
+    await frame.locator("body").evaluate((el) => {
+      el.tabIndex = -1;
+      el.focus({ preventScroll: true });
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".reading-panel")).not.toHaveAttribute("open");
+    await expect(page.locator(".reader.immersive")).toBeVisible();
+    await frame
+      .locator("body")
+      .evaluate((el) => el.focus({ preventScroll: true }));
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".reader.immersive")).toHaveCount(0);
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page
+      .getByRole("button", { name: "Lettura immersiva", exact: true })
+      .click();
+    let typographyRequests = 0;
+    const countContent = (r: import("@playwright/test").Request) => {
+      if (r.url().includes("/read?")) typographyRequests++;
+    };
+    page.on("request", countContent);
+    await page.getByRole("button", { name: "Aspetto", exact: true }).click();
+    await page.getByRole("button", { name: "Sans serif", exact: true }).click();
+    await expect(frame.locator("body")).toHaveCSS(
+      "font-family",
+      "system-ui, sans-serif",
+    );
+    await page.getByRole("slider", { name: "Dimensione testo" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(frame.locator("body")).toHaveCSS("font-size", "20px");
+    await page.getByRole("button", { name: "Compatta", exact: true }).click();
+    await expect(frame.locator("body")).toHaveCSS("line-height", "31px");
+    await page.getByRole("button", { name: "Chiudi", exact: true }).click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.waitForTimeout(3000);
+    expect(typographyRequests).toBe(0);
+    page.off("request", countContent);
+    expect(
+      (
+        await pool.query(
+          "SELECT revision,anchor FROM library_progress WHERE work_id=$1",
+          [work],
+        )
+      ).rows[0],
+    ).toEqual(savedBeforeMode);
+    await page.getByRole("button", { name: "Aspetto", exact: true }).click();
+    await page.getByRole("button", { name: "Scuro", exact: false }).click();
+    await expect(frame.locator("body")).toHaveCSS(
+      "background-color",
+      "rgb(32, 39, 46)",
+    );
+    await page.getByRole("button", { name: "Chiudi", exact: true }).click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.goto("/works/" + work);
+    await expect(frame.locator("body")).toHaveCSS("font-size", "20px");
+    await expect(frame.locator("body")).toHaveCSS(
+      "font-family",
+      "system-ui, sans-serif",
+    );
+    await page.screenshot({ path: testInfo.outputPath("reader-mobile.png") });
+    await expect(
+      page.getByRole("button", { name: "Riprendi lettura" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Riprendi lettura" }).click();
+    await expect.poll(visibleParagraph).toBe(beforeMode);
+    await page.getByRole("button", { name: "Aspetto", exact: true }).click();
+    // Re-selecting the active option must not freeze progress sampling.
+    await page.getByRole("button", { name: "Sans serif", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Automatico", exact: false })
+      .click();
+    await page.getByRole("button", { name: "Chiudi", exact: true }).click();
+    await frame.locator("p").nth(26).scrollIntoViewIfNeeded();
+    await expect
+      .poll(async () =>
+        Number(
+          (
+            await pool.query(
+              "SELECT revision FROM library_progress WHERE work_id=$1",
+              [work],
+            )
+          ).rows[0].revision,
+        ),
+      )
+      .toBeGreaterThan(Number(savedBeforeMode.revision));
     await page.reload();
     await expect(page.getByLabel("Stato di lettura")).toHaveValue("paused");
+    await expect(frame.locator("html")).toHaveAttribute("lang", "en");
+    await page.locator(".reading-panel > summary").click();
+    await frame
+      .locator("p")
+      .nth(5)
+      .evaluate((el) => {
+        const r = el.ownerDocument.createRange();
+        r.selectNodeContents(el);
+        const sel = el.ownerDocument.getSelection()!;
+        sel.removeAllRanges();
+        sel.addRange(r);
+      });
+    await expect(
+      page.getByRole("button", { name: "Annota selezione" }),
+    ).toBeEnabled();
+    const second = await page
+      .getByRole("combobox", { name: "Capitolo", exact: true })
+      .locator("option")
+      .nth(2)
+      .getAttribute("value");
+    await page.getByRole("combobox", { name: "Capitolo", exact: true }).focus();
+    await page.keyboard.press("Home");
+    await page
+      .getByRole("combobox", { name: "Capitolo", exact: true })
+      .selectOption(second!);
+    await expect(frame.locator("p")).toHaveText("A separate chapter.");
+    await expect
+      .poll(async () =>
+        parseInt(await page.locator(".reader-progress-status").innerText()),
+      )
+      .toBeGreaterThan(90);
+    await expect
+      .poll(
+        async () =>
+          (
+            await pool.query(
+              "SELECT anchor->>'chapter' AS chapter FROM library_progress WHERE work_id=$1",
+              [work],
+            )
+          ).rows[0]?.chapter,
+      )
+      .toBe(second);
+
+    await expect
+      .poll(() =>
+        page
+          .locator(".reader-frame")
+          .evaluate(
+            (f) =>
+              !!(
+                f as HTMLIFrameElement
+              ).contentDocument?.activeElement?.closest(".chapter"),
+          ),
+      )
+      .toBe(true);
+    await expect(frame.locator('[tabindex="-1"]:focus')).toHaveCSS(
+      "outline-style",
+      "none",
+    );
+    await expect(page.locator(".reader-frame")).toHaveCSS(
+      "outline-style",
+      "none",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("chapter-change-no-outline.png"),
+    });
+    await expect(
+      page.getByRole("button", { name: "Annota selezione" }),
+    ).toBeDisabled();
+    const current = (
+      await pool.query(
+        "SELECT current_snapshot_id FROM archive_work_heads WHERE id=$1",
+        [work],
+      )
+    ).rows[0].current_snapshot_id;
+    await page.goto(`/works/${work}?snapshot=${current}`);
+    await expect(page.locator(".reader-frame")).toBeVisible();
+    await expect(page.locator(".version-indicator")).toHaveCount(0);
     await page.goto("/collections");
     await page
       .getByRole("link", { name: "Reading group", exact: true })

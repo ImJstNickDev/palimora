@@ -1,4 +1,4 @@
-import { socialOperation } from "./social";
+import { socialOperation, statistics } from "./social";
 import { readingOperation } from "./reading";
 import { collectionOperation } from "./collections";
 import { libraryOperation, recordReading } from "./library";
@@ -427,6 +427,7 @@ export class Identity {
       case "personalActivity":
       case "readingHeartbeat":
       case "recommendWork":
+      case "recommendationRecipients":
       case "subscriptionStatus":
       case "subscriptionSave":
       case "subscriptions":
@@ -454,6 +455,7 @@ export class Identity {
       }
       case "libraryList":
       case "libraryWork":
+      case "librarySave":
       case "bookmarkSave":
       case "libraryLater":
       case "libraryForget":
@@ -847,6 +849,17 @@ export class Identity {
           items: rows.slice(0, 50),
           next: rows.length > 50 ? rows[49].id : null,
         };
+      }
+      case "userDetail":
+      case "userStatistics": {
+        const target = (
+          await db.query(`SELECT ${userColumns} FROM users WHERE id=$1`, [x.id])
+        ).rows[0];
+        if (!target) fail("NOT_FOUND", 404);
+        const result =
+          op === "userStatistics" ? await statistics(db, target.id) : target;
+        await this.audit(db, c, op, target.id);
+        return result;
       }
       case "userUpdate": {
         const user = await this.target(db, c, x.id);

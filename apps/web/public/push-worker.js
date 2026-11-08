@@ -4,15 +4,15 @@ self.addEventListener('push', event => {
   try { if (event.data?.json().language === 'en') language = 'en'; } catch {}
   event.waitUntil(self.registration.showNotification('Palimora', {
     body: language === 'en' ? 'New notifications' : 'Nuove notifiche', tag: 'palimora-notifications',
-    data: {url: '/notifications'}
+    data: {url: '/library/notifications'}
   }));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async windows => {
     const existing=windows.find(client=>new URL(client.url).origin===self.location.origin);
-    if(existing){await existing.navigate('/notifications');return existing.focus();}
-    return self.clients.openWindow('/notifications');
+    if(existing){await existing.navigate('/library/notifications');return existing.focus();}
+    return self.clients.openWindow('/library/notifications');
   }));
 });
 

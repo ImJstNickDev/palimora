@@ -12,13 +12,13 @@
   --surface: #fffefa;
   --text: #252b32;
   --muted: #58616b;
-  --line: #c9c9c2;
+  --line: #d9dad6;
   --accent: #284f74;
   --on-accent: #fff;
   --soft: #e7edf1;
   --danger: #a32929;
   --warning: #b36b00;
-  --focus: var(--accent);
+  --focus: var(--muted);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -28,7 +28,7 @@ html[data-theme="dark"] {
   --surface: #20272e;
   --text: #edece6;
   --muted: #b3bcc5;
-  --line: #505962;
+  --line: #414950;
   --accent: #9bc5ed;
   --on-accent: #142536;
   --soft: #2d3d4c;
@@ -51,7 +51,7 @@ html[data-theme="dark"][data-skin="forest"] {
     --surface: #20272e;
     --text: #edece6;
     --muted: #b3bcc5;
-    --line: #505962;
+    --line: #414950;
     --accent: #9bc5ed;
     --on-accent: #142536;
     --soft: #2d3d4c;
@@ -100,8 +100,8 @@ select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  padding: 8px 12px;
   background: var(--surface);
   color: var(--text);
   min-height: 44px;
@@ -123,23 +123,26 @@ small {
 }
 .field {
   display: grid;
-  gap: 0.3rem;
+  gap: 4px;
   margin-bottom: 1rem;
 }
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 8px;
   min-height: 44px;
-  padding: 0.45rem 0.85rem;
+  padding: 8px 16px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
-  border-radius: 4px;
+  border-radius: 8px;
   font-weight: 600;
   text-decoration: none;
   white-space: normal;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out;
 }
 .button:hover {
   background: var(--soft);
@@ -152,23 +155,51 @@ small {
 .button.danger {
   color: var(--danger);
 }
-:focus-visible {
-  outline: 2px solid var(--focus);
+:focus {
+  outline: none;
+}
+/* No JavaScript falls back to native :focus-visible keyboard detection. */
+html:not([data-focus-mode="pointer"])
+  :focus-visible:where(:not([tabindex="-1"])) {
+  outline: 1px solid var(--focus);
   outline-offset: 2px;
 }
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline-offset: 0;
+html:not([data-focus-mode="pointer"])
+  :where(
+    input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="color"],
+      [type="file"]
+    ),
+    select,
+    textarea
+  ):focus-visible {
+  outline: none;
+  border-color: var(--focus);
+}
+@media (forced-colors: active) {
+  html:not([data-focus-mode="pointer"])
+    :is(input, select, textarea):focus-visible,
+  html:not([data-focus-mode="pointer"])
+    :focus-visible:where(:not([tabindex="-1"])) {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 h1,
 h2,
 h3 {
   line-height: 1.2;
+  font-weight: 500;
 }
 h1 {
   font-size: 1.9rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
   margin: 0 0 1.5rem;
 }
 h2 {
@@ -181,7 +212,7 @@ h3 {
 .row {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .row > h2 {

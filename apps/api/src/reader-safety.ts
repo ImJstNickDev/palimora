@@ -166,7 +166,12 @@ export function safeHtml(
 export function readerDocument(
   body: string,
   style = "",
-  options: { theme?: string; font?: string; size?: number } = {},
+  options: {
+    theme?: string;
+    font?: string;
+    size?: number;
+    language?: string;
+  } = {},
 ) {
   const dark = options.theme === "dark";
   const font =
@@ -188,7 +193,7 @@ export function readerDocument(
   const palette = dark
     ? `#workskin,#workskin *:not(img):not(video):not(svg):not(svg *),#workskin *::before,#workskin *::after{color:${ink}!important;background-color:transparent!important;background-image:none!important;border-color:${line}!important;text-shadow:none!important;-webkit-text-fill-color:currentColor!important}#workskin a,#workskin a *{color:${link}!important}`
     : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>
+  return `<!doctype html><html lang="${escapeHtml(options.language ?? "und")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>
     @layer palimora-reader;
     *{box-sizing:border-box}body{font:${size}px/1.85 ${font};overflow-wrap:anywhere;text-align:start}
     #workskin{max-width:68ch;margin:0 auto}img,video{max-width:100%;height:auto}audio{max-width:100%}a{color:${link}}pre{white-space:pre-wrap}table{max-width:100%}p{margin:0 0 1.2em}h1,h2,h3,h4{line-height:1.35;text-wrap:balance}h3.fff_chapter_title,.chapter>h2{font-size:1.3em;font-weight:500;text-align:center;margin:0 0 2em}.chapter+.chapter{margin-top:4em;padding-top:2em;border-top:1px solid ${line}}.notes{font-size:.9em;border-block:1px solid ${line};padding:1em 0;margin:1.5em 0}blockquote{margin:1.5em 0;padding-left:1.5em;border-left:2px solid ${line}}

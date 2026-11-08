@@ -1,5 +1,6 @@
 import { DB } from "./db";
 import { fail } from "./security";
+import { ensureLibrarySaved } from "./library";
 export async function collectionAccess(
   db: DB,
   id: string,
@@ -29,8 +30,10 @@ export async function collectionOperation(
   if (op === "collectionList") {
     const rows = (
       await db.query(
-        `SELECT c.id,c.name,c.description,c.revision,CASE WHEN owner_id=$1 THEN 'Owner' ELSE m.role END AS role,(owner_id=$1 OR m.accepted) AS accepted FROM library_collections c LEFT JOIN library_members m ON m.collection_id=c.id AND m.user_id=$1 WHERE NOT c.deleted AND (owner_id=$1 OR m.user_id=$1) AND ($2::uuid IS NULL OR c.id>$2) AND c.name ILIKE '%'||$3||'%' ORDER BY c.id LIMIT 51`,
-        [user, x.cursor ?? null, x.q ?? ""],
+        `SELECT c.id,c.name,c.description,c.revision,CASE WHEN owner_id=$1 THEN 'Owner' ELSE m.role END AS role,(owner_id=$1 OR m.accepted) AS accepted,
+         coalesce((owner_id=$1 OR m.accepted) AND EXISTS(SELECT 1 FROM library_collection_works cw WHERE cw.collection_id=c.id AND cw.work_id=$4),false) AS contains_work
+         FROM library_collections c LEFT JOIN library_members m ON m.collection_id=c.id AND m.user_id=$1 WHERE NOT c.deleted AND (owner_id=$1 OR m.user_id=$1) AND ($2::uuid IS NULL OR c.id>$2) AND c.name ILIKE '%'||$3||'%' ORDER BY c.id LIMIT 51`,
+        [user, x.cursor ?? null, x.q ?? "", x.work ?? null],
       )
     ).rows;
     return {
@@ -133,11 +136,13 @@ export async function collectionOperation(
         "DELETE FROM library_collection_works WHERE collection_id=$1 AND work_id=$2",
         [x.id, x.work],
       );
-    else
+    else {
       await db.query(
         "INSERT INTO library_collection_works VALUES($1,$2) ON CONFLICT DO NOTHING",
         [x.id, x.work],
       );
+      await ensureLibrarySaved(db, user, x.work);
+    }
   }
   return { ok: true };
 }

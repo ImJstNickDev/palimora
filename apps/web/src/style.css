@@ -404,11 +404,10 @@ main h3 {
   animation: digit-enter 150ms ease-out;
 }
 .otp-slots > span[data-active="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--soft);
+  border-color: var(--muted);
 }
-.otp-control:focus-within {
-  outline: 2px solid var(--focus);
+html:not([data-focus-mode="pointer"]) .otp-control:has(input:focus-visible) {
+  outline: 1px solid var(--focus);
   outline-offset: 2px;
   border-radius: 9px;
 }

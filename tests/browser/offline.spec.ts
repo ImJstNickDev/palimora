@@ -186,7 +186,7 @@ test("offline reader survives restart, reconciles conflicts and isolates account
       .click();
     await page
       .getByRole("combobox", { name: "Capitolo", exact: true })
-      .selectOption({ label: "2. Second chapter" });
+      .selectOption({ label: "2/2 · Second chapter" });
     await expect(frame.locator("p").first()).toHaveText(
       "Second saved chapter with its original words.",
     );
@@ -208,6 +208,7 @@ test("offline reader survives restart, reconciles conflicts and isolates account
         s.removeAllRanges();
         s.addRange(r);
       });
+    await page.locator(".reading-panel > summary").click();
     await page.getByRole("button", { name: "Annota selezione" }).click();
     await page
       .getByRole("dialog")
@@ -237,7 +238,10 @@ test("offline reader survives restart, reconciles conflicts and isolates account
       "/works/" + work.id + "?local=1&snapshot=" + work.current_snapshot_id,
     );
     await expect(restart.getByLabel("Stato di lettura")).toHaveValue("paused");
-    await restart.getByText("Annotazioni", { exact: true }).click();
+    await restart.locator(".reading-panel > summary").click();
+    await expect(
+      restart.getByRole("heading", { name: "Annotazioni", exact: true }),
+    ).toBeVisible();
     await expect(restart.getByText("Written entirely offline")).toBeVisible();
     // A concurrent device changes the server revision while this client is offline.
     const local = await restart.evaluate(async () => {
@@ -395,14 +399,14 @@ test("offline reader survives restart, reconciles conflicts and isolates account
     }
     for (const route of [
       "library",
-      "collections",
-      "collections/" + collection,
-      "statistics",
-      "activity",
-      "subscriptions",
-      "notifications",
-      "social-settings",
-      "offline",
+      "library/collections",
+      "library/collections/" + collection,
+      "library/statistics",
+      "library/activity",
+      "library/subscriptions",
+      "library/notifications",
+      "library/settings",
+      "library/offline",
     ]) {
       await restart.goto("/" + route);
       await expect(restart.locator("main h1")).toBeVisible();
@@ -434,7 +438,10 @@ test("offline reader survives restart, reconciles conflicts and isolates account
     await expect(
       restart.frameLocator(".reader-frame").locator("p").first(),
     ).toContainText("A new introduction.");
-    await restart.getByText("Annotazioni", { exact: true }).click();
+    await restart.locator(".reading-panel > summary").click();
+    await expect(
+      restart.getByRole("heading", { name: "Annotazioni", exact: true }),
+    ).toBeVisible();
     await expect(restart.getByText("Written entirely offline")).toBeVisible();
     for (const width of [390, 820]) {
       await restart.setViewportSize({ width, height: 1000 });

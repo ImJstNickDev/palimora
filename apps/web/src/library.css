@@ -1,26 +1,15 @@
 .personal-library {
-  max-width: 76rem;
-  margin-inline: auto;
+  max-width: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
 }
-.library-tabs,
 .library-controls,
 .library-filter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem;
-}
-.library-tabs {
-  border-bottom: 1px solid var(--line);
-  padding-block: 0.6rem;
-}
-.library-tabs a {
-  padding: 0.4rem 0.65rem;
-}
-.library-tabs [aria-current] {
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 0.4rem;
 }
 .library-filter {
   align-items: end;
@@ -69,14 +58,7 @@
 .library-controls .notice {
   flex-basis: 100%;
 }
-@media (max-width: 40rem) {
-  .library-tabs {
-    gap: 0.25rem;
-  }
-  .library-tabs a {
-    padding: 0.5rem 0.25rem;
-  }
-}
+
 .reading-tools {
   border-block: 1px solid var(--line);
   padding-block: 0.7rem;
@@ -134,4 +116,383 @@
   .personal-totals {
     grid-template-columns: 1fr;
   }
+}
+
+/* The personal collection uses the same heading, tabs and search as Fandom. */
+.personal-search {
+  max-width: 48rem;
+}
+.personal-library .catalog-heading h1 {
+  overflow-wrap: anywhere;
+}
+.personal-library .library-entries {
+  margin-block: 24px;
+}
+.personal-library .library-entries > li {
+  padding-block: 20px;
+}
+.personal-library .library-entries h2 a {
+  text-decoration: none;
+}
+.personal-library .library-entries h2 a:hover {
+  text-decoration: underline;
+}
+.personal-library > form {
+  max-width: 48rem;
+}
+.personal-navigation a {
+  min-height: 44px;
+}
+@media (max-width: 700px) {
+  .catalog-searchbar.personal-search {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .catalog-searchbar.personal-search .catalog-search-field {
+    flex: 1 1 100%;
+  }
+  .catalog-searchbar.personal-search
+    .catalog-search-field
+    + .catalog-search-field {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 0 8px;
+  }
+  .personal-search > .button {
+    margin-left: auto;
+  }
+}
+
+.personal-library .library-entries .library-controls > .button {
+  padding-inline: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border-color: transparent;
+  background: transparent;
+}
+.personal-library .library-entries .library-controls > .button:hover {
+  background: var(--soft);
+}
+
+/* One personal workspace: compact navigation, calm lists, touch-sized actions. */
+.personal-library .catalog-heading {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.personal-library .catalog-heading > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+.library-heading-actions {
+  align-self: flex-end;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 12px;
+}
+.icon-button:not(.primary):not(.danger) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--soft);
+  color: var(--text);
+}
+.personal-navigation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.personal-tab-list {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  gap: 4px;
+}
+.personal-tab-list a {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.personal-tab-list a:hover,
+.personal-tab-list a.active {
+  color: var(--accent);
+  background: var(--soft);
+}
+.catalog-searchbar.personal-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+.personal-search .catalog-search-field {
+  min-width: 0;
+  min-height: 44px;
+}
+.personal-search > .button {
+  margin: 0;
+}
+.personal-search > button[type="submit"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+.personal-search > a {
+  grid-column: 3;
+  grid-row: 1;
+}
+.personal-search:has(.catalog-search-field + .catalog-search-field) {
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.6fr) auto auto;
+}
+.personal-search:has(.catalog-search-field + .catalog-search-field)
+  > button[type="submit"] {
+  grid-column: 3;
+}
+.personal-search:has(.catalog-search-field + .catalog-search-field) > a {
+  grid-column: 4;
+}
+.library-entry-meta,
+.collection-description,
+.notification-entry > time {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.personal-library .library-entries {
+  margin-block: 16px 24px;
+}
+.personal-library .library-entries > li {
+  padding-block: 16px;
+}
+.personal-library .library-entries > li > :last-child {
+  margin-bottom: 0;
+}
+.library-work-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 24px;
+}
+.library-work-entry > :not(.library-entry-actions) {
+  grid-column: 1;
+}
+.library-work-entry > h2 {
+  align-self: center;
+}
+.library-work-entry .bookmark-notes {
+  margin: 8px 0;
+}
+.library-work-entry .bookmark-tags {
+  margin: 4px 0;
+}
+.library-work-entry .library-entry-meta {
+  margin: 4px 0;
+}
+.library-entry-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px;
+  grid-column: 2;
+  grid-row: 1 / span 5;
+  align-self: start;
+}
+.library-entry-actions .library-controls {
+  gap: 4px;
+}
+.library-entry-actions > .icon-button {
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+}
+.library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.library-row > :first-child {
+  min-width: 0;
+  margin: 0;
+}
+.library-row > .button {
+  flex-shrink: 0;
+}
+.library-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  text-decoration: none;
+}
+.library-options {
+  margin-block: 24px;
+  padding-block: 8px;
+  border-block: 1px solid var(--line);
+}
+.library-options > summary {
+  padding-block: 12px;
+  cursor: pointer;
+}
+.notification-entry {
+  position: relative;
+  padding-right: 60px;
+}
+.notification-entry.unread h2::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.notification-entry > .library-controls {
+  position: absolute;
+  top: 12px;
+  right: 0;
+}
+.personal-totals {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  padding-block: 8px 24px;
+}
+.personal-totals dt {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+.personal-totals dd {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+.personal-library > table {
+  width: 100%;
+  max-width: 48rem;
+}
+.social-preferences {
+  gap: 16px;
+}
+.social-preferences h2 {
+  margin: 16px 0 0;
+}
+.social-preferences fieldset {
+  border: 0;
+  padding: 8px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.social-preferences legend {
+  font-weight: 500;
+  padding: 0;
+}
+.social-preferences > .button {
+  justify-self: start;
+}
+@media (max-width: 700px) {
+  .personal-library .catalog-heading {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .personal-library .catalog-heading h1 {
+    font-size: 28px;
+  }
+  .personal-navigation {
+    margin-inline: -4px;
+    margin-bottom: 20px;
+    gap: 0;
+  }
+  .personal-tab-list a {
+    padding-inline: 12px;
+  }
+  .personal-navigation > .icon-button {
+    width: 44px;
+  }
+  .catalog-searchbar.personal-search,
+  .personal-search:has(.catalog-search-field + .catalog-search-field) {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .personal-search:has(.catalog-search-field + .catalog-search-field)
+    > button[type="submit"] {
+    grid-column: 2;
+  }
+  .personal-search:has(.catalog-search-field + .catalog-search-field) > a {
+    grid-column: 3;
+  }
+  .catalog-searchbar.personal-search
+    .catalog-search-field
+    + .catalog-search-field {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0 8px;
+    border-top: 1px solid var(--line);
+  }
+  .library-work-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .library-entry-actions {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 8px;
+  }
+  .personal-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
+  }
+  .personal-totals dd {
+    font-size: 22px;
+  }
+  .library-filter {
+    align-items: stretch;
+    gap: 12px;
+  }
+  .library-filter > .field {
+    flex-basis: 100%;
+  }
+}
+
+.library-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+}
+.library-section-heading h2 {
+  margin: 0;
+}
+
+.social-preferences .check {
+  margin: 0;
+  min-height: 44px;
+  font-weight: 400;
+  gap: 12px;
+}
+.personal-library input[type="checkbox"] {
+  accent-color: var(--accent);
 }

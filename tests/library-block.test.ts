@@ -144,6 +144,68 @@ test(
         { id: collection, work: id, remove: false },
         editor,
       );
+      const savedEntry = (
+        await pool.query(
+          "SELECT * FROM library_bookmarks WHERE user_id=$1 AND work_id=$2",
+          [editor, id],
+        )
+      ).rows[0];
+      assert.equal(savedEntry.deleted, false);
+      assert.equal(savedEntry.revision, 1);
+      assert.equal(
+        (await co("collectionList", { work: id }, editor)).items[0]
+          .contains_work,
+        true,
+      );
+      await co(
+        "collectionWork",
+        { id: collection, work: id, remove: false },
+        editor,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT revision FROM library_bookmarks WHERE user_id=$1 AND work_id=$2",
+            [editor, id],
+          )
+        ).rows[0].revision,
+        1,
+      );
+      await assert.rejects(
+        co(
+          "collectionWork",
+          { id: collection, work: id, remove: false },
+          viewer,
+        ),
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT count(*)::int AS n FROM library_bookmarks WHERE user_id=$1",
+            [viewer],
+          )
+        ).rows[0].n,
+        0,
+      );
+      await co(
+        "collectionWork",
+        { id: collection, work: id, remove: true },
+        editor,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT deleted FROM library_bookmarks WHERE user_id=$1 AND work_id=$2",
+            [editor, id],
+          )
+        ).rows[0].deleted,
+        false,
+      );
+      await co(
+        "collectionWork",
+        { id: collection, work: id, remove: false },
+        editor,
+      );
       await assert.rejects(
         co(
           "collectionWork",
@@ -295,3 +357,21 @@ test(
     }
   },
 );
+
+test("reading percentage uses the same ordered UTF-16 chapter offsets", async () => {
+  const { readingPercent } = await import("../packages/contracts/src/index");
+  const lengths = [
+    { chapter: "first", length: "A😀".length },
+    { chapter: "second", length: 7 },
+  ];
+  assert.equal(readingPercent(lengths, { chapter: "second", offset: 2 }), 50);
+  assert.equal(readingPercent(lengths, { chapter: "first", offset: 0 }), 0);
+  assert.equal(
+    readingPercent(lengths, { chapter: "second", offset: 100 }),
+    100,
+  );
+  assert.equal(
+    readingPercent(lengths, { chapter: "missing", offset: 1 }),
+    null,
+  );
+});

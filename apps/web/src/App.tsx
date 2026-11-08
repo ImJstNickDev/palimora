@@ -1,3 +1,4 @@
+import { canonicalLibraryLocation } from "./library-routes";
 import { pendingOperations } from "./offline";
 import { OfflineLibrary, OfflineRuntime, useOffline } from "./offline-ui";
 import {
@@ -42,7 +43,16 @@ import {
 } from "./shared";
 import { Setup, Login, Register } from "./access";
 import { Account, Security, Sessions } from "./account";
-import { Users, Invites } from "./admin";
+import { Users, UserDetail, Invites } from "./admin";
+function LibraryRedirect() {
+  const location = useLocation();
+  const target = canonicalLibraryLocation(location.pathname, location.search);
+  return target ? (
+    <Navigate to={target + location.hash} state={location.state} replace />
+  ) : (
+    <Library />
+  );
+}
 export function App() {
   const { offline } = useOffline();
   const [language, setLanguage] = useState("it");
@@ -155,7 +165,7 @@ export function App() {
           <Button
             onClick={() => {
               setLogoutPending(0);
-              navigate("/offline");
+              navigate("/library/offline");
             }}
           >
             {language === "it"
@@ -211,27 +221,64 @@ export function App() {
             <Navigation library={library} />
             <main id="main">
               <Routes>
-                <Route path="/offline" element={<OfflineLibrary />} />
+                <Route path="/library/offline" element={<OfflineLibrary />} />
                 <Route
                   path="/"
                   element={
-                    offline ? <Navigate to="/offline" replace /> : <Catalog />
+                    offline ? (
+                      <Navigate to="/library/offline" replace />
+                    ) : (
+                      <Catalog />
+                    )
                   }
                 />
                 <Route
                   path="/works"
                   element={
-                    offline ? <Navigate to="/offline" replace /> : <Catalog />
+                    offline ? (
+                      <Navigate to="/library/offline" replace />
+                    ) : (
+                      <Catalog />
+                    )
                   }
                 />
-                <Route path="/library" element={<Library />} />
-                <Route path="/statistics" element={<Statistics />} />
-                <Route path="/activity" element={<Activity />} />
-                <Route path="/subscriptions" element={<Subscriptions />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/social-settings" element={<SocialSettings />} />
-                <Route path="/collections" element={<Collections />} />
-                <Route path="/collections/:id" element={<CollectionDetail />} />
+                <Route path="/library" element={<LibraryRedirect />} />
+                <Route
+                  path="/library/later"
+                  element={<Library kind="later" />}
+                />
+                <Route
+                  path="/library/history"
+                  element={<Library kind="history" />}
+                />
+                {[
+                  "/collections",
+                  "/collections/:id",
+                  "/offline",
+                  "/statistics",
+                  "/activity",
+                  "/subscriptions",
+                  "/notifications",
+                  "/social-settings",
+                ].map((path) => (
+                  <Route key={path} path={path} element={<LibraryRedirect />} />
+                ))}
+                <Route path="/library/statistics" element={<Statistics />} />
+                <Route path="/library/activity" element={<Activity />} />
+                <Route
+                  path="/library/subscriptions"
+                  element={<Subscriptions />}
+                />
+                <Route
+                  path="/library/notifications"
+                  element={<Notifications />}
+                />
+                <Route path="/library/settings" element={<SocialSettings />} />
+                <Route path="/library/collections" element={<Collections />} />
+                <Route
+                  path="/library/collections/:id"
+                  element={<CollectionDetail />}
+                />
                 <Route
                   path="/bibliography/:kind/:id"
                   element={<BibliographyPage />}
@@ -265,7 +312,10 @@ export function App() {
                 <Route path="/security/*" element={<Security />} />
                 <Route path="/sessions" element={<Sessions />} />
                 {me.data.user.role !== "User" && (
-                  <Route path="/admin/users" element={<Users />} />
+                  <>
+                    <Route path="/admin/users" element={<Users />} />
+                    <Route path="/admin/users/:id/*" element={<UserDetail />} />
+                  </>
                 )}{" "}
                 {me.data.user.role === "Owner" && (
                   <Route path="/admin/invites" element={<Invites />} />
@@ -322,7 +372,7 @@ function Navigation({ library }: { library: boolean }) {
         className="library-navigation"
         aria-label={t("Navigazione principale", "Main navigation")}
       >
-        <NavLink to="/offline">
+        <NavLink to="/library/offline">
           {t("Lettura offline", "Offline reading")}
         </NavLink>
       </nav>
@@ -342,7 +392,6 @@ function Navigation({ library }: { library: boolean }) {
           {t("Opere", "Works")}
         </NavLink>
         <NavLink to="/library">{t("Biblioteca", "Library")}</NavLink>
-        <NavLink to="/notifications">{t("Notifiche", "Notifications")}</NavLink>
         <NavLink to="/browse/fandom">Fandom</NavLink>
         <NavLink to="/browse/creators">{t("Autori", "Authors")}</NavLink>
         <NavLink to="/browse/freeform">Tag</NavLink>
@@ -367,7 +416,9 @@ function Navigation({ library }: { library: boolean }) {
     >
       <NavLink to="/works">{t("Opere", "Works")}</NavLink>
       <NavLink to="/library">{t("Biblioteca", "Library")}</NavLink>
-      <NavLink to="/notifications">{t("Notifiche", "Notifications")}</NavLink>
+      <NavLink to="/library/notifications">
+        {t("Notifiche", "Notifications")}
+      </NavLink>
       <NavLink to="/account">{t("Account", "Account")}</NavLink>
       <NavLink to="/security">{t("Sicurezza", "Security")}</NavLink>
       <NavLink to="/sessions">{t("Dispositivi", "Devices")}</NavLink>

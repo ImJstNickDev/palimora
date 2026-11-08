@@ -31,17 +31,21 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.library-tabs {
-  row-gap: 0.35rem;
-}
 @media (max-width: 600px) {
   .offline-banner {
     padding: 0.5rem;
   }
-  .personal-library .library-controls {
-    align-items: flex-start;
-  }
   .offline-storage {
     line-height: 1.6;
   }
+}
+
+.offline-entry .offline-title {
+  font: inherit;
+}
+.offline-entry .library-controls > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
 }

@@ -35,3 +35,15 @@ test("reader removes executable markup, network resources and CSS fetches", () =
     /<script>/,
   );
 });
+
+test("reader declares language and escapes its HTML attribute", () => {
+  assert.match(
+    readerDocument("<p>text</p>", "", { language: "it" }),
+    /<html lang="it"/,
+  );
+  assert.match(readerDocument("<p>text</p>", ""), /<html lang="und"/);
+  assert.doesNotMatch(
+    readerDocument("<p>text</p>", "", { language: '\" onload=\"bad' }),
+    /lang="" onload/,
+  );
+});

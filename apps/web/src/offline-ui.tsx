@@ -1,3 +1,5 @@
+import { IconButton } from "./library-ui";
+import { Icon } from "./icons";
 import { states } from "./reading";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
@@ -5,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Modal, Notice } from "@palimora/ui";
 import { transport, settleWrites } from "./api";
 import { client, useAction, useText, Feedback } from "./shared";
-import { SocialNav } from "./social";
+import { LibraryHeading } from "./social";
 import {
   listOffline,
   pendingOperations,
@@ -97,7 +99,7 @@ export function OfflineRuntime() {
       {(offline || availableUpdate()) && (
         <div className="offline-banner" role="status">
           {offline && (
-            <Link to="/offline">
+            <Link to="/library/offline">
               {t("Offline · Opere salvate", "Offline · Saved works")}
             </Link>
           )}
@@ -124,9 +126,11 @@ export function OfflineRuntime() {
 export function OfflineSave({
   id,
   snapshot,
+  compact = false,
 }: {
   id: string;
   snapshot: string;
+  compact?: boolean;
 }) {
   const t = useText(),
     { offline } = useOffline(),
@@ -144,11 +148,22 @@ export function OfflineSave({
   return (
     <div className="library-controls offline-controls">
       {saved ? (
-        <Link to={`/works/${id}?local=1&snapshot=${snapshot}`}>
-          {t("Copia offline", "Offline copy")} · {size(saved.bytes)}
+        <Link
+          className={
+            compact ? "button reader-icon-action saved-offline" : undefined
+          }
+          title={t("Copia offline", "Offline copy") + " · " + size(saved.bytes)}
+          to={`/works/${id}?local=1&snapshot=${snapshot}`}
+        >
+          {compact && <Icon name="check" />}
+          <span className={compact ? "sr-only" : undefined}>
+            {t("Copia offline", "Offline copy")} · {size(saved.bytes)}
+          </span>
         </Link>
       ) : (
         <Button
+          className={compact ? "button reader-icon-action" : "button"}
+          title={t("Salva offline", "Save offline")}
           disabled={offline || action.busy}
           onClick={() =>
             void action.run(async () => {
@@ -171,7 +186,10 @@ export function OfflineSave({
             })
           }
         >
-          {t("Salva offline", "Save offline")}
+          {compact && <Icon name="download" />}
+          <span className={compact ? "sr-only" : undefined}>
+            {t("Salva offline", "Save offline")}
+          </span>
         </Button>
       )}
       {progress && (
@@ -342,26 +360,31 @@ export function OfflineLibrary() {
   }, [offline]);
   return (
     <section className="personal-library">
-      <h1 tabIndex={-1}>{t("Lettura offline", "Offline reading")}</h1>
-      <SocialNav />
-      <div className="library-controls">
-        {availableInstall() && (
-          <Button onClick={() => void action.run(installApp)}>
-            {t("Installa Palimora", "Install Palimora")}
-          </Button>
-        )}
-        <Button
-          disabled={offline || action.busy}
-          onClick={() => void action.run(refresh)}
-        >
-          {t("Sincronizza", "Sync")}
-        </Button>
-        {!!copies.data?.length && (
-          <Button tone="danger" onClick={() => setRemove("all")}>
-            {t("Rimuovi tutte le copie", "Remove all copies")}
-          </Button>
-        )}
-      </div>
+      <LibraryHeading
+        title={<>{t("Lettura offline", "Offline reading")}</>}
+        actions={
+          <div className="library-controls">
+            {availableInstall() && (
+              <Button onClick={() => void action.run(installApp)}>
+                {t("Installa Palimora", "Install Palimora")}
+              </Button>
+            )}
+            <IconButton
+              icon="refresh"
+              label={t("Sincronizza", "Sync")}
+              disabled={offline || action.busy}
+              onClick={() => void action.run(refresh)}
+            />
+            {!!copies.data?.length && (
+              <IconButton
+                icon="trash"
+                label={t("Rimuovi tutte le copie", "Remove all copies")}
+                onClick={() => setRemove("all")}
+              />
+            )}
+          </div>
+        }
+      />
       {!availableInstall() &&
         !matchMedia("(display-mode: standalone)").matches && (
           <details>
@@ -465,14 +488,16 @@ export function OfflineLibrary() {
       )}
       <ul className="library-entries">
         {copies.data?.map((w) => (
-          <li key={w.key}>
-            <Link
-              className="offline-title"
-              to={`/works/${w.id}?local=1&snapshot=${w.snapshot}`}
-            >
-              {w.title}
-            </Link>
-            <p>
+          <li key={w.key} className="offline-entry">
+            <h2>
+              <Link
+                className="offline-title"
+                to={`/works/${w.id}?local=1&snapshot=${w.snapshot}`}
+              >
+                {w.title}
+              </Link>
+            </h2>
+            <p className="library-entry-meta">
               {t("Salvata", "Saved")}{" "}
               {new Date(w.saved).toLocaleString(t("it", "en"))} ·{" "}
               {size(w.bytes)} · {w.snapshot.slice(0, 8)}
@@ -509,13 +534,12 @@ export function OfflineLibrary() {
                     {t("Scarica nuova versione", "Download new version")}
                   </Button>
                 )}
-              <Button
-                tone="danger"
+              <IconButton
+                icon="trash"
+                label={t("Rimuovi copia", "Remove copy")}
                 disabled={!!updating}
                 onClick={() => setRemove(w)}
-              >
-                {t("Rimuovi copia", "Remove copy")}
-              </Button>
+              />
               {!offline && (
                 <Link to={`/works/${w.id}`}>
                   {t("Versione corrente", "Current version")}

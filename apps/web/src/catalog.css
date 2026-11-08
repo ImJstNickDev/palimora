@@ -95,6 +95,10 @@
   padding-left: 0;
   font-weight: 400;
 }
+html:not([data-focus-mode="pointer"])
+  .catalog-search-field:has(input:focus-visible) {
+  box-shadow: inset 0 -1px 0 var(--focus);
+}
 .catalog-search-field input::placeholder {
   color: var(--muted);
   opacity: 1;
@@ -513,6 +517,9 @@
   font-size: 0.85rem;
 }
 /* Reading is a continuous page; only focus mode uses its own scrolling canvas. */
+html iframe.reader-frame:focus {
+  outline: none;
+}
 .reader {
   --reading-paper: #fffefa;
   --reading-ink: #292c31;
@@ -547,6 +554,9 @@
   gap: 1.2rem;
 }
 .reader-secondary-actions > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.8rem;
   text-decoration: none;
 }
@@ -561,6 +571,7 @@
     serif;
   letter-spacing: -0.025em;
   margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
 }
 .reader-heading .byline {
   font-size: 1rem;
@@ -754,12 +765,8 @@ body:has(.reader) .modal {
   color: var(--text);
 }
 .appearance-options button[aria-pressed="true"] {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.appearance-options button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 4px;
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
 .theme-option span {
   display: block;
@@ -1004,12 +1011,9 @@ body:has(.reader) .modal {
   }
   .reader-breadcrumb {
     margin-bottom: 1.5rem;
-    align-items: start;
   }
   .reader-secondary-actions {
     gap: 0.25rem 1rem;
-    justify-content: flex-end;
-    flex-wrap: wrap;
   }
   .reader-secondary-actions .text-button,
   .reader-secondary-actions > a {

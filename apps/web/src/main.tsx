@@ -5,6 +5,10 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { client } from "./shared";
 import { App } from "./App";
 import "./style.css";
+import "./refinement.css";
+import { installFocusMode } from "./focus-mode";
+const stopFocusMode = installFocusMode();
+if (import.meta.hot) import.meta.hot.dispose(stopFocusMode);
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={client}>
     <BrowserRouter>

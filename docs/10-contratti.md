@@ -246,7 +246,7 @@ con ricerca URL, cursore, riferimenti alle opere e stato dell'upload. La migrazi
 
 ### Biblioteca personale: prima slice
 
-`libraryList`, `libraryWork`, `bookmarkSave`, `libraryLater` e `libraryForget`
+`libraryList`, `libraryWork`, `librarySave`, `bookmarkSave`, `libraryLater` e `libraryForget`
 sono nel registro condiviso `/api/v1`. Ogni query usa l'utente della sessione;
 nessun ID utente fornito dal client determina il proprietario. `bookmarkSave`
 richiede la revisione letta (zero per la prima creazione) e restituisce quella
@@ -254,6 +254,17 @@ nuova. Anche una cancellazione incrementa la revisione; un retry con revisione
 vecchia restituisce `CONFLICT` senza mutazioni. Le liste paginano 50 identità
 in ordine UUID stabile, con filtro titolo/note e tag esatto. `readerOpen`
 aggiorna anche la cronologia privata, senza togliere Mark for Later.
+
+`librarySave` (`POST /library/works/:id/save`) assicura il salvataggio personale
+senza sovrascrivere note, tag, raccomandazione o visibilità. È idempotente: un
+salvataggio attivo mantiene la revisione; prima creazione e ripristino di un
+tombstone la incrementano. «Opere salvate» riusa `kind=bookmarks` e lo stesso
+modello: i client precedenti restano compatibili.
+`collectionWork` in aggiunta assicura lo stesso salvataggio per l'utente agente,
+atomicamente dopo i controlli ACL; non salva a nome degli altri membri. La
+rimozione dalla collezione non modifica il salvataggio personale e viceversa.
+`collectionList` accetta `work` opzionale e restituisce `contains_work` per il
+selettore; gli inviti non accettati non rivelano l'appartenenza dell'opera.
 
 ### Collezioni e lettura personale
 
@@ -263,6 +274,13 @@ usano UUID del client; associazioni opera sono idempotenti per chiave composta.
 Modifiche di metadati, progressi e annotazioni richiedono la revisione corrente:
 `CONFLICT` non sovrascrive la modifica concorrente. Liste collezioni, opere e
 annotazioni paginano per UUID stabile in gruppi di 50.
+`readingProgress/Save` include `chapter_lengths` nello snapshot selezionato:
+ID capitolo e lunghezza del testo canonico in unità UTF-16, nello stesso ordine
+dell'opera. Il campo è opzionale per le copie locali già salvate; l'adapter offline
+lo ricostruisce dai documenti della copia. Server, coda offline e percentuale
+visibile usano `readingPercent`; la UI aggiorna la posizione durante lo scorrimento
+e distingue sempre questa indicazione dal salvataggio confermato. Nessun offset
+viene convertito in una diversa unità o salvato senza validazione server.
 
 Inviti alla condivisione rivolti a username locali: solo l'Owner invita/revoca o
 cambia ruolo, il destinatario accetta/rifiuta e può lasciare la collezione.
@@ -275,13 +293,29 @@ conservate nella cache server. Le operazioni sulle collezioni sono auditate.
 ### Contratti 5B
 
 Registro condiviso: `socialPreferences/Save`, `personalStatistics/Activity`,
-`readingHeartbeat`, `recommendWork`, `subscriptionStatus/Save`, `subscriptions`,
+`readingHeartbeat`, `recommendationRecipients`, `recommendWork`, `subscriptionStatus/Save`, `subscriptions`,
 `notifications`, `notificationRead`, `pushDevices/Register/Revoke`.
 Preferenze protette da revisione; gli ID utente effettivi provengono dalla sessione.
-Consultazione altrui autorizzata separatamente per attività e statistiche;
-revoche applicate a ogni richiesta. Le risposte dispositivi escludono endpoint,
+La condivisione per utenti selezionati/istanza si applica soltanto all'attività.
+`GET /library/statistics` non accetta parametri e calcola soltanto le statistiche
+della sessione; un `username` inviato direttamente viene rifiutato (400).
+`GET /admin/users/:id` e `GET /admin/users/:id/statistics` richiedono Admin/Owner
+(403 per User), includono account disabilitati/eliminati e registrano l'ispezione
+nell'audit. Il calcolo statistico è condiviso, senza modello alternativo.
+`socialPreferences/Save` non espone né applica `statistics` e `statistics_users`;
+le colonne preesistenti restano conservate ma inerti, anche nei vecchi backup.
+Le revoche dell'attività si applicano a ogni richiesta. Le risposte dispositivi escludono endpoint,
 chiavi private e subscription cifrate. Notifiche paginate per data aggiornamento
 con UUID come spareggio; opere e sottoscrizioni mantengono cursori stabili.
+
+`GET /recommendations/recipients` è autenticato e restituisce soltanto `username`,
+50 nomi per pagina, ordinati per nome case-insensitive; `cursor` è l'ultimo nome,
+`q` cerca una sottostringa letterale senza distinzione di maiuscole. Esclude il
+richiedente, gli account disattivati/eliminati e chi ha disabilitato i consigli.
+`recommendWork` ricontrolla il destinatario al momento dell'invio; `note` omessa
+vale stringa vuota, le note storiche restano leggibili. La UI multipla riusa
+l'operazione singola con un `requestId` per destinatario, conservato nei retry;
+il vincolo mittente/destinatario/opera impedisce consigli e notifiche duplicati.
 
 Le sottoscrizioni partono dallo snapshot transazionale PostgreSQL, usando
 `pg_visible_in_snapshot` sul top-level XID del produttore outbox; nessuna

@@ -1,6 +1,8 @@
-import { SocialNav } from "./social";
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { IconButton } from "./library-ui";
+import { Icon } from "./icons";
+import { LibraryHeading } from "./social";
+import { useState, useRef, useLayoutEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button, Field, Modal, Notice, Select } from "@palimora/ui";
 import { call } from "./api";
@@ -19,16 +21,19 @@ export function Collections() {
   });
   return (
     <section className="personal-library">
-      <h1 tabIndex={-1}>{t("Collezioni personali", "Personal collections")}</h1>
-      <SocialNav />
-      <Button
-        onClick={() => {
-          setCreateId(crypto.randomUUID());
-          setCreate(true);
-        }}
-      >
-        {t("Nuova collezione", "New collection")}
-      </Button>
+      <LibraryHeading
+        title={<>{t("Collezioni personali", "Personal collections")}</>}
+        actions={
+          <IconButton
+            icon="plus"
+            label={t("Nuova collezione", "New collection")}
+            onClick={() => {
+              setCreateId(crypto.randomUUID());
+              setCreate(true);
+            }}
+          />
+        }
+      />
       {action.error && <Notice error>{action.error}</Notice>}
       {data.isPending ? (
         <Loading />
@@ -43,13 +48,21 @@ export function Collections() {
                 <li key={c.id}>
                   <h2>
                     {c.accepted ? (
-                      <Link to={"/collections/" + c.id}>{c.name}</Link>
+                      <Link to={"/library/collections/" + c.id}>{c.name}</Link>
                     ) : (
                       c.name
                     )}
                   </h2>
-                  <p>{c.description}</p>
-                  <span>{c.role}</span>
+                  {c.description && (
+                    <p className="collection-description">{c.description}</p>
+                  )}
+                  <span className="library-entry-meta">
+                    {c.role === "Owner"
+                      ? t("Proprietario", "Owner")
+                      : c.role === "Editor"
+                        ? t("Puoi modificare", "Can edit")
+                        : t("Sola lettura", "Read only")}
+                  </span>
                   {!c.accepted && (
                     <div className="library-controls">
                       {[true, false].map((accept) => (
@@ -131,6 +144,7 @@ export function Collections() {
 export function CollectionDetail() {
   const { id = "" } = useParams(),
     t = useText(),
+    navigate = useNavigate(),
     action = useAction(t);
   const [edit, setEdit] = useState(false),
     [remove, setRemove] = useState(false);
@@ -152,52 +166,72 @@ export function CollectionDetail() {
     });
   return (
     <section className="personal-library">
-      <Link to="/collections">
+      <Link className="library-back" to="/library/collections">
+        <Icon name="back" />
         {t("Collezioni personali", "Personal collections")}
       </Link>
-      <h1 tabIndex={-1}>{c.name}</h1>
-      <SocialNav />
-      <p>{c.description}</p>
-      <div className="library-controls">
+      <LibraryHeading
+        title={<>{c.name}</>}
+        actions={
+          <div className="library-controls">
+            {write && (
+              <IconButton
+                icon="edit"
+                label={t("Modifica", "Edit")}
+                onClick={() => setEdit(true)}
+              />
+            )}
+            {c.role === "Owner" ? (
+              <IconButton
+                icon="trash"
+                label={t("Elimina collezione", "Delete collection")}
+                onClick={() => setRemove(true)}
+              />
+            ) : (
+              <Button
+                disabled={action.busy}
+                onClick={() =>
+                  void action.run(async () => {
+                    await call("collectionRespond", { id, accept: false });
+                    navigate("/library/collections");
+                  })
+                }
+              >
+                {t("Lascia collezione", "Leave collection")}
+              </Button>
+            )}
+          </div>
+        }
+      />
+      {c.description && (
+        <p className="collection-description">{c.description}</p>
+      )}
+      {action.error && <Notice error>{action.error}</Notice>}
+      <div className="library-section-heading">
+        <h2>{t("Opere", "Works")}</h2>
         {write && (
-          <Button onClick={() => setEdit(true)}>{t("Modifica", "Edit")}</Button>
-        )}
-        {c.role === "Owner" ? (
-          <Button tone="danger" onClick={() => setRemove(true)}>
-            {t("Elimina collezione", "Delete collection")}
-          </Button>
-        ) : (
-          <Button
-            disabled={action.busy}
-            onClick={() =>
-              void action.run(async () => {
-                await call("collectionRespond", { id, accept: false });
-                location.assign("/collections");
-              })
-            }
+          <Link
+            className="button icon-button"
+            to="/library"
+            aria-label={t("Aggiungi opere", "Add works")}
+            title={t("Aggiungi opere", "Add works")}
           >
-            {t("Lascia collezione", "Leave collection")}
-          </Button>
+            <Icon name="plus" />
+          </Link>
         )}
       </div>
-      {action.error && <Notice error>{action.error}</Notice>}
-      <h2>{t("Opere", "Works")}</h2>
-      <p>
-        <Link to="/library">
-          {t(
-            "Aggiungi dalla biblioteca o dal lettore",
-            "Add from your library or the reader",
-          )}
-        </Link>
-      </p>
       <ul className="library-entries">
         {data.data.pages
           .flatMap((p) => p.works)
           .map((w) => (
-            <li key={w.id}>
-              <Link to={"/works/" + w.id}>{w.title}</Link>
+            <li key={w.id} className="library-row">
+              <h2>
+                <Link to={"/works/" + w.id}>{w.title}</Link>
+              </h2>
               {write && (
-                <Button
+                <IconButton
+                  icon="close"
+                  label={t("Rimuovi", "Remove")}
                   disabled={action.busy}
                   onClick={() =>
                     void action.run(async () => {
@@ -209,9 +243,7 @@ export function CollectionDetail() {
                       await refresh();
                     })
                   }
-                >
-                  {t("Rimuovi", "Remove")}
-                </Button>
+                />
               )}
             </li>
           ))}
@@ -227,7 +259,7 @@ export function CollectionDetail() {
           {t("Altre opere", "More works")}
         </Button>
       )}
-      <details>
+      <details className="library-options">
         <summary>{t("Membri e condivisione", "Members and sharing")}</summary>
         <ul className="library-entries">
           {members.map((m) => (
@@ -244,8 +276,12 @@ export function CollectionDetail() {
                       member(m.username, e.target.value as "Editor" | "Viewer")
                     }
                   >
-                    <option>Viewer</option>
-                    <option>Editor</option>
+                    <option value="Viewer">
+                      {t("Sola lettura", "Read only")}
+                    </option>
+                    <option value="Editor">
+                      {t("Può modificare", "Can edit")}
+                    </option>
                   </Select>
                   <Button
                     disabled={action.busy}
@@ -276,8 +312,8 @@ export function CollectionDetail() {
               required
             />
             <Select label={t("Permesso", "Permission")} name="role">
-              <option>Viewer</option>
-              <option>Editor</option>
+              <option value="Viewer">{t("Sola lettura", "Read only")}</option>
+              <option value="Editor">{t("Può modificare", "Can edit")}</option>
             </Select>
             <Button disabled={action.busy}>{t("Invita", "Invite")}</Button>
           </form>
@@ -309,7 +345,7 @@ export function CollectionDetail() {
                 description: String(f.get("description") ?? c.description),
                 deleted: remove,
               });
-              if (remove) location.assign("/collections");
+              if (remove) navigate("/library/collections");
               else {
                 setEdit(false);
                 await refresh();
@@ -320,8 +356,8 @@ export function CollectionDetail() {
           {remove ? (
             <p>
               {t(
-                "Le opere e i bookmark saranno conservati.",
-                "Works and bookmarks will be preserved.",
+                "Le opere e i salvataggi personali saranno conservati.",
+                "Works and personal saves will be preserved.",
               )}
             </p>
           ) : (
@@ -350,71 +386,173 @@ export function CollectionDetail() {
     </section>
   );
 }
-export function AddToCollection({ work }: { work: string }) {
+export function CollectionChoices({
+  work,
+  onSaved,
+}: {
+  work: string;
+  onSaved: () => Promise<void>;
+}) {
   const t = useText(),
-    action = useAction(t),
-    [open, setOpen] = useState(false);
+    action = useAction(t);
+  const [create, setCreate] = useState(false),
+    [createId, setCreateId] = useState(() => crypto.randomUUID());
+  const [name, setName] = useState(""),
+    [description, setDescription] = useState("");
+  const createTrigger = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const choiceFocus = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (!create && !action.busy && choiceFocus.current) {
+      choiceFocus.current.focus({ preventScroll: true });
+      choiceFocus.current = null;
+    }
+    if (
+      !create &&
+      !action.busy &&
+      restoreFocus.current &&
+      createTrigger.current
+    ) {
+      createTrigger.current.focus({ preventScroll: true });
+      restoreFocus.current = false;
+    }
+  }, [create, action.busy]);
+  function showChoices() {
+    restoreFocus.current = true;
+    setCreate(false);
+  }
+  const [created, setCreated] = useState(false);
   const data = useInfiniteQuery({
-    queryKey: ["collections"],
+    queryKey: ["collections", "choices", work],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => call("collectionList", { cursor: pageParam }),
+    queryFn: ({ pageParam }) =>
+      call("collectionList", { cursor: pageParam, work }),
     getNextPageParam: (p) => p.next ?? undefined,
-    enabled: open,
   });
+  const update = async (id: string, remove = false) => {
+    await call("collectionWork", { id, work, remove });
+    await refresh();
+    await onSaved();
+    if (create) showChoices();
+  };
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        {t("Aggiungi a collezione", "Add to collection")}
-      </Button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={t("Aggiungi a collezione", "Add to collection")}
-        closeLabel={t("Chiudi", "Close")}
-      >
-        {data.isPending ? (
-          <Loading />
-        ) : data.isError ? (
-          <QueryError retry={() => void data.refetch()} />
-        ) : (
-          <>
-            <ul className="library-entries">
-              {data.data.pages
-                .flatMap((p) => p.items)
-                .filter((c) => c.accepted && c.role !== "Viewer")
-                .map((c) => (
-                  <li key={c.id}>
-                    <Button
+      {create ? (
+        <form
+          className="collection-quick-create"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void action.run(async () => {
+              if (!created) {
+                await call("collectionCreate", {
+                  id: createId,
+                  name,
+                  description,
+                });
+                setCreated(true);
+              }
+              await update(createId);
+            });
+          }}
+        >
+          <Field
+            label={t("Nome", "Name")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            maxLength={120}
+            autoFocus
+            disabled={created}
+          />
+          <Field
+            label={t("Descrizione", "Description")}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={4000}
+            disabled={created}
+          />
+          <div className="library-controls">
+            <Button type="button" disabled={action.busy} onClick={showChoices}>
+              {t("Indietro", "Back")}
+            </Button>
+            <Button tone="primary" disabled={action.busy}>
+              {created
+                ? t("Aggiungi opera", "Add work")
+                : t("Crea e aggiungi", "Create and add")}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <button
+            className="action-menu-item new-collection"
+            disabled={action.busy}
+            ref={createTrigger}
+            onClick={() => {
+              setCreateId(crypto.randomUUID());
+              setCreated(false);
+              setName("");
+              setDescription("");
+              setCreate(true);
+            }}
+          >
+            <Icon name="plus" />
+            <span>{t("Nuova collezione", "New collection")}</span>
+          </button>
+          {data.isPending ? (
+            <Loading />
+          ) : data.isError ? (
+            <QueryError retry={() => void data.refetch()} />
+          ) : (
+            <>
+              <div className="collection-choices">
+                {data.data.pages
+                  .flatMap((p) => p.items)
+                  .filter((c) => c.accepted && c.role !== "Viewer")
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      className="action-menu-item"
                       disabled={action.busy}
-                      onClick={() =>
-                        void action.run(async () => {
-                          await call("collectionWork", {
-                            id: c.id,
-                            work,
-                            remove: false,
-                          });
-                          await refresh();
-                          setOpen(false);
-                        })
+                      aria-pressed={!!c.contains_work}
+                      title={
+                        c.contains_work
+                          ? t(`Rimuovi da ${c.name}`, `Remove from ${c.name}`)
+                          : t(`Aggiungi a ${c.name}`, `Add to ${c.name}`)
                       }
+                      onClick={(event) => {
+                        choiceFocus.current = event.currentTarget;
+                        void action.run(() => update(c.id, !!c.contains_work));
+                      }}
                     >
-                      {c.name}
-                    </Button>
-                  </li>
-                ))}
-            </ul>
-            {data.hasNextPage && (
-              <Button onClick={() => void data.fetchNextPage()}>
-                {t("Altre collezioni", "More collections")}
-              </Button>
-            )}
-            <Link to="/collections">
-              {t("Gestisci collezioni", "Manage collections")}
-            </Link>
-          </>
-        )}
-        {action.error && <Notice error>{action.error}</Notice>}
-      </Modal>
+                      <Icon name={c.contains_work ? "check" : "folder"} />
+                      <span>{c.name}</span>
+                    </button>
+                  ))}
+              </div>
+              {!data.data.pages.some((p) =>
+                p.items.some((c) => c.accepted && c.role !== "Viewer"),
+              ) && (
+                <p className="action-menu-empty">
+                  {t(
+                    "Non hai ancora collezioni modificabili.",
+                    "No editable collections yet.",
+                  )}
+                </p>
+              )}
+              {data.hasNextPage && (
+                <Button
+                  disabled={data.isFetchingNextPage}
+                  onClick={() => void data.fetchNextPage()}
+                >
+                  {t("Altre collezioni", "More collections")}
+                </Button>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {action.error && <Notice error>{action.error}</Notice>}
     </>
   );
 }

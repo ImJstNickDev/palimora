@@ -1,0 +1,65 @@
+.user-list table {
+  width: 100%;
+}
+.user-list td:first-child {
+  overflow-wrap: anywhere;
+}
+.user-list td:first-child a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 500;
+}
+.user-list td small {
+  display: block;
+  color: var(--muted);
+}
+.user-detail > .library-back {
+  margin-bottom: 8px;
+}
+.user-detail > .catalog-tabs {
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.user-detail > .catalog-tabs a {
+  min-height: 44px;
+}
+.user-account-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0 0 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.user-account-details dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+.user-account-details dd {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+.statistics-content table {
+  width: 100%;
+  max-width: 48rem;
+}
+@media (max-width: 700px) {
+  .user-list th,
+  .user-list td {
+    padding-inline: 8px;
+  }
+  .user-list .search {
+    align-items: end;
+  }
+  .user-account-details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .user-detail > .row {
+    gap: 8px;
+  }
+  .user-detail h1 {
+    overflow-wrap: anywhere;
+  }
+}

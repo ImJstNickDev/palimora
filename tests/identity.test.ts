@@ -323,6 +323,125 @@ test(
         },
       );
       await t.test(
+        "statistics are personal; administrative inspection is authorized and audited",
+        async () => {
+          const own = await user.request("/me");
+          const ownerId = (await owner.request("/me")).data.user.id;
+          const workId = randomUUID(),
+            intervalId = randomUUID();
+          await pool.query(
+            "INSERT INTO archive_work_heads(id,external_id,title) VALUES($1,$2,'Statistics ACL fixture')",
+            [workId, workId],
+          );
+          await pool.query(
+            "INSERT INTO reading_intervals(id,user_id,work_id,span) VALUES($1,$2,$3,tstzrange('2026-01-01 00:00Z','2026-01-01 00:01Z','[)'))",
+            [intervalId, userId, workId],
+          );
+          // Legacy opt-in values can no longer make statistics public.
+          await pool.query(
+            "INSERT INTO personal_settings(user_id,statistics,statistics_users) VALUES($1,'instance',$2) ON CONFLICT(user_id) DO UPDATE SET statistics='instance',statistics_users=$2",
+            [userId, [adminId]],
+          );
+          assert.equal(
+            (await user.request("/library/statistics")).data.seconds,
+            60,
+          );
+          assert.equal(
+            (await owner.request("/library/statistics")).data.seconds,
+            0,
+          );
+          assert.equal(
+            (
+              await owner.request(
+                "/library/statistics?username=" + own.data.user.username,
+              )
+            ).status,
+            400,
+          );
+          assert.equal(
+            (await user.request("/library/statistics?username=owner")).status,
+            400,
+          );
+          const settings = (await user.request("/me/social")).data;
+          assert.equal("statistics" in settings, false);
+          assert.equal("statistics_users" in settings, false);
+          const saved = await user.request("/me/social", {
+            ...settings,
+            statistics: "selected",
+            statistics_users: ["owner"],
+          });
+          assert.equal(saved.status, 200);
+          assert.equal("statistics" in saved.data, false);
+          for (const route of [
+            "/admin/users/" + userId,
+            "/admin/users/" + userId + "/statistics",
+          ]) {
+            assert.equal((await new Client().request(route)).status, 401);
+            assert.equal((await user.request(route)).status, 403);
+            assert.equal((await admin.request(route)).status, 200);
+            assert.equal((await owner.request(route)).status, 200);
+          }
+          const details = (await admin.request("/admin/users/" + userId)).data;
+          assert.equal(details.id, userId);
+          assert.equal("password_hash" in details, false);
+          assert.equal(
+            (await admin.request("/admin/users/" + ownerId + "/statistics"))
+              .status,
+            200,
+          );
+          assert.equal(
+            (await admin.request("/admin/users/" + userId + "/statistics")).data
+              .seconds,
+            60,
+          );
+          assert.equal(
+            (
+              await owner.request(
+                "/admin/users/" + randomUUID() + "/statistics",
+              )
+            ).status,
+            404,
+          );
+          const audit = (
+            await pool.query(
+              "SELECT actor_id,effective_user_id,session_id,target FROM audit WHERE action='userStatistics' AND actor_id=$1 AND target=$2 ORDER BY created_at DESC LIMIT 1",
+              [adminId, userId],
+            )
+          ).rows[0];
+          assert.equal(audit.actor_id, adminId);
+          assert.equal(audit.effective_user_id, adminId);
+          assert.ok(audit.session_id);
+          assert.equal(audit.target, userId);
+          await owner.request(
+            "/admin/users/" + userId,
+            { deleted: true },
+            "PATCH",
+          );
+          assert.equal(
+            (await admin.request("/admin/users/" + userId + "/statistics")).data
+              .seconds,
+            60,
+          );
+          assert.ok(
+            (await admin.request("/admin/users/" + userId)).data
+              .soft_deleted_at,
+          );
+          await owner.request(
+            "/admin/users/" + userId,
+            { deleted: false },
+            "PATCH",
+          );
+          await user.request("/auth/login", {
+            username: own.data.user.username,
+            password,
+          });
+          await pool.query("DELETE FROM reading_intervals WHERE id=$1", [
+            intervalId,
+          ]);
+          // The fixture work is removed with this test's isolated schema.
+        },
+      );
+      await t.test(
         "TOTP enrollment, reusable login code, single-use recovery and encrypted secret",
         async () => {
           await pool.query("DELETE FROM rate_limits");

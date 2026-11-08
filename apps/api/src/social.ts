@@ -14,20 +14,23 @@ export async function settings(db: DB, user: string) {
 }
 async function preferences(db: DB, user: string) {
   const p = await settings(db, user);
-  for (const key of ["activity_users", "statistics_users"])
+  for (const key of ["activity_users"])
     p[key] = (
       await db.query(
         "SELECT username FROM users WHERE id=ANY($1::uuid[]) ORDER BY username",
         [p[key]],
       )
     ).rows.map((r) => r.username);
+  // Legacy sharing settings remain stored, but are no longer exposed or applied.
+  delete p.statistics;
+  delete p.statistics_users;
   return p;
 }
 export async function sharedUser(
   db: DB,
   user: string,
   username: string | undefined,
-  scope: "activity" | "statistics",
+  scope: "activity",
 ) {
   if (!username) return user;
   const target = (
@@ -106,7 +109,7 @@ export async function socialOperation(
     const p = await settings(db, user);
     if (p.revision !== x.revision) fail("CONFLICT", 409);
     const recipients: Record<string, string[]> = {};
-    for (const key of ["activity_users", "statistics_users"]) {
+    for (const key of ["activity_users"]) {
       const names = [
         ...new Set<string>(x[key].map((n: string) => n.toLowerCase())),
       ];
@@ -120,13 +123,11 @@ export async function socialOperation(
       recipients[key] = rows.map((r) => r.id);
     }
     await db.query(
-      "UPDATE personal_settings SET activity=$2,statistics=$3,activity_users=$4,statistics_users=$5,recommendations=$6,updates=$7,push=$8,grouping=$9,revision=revision+1 WHERE user_id=$1",
+      "UPDATE personal_settings SET activity=$2,activity_users=$3,recommendations=$4,updates=$5,push=$6,grouping=$7,revision=revision+1 WHERE user_id=$1",
       [
         user,
         x.activity,
-        x.statistics,
         recipients.activity_users,
-        recipients.statistics_users,
         x.recommendations,
         x.updates,
         x.push,
@@ -135,8 +136,10 @@ export async function socialOperation(
     );
     return preferences(db, user);
   }
-  if (op === "personalStatistics")
-    return statistics(db, await sharedUser(db, user, x.username, "statistics"));
+  if (op === "personalStatistics") {
+    if (x.username !== undefined) fail("INVALID_INPUT", 400);
+    return statistics(db, user);
+  }
   if (op === "personalActivity") {
     const target = await sharedUser(db, user, x.username, "activity");
     const rows = (
@@ -194,6 +197,23 @@ export async function socialOperation(
       [session, x.id],
     );
     return { ok: true };
+  }
+  if (op === "recommendationRecipients") {
+    const rows = (
+      await db.query(
+        `SELECT u.username FROM users u LEFT JOIN personal_settings p ON p.user_id=u.id
+         WHERE u.id<>$1 AND NOT u.disabled AND u.soft_deleted_at IS NULL
+           AND coalesce(p.recommendations,true)
+           AND strpos(lower(u.username),lower($2))>0
+           AND ($3::text IS NULL OR lower(u.username)>lower($3))
+         ORDER BY lower(u.username) LIMIT 51`,
+        [user, x.q ?? "", x.cursor ?? null],
+      )
+    ).rows;
+    return {
+      items: rows.slice(0, 50),
+      next: rows.length > 50 ? rows[49].username : null,
+    };
   }
   if (op === "recommendWork") {
     const recipient = (

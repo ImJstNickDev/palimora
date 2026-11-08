@@ -72,6 +72,12 @@ test(
         op("bookmarkSave", { id: work, revision: 0, bookmark }),
         /Http Exception/,
       );
+      const saved = await op("librarySave", { id: work });
+      assert.deepEqual(
+        saved,
+        entry,
+        "Saving again preserves details and revision",
+      );
       const revision = entry.revision;
       const writes = await Promise.allSettled([
         op("bookmarkSave", {
@@ -104,6 +110,21 @@ test(
       assert.equal(
         (await op("libraryList", { kind: "bookmarks" })).items.length,
         0,
+      );
+      const restored = await op("librarySave", { id: work });
+      assert.equal(restored.revision, deleted.revision + 1);
+      assert.deepEqual(restored.bookmark, {
+        notes: "",
+        tags: [],
+        recommended: false,
+        private: true,
+      });
+      assert.equal(
+        (await op("librarySave", { id: work })).revision,
+        restored.revision,
+      );
+      await assert.rejects(
+        op("bookmarkSave", { id: work, revision: deleted.revision, bookmark }),
       );
       await op("libraryLater", { id: work, later: true });
       await transaction((db) => recordReading(db, alice, work));

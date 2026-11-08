@@ -9,6 +9,16 @@ const projection = `w.id AS work_id, coalesce(nullif(c.title,''),nullif(w.title,
 const joins = `FROM archive_work_heads w LEFT JOIN catalog_documents c ON c.work_id=w.id
  LEFT JOIN library_bookmarks b ON b.work_id=w.id AND b.user_id=$1
  LEFT JOIN library_readings r ON r.work_id=w.id AND r.user_id=$1 LEFT JOIN library_progress p ON p.work_id=w.id AND p.user_id=$1`;
+/** Save without overwriting personal details or advancing an existing revision. */
+export async function ensureLibrarySaved(db: DB, user: string, work: string) {
+  await db.query(
+    `INSERT INTO library_bookmarks(user_id,work_id,revision) VALUES($1,$2,1)
+     ON CONFLICT(user_id,work_id) DO UPDATE SET deleted=false,
+       revision=library_bookmarks.revision+1,updated_at=now()
+     WHERE library_bookmarks.deleted`,
+    [user, work],
+  );
+}
 export async function recordReading(db: DB, user: string, work: string) {
   await db.query(
     `INSERT INTO library_readings(user_id,work_id,last_viewed) VALUES($1,$2,now())
@@ -48,6 +58,7 @@ export async function libraryOperation(
     )
   ).rows[0];
   if (!work) fail("NOT_FOUND", 404);
+  if (op === "librarySave") await ensureLibrarySaved(db, user, x.id);
   if (op === "bookmarkSave") {
     // Tombstones retain the revision so stale clients cannot resurrect a deletion.
     await db.query(

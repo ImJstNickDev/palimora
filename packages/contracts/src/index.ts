@@ -165,6 +165,7 @@ const collection = z.object({
   revision: z.number().int(),
   role: z.enum(["Owner", "Editor", "Viewer"]),
   accepted: z.boolean(),
+  contains_work: z.boolean().optional(),
 });
 const collectionFields = z.object({
   name: z.string().trim().min(1).max(120),
@@ -188,6 +189,11 @@ const progress = z.object({
   state: ReadingState,
   anchor: TextAnchor.nullable(),
   percent: z.number(),
+  chapter_lengths: z
+    .array(
+      z.object({ chapter: z.uuid(), length: z.number().int().nonnegative() }),
+    )
+    .optional(),
   aligned: alignment,
 });
 const annotation = z.object({
@@ -205,9 +211,7 @@ const audience = z.enum(["private", "selected", "instance"]);
 export const SocialPreferences = z.object({
   revision: z.number().int().nonnegative(),
   activity: audience,
-  statistics: audience,
   activity_users: z.array(z.string().min(1).max(100)).max(100),
-  statistics_users: z.array(z.string().min(1).max(100)).max(100),
   recommendations: z.boolean(),
   updates: z.boolean(),
   push: z.boolean(),
@@ -238,7 +242,7 @@ export const api = {
   personalStatistics: endpoint(
     "get",
     "/library/statistics",
-    z.object({ username: z.string().max(100).optional() }),
+    z.object({}).strict(),
     statisticsResult,
   ),
   personalActivity: endpoint(
@@ -266,6 +270,18 @@ export const api = {
     id.extend({ requestId: z.uuid(), active: z.boolean().default(true) }),
     ok,
   ),
+  recommendationRecipients: endpoint(
+    "get",
+    "/recommendations/recipients",
+    z.object({
+      q: z.string().max(100).default(""),
+      cursor: z.string().max(100).optional(),
+    }),
+    z.object({
+      items: z.array(z.object({ username: z.string() })),
+      next: z.string().nullable(),
+    }),
+  ),
   recommendWork: endpoint(
     "post",
     "/recommendations",
@@ -273,7 +289,7 @@ export const api = {
       requestId: z.uuid(),
       work: z.uuid(),
       username: z.string().min(1).max(100),
-      note: z.string().max(2000),
+      note: z.string().max(2000).default(""),
     }),
     ok,
   ),
@@ -408,7 +424,7 @@ export const api = {
   collectionList: endpoint(
     "get",
     "/collections",
-    page,
+    page.extend({ work: z.uuid().optional() }),
     z.object({ items: z.array(collection), next: z.uuid().nullable() }),
   ),
   collectionCreate: endpoint(
@@ -479,6 +495,7 @@ export const api = {
     z.object({ items: z.array(libraryEntry), next: z.uuid().nullable() }),
   ),
   libraryWork: endpoint("get", "/library/works/:id", id, libraryEntry),
+  librarySave: endpoint("post", "/library/works/:id/save", id, libraryEntry),
   bookmarkSave: endpoint(
     "post",
     "/bookmarks/:id",
@@ -1306,6 +1323,14 @@ export const api = {
     z.object({ items: z.array(User), next: z.string().nullable() }),
     "admin",
   ),
+  userDetail: endpoint("get", "/admin/users/:id", id, User, "admin"),
+  userStatistics: endpoint(
+    "get",
+    "/admin/users/:id/statistics",
+    id,
+    statisticsResult,
+    "admin",
+  ),
   userUpdate: endpoint(
     "patch",
     "/admin/users/:id",
@@ -1497,4 +1522,24 @@ export function openapi() {
       },
     },
   };
+}
+
+/** Same text-offset percentage for the server, local queue and live reader. */
+export function readingPercent(
+  chapters: readonly { chapter: string; length: number }[],
+  anchor: { chapter: string; offset: number },
+): number | null {
+  let before = 0,
+    total = 0,
+    found = false;
+  for (const c of chapters) {
+    if (c.chapter === anchor.chapter) {
+      before = total + Math.min(c.length, anchor.offset);
+      found = true;
+    }
+    total += c.length;
+  }
+  return found && total
+    ? Math.max(0, Math.min(100, (before / total) * 100))
+    : null;
 }

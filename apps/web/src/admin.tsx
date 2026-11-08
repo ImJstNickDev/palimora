@@ -1,10 +1,22 @@
 import { useContext, useState } from "react";
+import {
+  Link,
+  NavLink,
+  Navigate,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import { Icon } from "./icons";
+import { StatisticsContent } from "./social";
+import "./admin.css";
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@palimora/contracts";
 import { Button, Field, Modal } from "@palimora/ui";
 import { call } from "./api";
 import {
   Auth,
+  client,
   useText,
   useAction,
   Feedback,
@@ -17,43 +29,27 @@ import {
   Heading,
 } from "./shared";
 export function Users() {
-  const t = useText(),
-    { user } = useContext(Auth),
-    action = useAction();
-  const [q, setQ] = useState(""),
-    [cursor, setCursor] = useState<string>(),
-    [selected, setSelected] = useState<User | null>(null),
-    [confirm, setConfirm] = useState<{
-      target: User;
-      change: {
-        disabled?: boolean;
-        deleted?: boolean;
-        role?: "Admin" | "User";
-      };
-      label: string;
-    } | null>(null),
-    [reset, setReset] = useState<User | null>(null);
+  const t = useText();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") ?? "",
+    cursor = params.get("cursor") || undefined;
+  const setCursor = (value?: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set("cursor", value);
+    else next.delete("cursor");
+    setParams(next);
+  };
   const query = useQuery({
     queryKey: ["users", q, cursor],
     queryFn: () => call("users", { q, cursor }),
   });
-  const sessions = useQuery({
-    queryKey: ["user-sessions", selected?.id],
-    queryFn: () => call("userSessions", { id: selected!.id }),
-    enabled: !!selected,
-  });
-  const canManage = (u: User) =>
-    u.id !== user.id &&
-    u.role !== "Owner" &&
-    (user.role === "Owner" || u.role === "User");
   return (
-    <>
+    <section className="user-list">
       <Heading>{t("Utenti", "Users")}</Heading>
       <Form
-        onSubmit={async (f) => {
-          setQ(val(f, "q"));
-          setCursor(undefined);
-        }}
+        key={q}
+        onSubmit={async (f) => setParams(val(f, "q") ? { q: val(f, "q") } : {})}
       >
         <div className="search">
           <Field
@@ -61,11 +57,11 @@ export function Users() {
             name="q"
             type="search"
             maxLength={100}
+            defaultValue={q}
           />
           <Button type="submit">{t("Cerca", "Search")}</Button>
         </div>
       </Form>
-      <Feedback action={action} />
       {query.isPending ? (
         <Loading />
       ) : query.isError ? (
@@ -82,14 +78,15 @@ export function Users() {
                   <th>{t("Utente", "User")}</th>
                   <th>{t("Ruolo", "Role")}</th>
                   <th>{t("Stato", "Status")}</th>
-                  <th>{t("Azioni", "Actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {query.data.items.map((u) => (
                   <tr key={u.id}>
                     <td>
-                      <strong>{u.username}</strong>
+                      <Link to={"/admin/users/" + u.id + location.search}>
+                        {u.username}
+                      </Link>
                       <small>{u.email}</small>
                     </td>
                     <td>{u.role}</td>
@@ -100,86 +97,17 @@ export function Users() {
                           ? t("Disabilitato", "Disabled")
                           : t("Attivo", "Active")}
                     </td>
-                    <td>
-                      {canManage(u) && (
-                        <div className="row">
-                          <Button onClick={() => setSelected(u)}>
-                            {t("Sessioni", "Sessions")}
-                          </Button>
-                          <Button onClick={() => setReset(u)}>
-                            {t("Ripristina accesso", "Reset access")}
-                          </Button>
-                          {user.role === "Owner" && (
-                            <Button
-                              onClick={() =>
-                                setConfirm({
-                                  target: u,
-                                  change: {
-                                    role: u.role === "Admin" ? "User" : "Admin",
-                                  },
-                                  label:
-                                    u.role === "Admin"
-                                      ? t(
-                                          "Rimuovi ruolo Admin",
-                                          "Remove Admin role",
-                                        )
-                                      : t(
-                                          "Assegna ruolo Admin",
-                                          "Grant Admin role",
-                                        ),
-                                })
-                              }
-                            >
-                              {u.role === "Admin"
-                                ? t("Rimuovi Admin", "Remove Admin")
-                                : t("Rendi Admin", "Make Admin")}
-                            </Button>
-                          )}
-                          <Button
-                            onClick={() =>
-                              setConfirm({
-                                target: u,
-                                change: { disabled: !u.disabled },
-                                label: u.disabled
-                                  ? t("Riabilita account", "Enable account")
-                                  : t("Disabilita account", "Disable account"),
-                              })
-                            }
-                          >
-                            {u.disabled
-                              ? t("Riabilita", "Enable")
-                              : t("Disabilita", "Disable")}
-                          </Button>
-                          <Button
-                            tone="danger"
-                            onClick={() =>
-                              setConfirm({
-                                target: u,
-                                change: { deleted: !u.soft_deleted_at },
-                                label: u.soft_deleted_at
-                                  ? t("Ripristina account", "Restore account")
-                                  : t("Elimina account", "Delete account"),
-                              })
-                            }
-                          >
-                            {u.soft_deleted_at
-                              ? t("Ripristina", "Restore")
-                              : t("Elimina", "Delete")}
-                          </Button>
-                        </div>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {query.data.items.length === 0 && (
+          {!query.data.items.length && (
             <p>{t("Nessun utente trovato.", "No users found.")}</p>
           )}
           <div className="row pagination">
             {cursor && (
-              <Button onClick={() => setCursor(undefined)}>
+              <Button onClick={() => setCursor()}>
                 {t("Torna all’inizio", "Back to start")}
               </Button>
             )}
@@ -191,6 +119,192 @@ export function Users() {
           </div>
         </>
       )}
+    </section>
+  );
+}
+export function UserDetail() {
+  const t = useText(),
+    { id = "", "*": tab = "" } = useParams(),
+    location = useLocation();
+  const query = useQuery({
+    queryKey: ["admin-user", id],
+    queryFn: () => call("userDetail", { id }),
+  });
+  const params = new URLSearchParams(location.search);
+  const listParams = new URLSearchParams();
+  for (const key of ["q", "cursor"]) {
+    const value = params.get(key);
+    if (value) listParams.set(key, value);
+  }
+  const search = listParams.size ? "?" + listParams.toString() : "";
+  const base = "/admin/users/" + id;
+  const back = "/admin/users" + search;
+  if (tab !== "" && tab !== "statistics")
+    return <Navigate to={base + search} replace />;
+  if (query.isPending) return <Loading />;
+  if (query.isError) return <QueryError retry={() => void query.refetch()} />;
+  const target = query.data;
+  return (
+    <section className="user-detail">
+      <Link className="library-back" to={back}>
+        <Icon name="back" />
+        {t("Utenti", "Users")}
+      </Link>
+      <Heading>{target.username}</Heading>
+      <nav
+        className="catalog-tabs"
+        aria-label={t("Gestione utente", "User management")}
+      >
+        <NavLink to={base + search} end>
+          {t("Account", "Account")}
+        </NavLink>
+        <NavLink to={base + "/statistics" + search}>
+          {t("Statistiche", "Statistics")}
+        </NavLink>
+      </nav>
+      {tab === "statistics" ? (
+        <>
+          <h2>{t("Statistiche di lettura", "Reading statistics")}</h2>
+          <StatisticsContent key={id} userId={id} />
+        </>
+      ) : (
+        <>
+          <dl className="user-account-details">
+            <div>
+              <dt>{t("Ruolo", "Role")}</dt>
+              <dd>{target.role}</dd>
+            </div>
+            <div>
+              <dt>{t("Stato", "Status")}</dt>
+              <dd>
+                {target.soft_deleted_at
+                  ? t("Eliminato", "Deleted")
+                  : target.disabled
+                    ? t("Disabilitato", "Disabled")
+                    : t("Attivo", "Active")}
+              </dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd>{target.email || t("Non impostata", "Not set")}</dd>
+            </div>
+            <div>
+              <dt>{t("Registrato il", "Joined")}</dt>
+              <dd>
+                {new Date(target.created_at).toLocaleDateString(t("it", "en"))}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("Autenticazione TOTP", "TOTP authentication")}</dt>
+              <dd>
+                {target.totp_enabled
+                  ? t("Attiva", "Enabled")
+                  : t("Non attiva", "Not enabled")}
+              </dd>
+            </div>
+          </dl>
+          <UserManagement key={id} target={target} />
+        </>
+      )}
+    </section>
+  );
+}
+function UserManagement({ target: u }: { target: User }) {
+  const t = useText(),
+    { user } = useContext(Auth),
+    action = useAction();
+  const [selected, setSelected] = useState<User | null>(null),
+    [confirm, setConfirm] = useState<{
+      target: User;
+      change: {
+        disabled?: boolean;
+        deleted?: boolean;
+        role?: "Admin" | "User";
+      };
+      label: string;
+    } | null>(null),
+    [reset, setReset] = useState<User | null>(null);
+  const sessions = useQuery({
+    queryKey: ["user-sessions", selected?.id],
+    queryFn: () => call("userSessions", { id: selected!.id }),
+    enabled: !!selected,
+  });
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: ["users"] }),
+      client.invalidateQueries({ queryKey: ["admin-user", u.id] }),
+    ]);
+  const canManage = (target: User) =>
+    target.id !== user.id &&
+    target.role !== "Owner" &&
+    (user.role === "Owner" || target.role === "User");
+  return (
+    <>
+      <Feedback action={action} />
+      {u.id === user.id && (
+        <Link to="/account">
+          {t("Gestisci il tuo account", "Manage your account")}
+        </Link>
+      )}
+      {canManage(u) && (
+        <div className="row">
+          <Button onClick={() => setSelected(u)}>
+            {t("Sessioni", "Sessions")}
+          </Button>
+          <Button onClick={() => setReset(u)}>
+            {t("Ripristina accesso", "Reset access")}
+          </Button>
+          {user.role === "Owner" && (
+            <Button
+              onClick={() =>
+                setConfirm({
+                  target: u,
+                  change: {
+                    role: u.role === "Admin" ? "User" : "Admin",
+                  },
+                  label:
+                    u.role === "Admin"
+                      ? t("Rimuovi ruolo Admin", "Remove Admin role")
+                      : t("Assegna ruolo Admin", "Grant Admin role"),
+                })
+              }
+            >
+              {u.role === "Admin"
+                ? t("Rimuovi Admin", "Remove Admin")
+                : t("Rendi Admin", "Make Admin")}
+            </Button>
+          )}
+          <Button
+            onClick={() =>
+              setConfirm({
+                target: u,
+                change: { disabled: !u.disabled },
+                label: u.disabled
+                  ? t("Riabilita account", "Enable account")
+                  : t("Disabilita account", "Disable account"),
+              })
+            }
+          >
+            {u.disabled ? t("Riabilita", "Enable") : t("Disabilita", "Disable")}
+          </Button>
+          <Button
+            tone="danger"
+            onClick={() =>
+              setConfirm({
+                target: u,
+                change: { deleted: !u.soft_deleted_at },
+                label: u.soft_deleted_at
+                  ? t("Ripristina account", "Restore account")
+                  : t("Elimina account", "Delete account"),
+              })
+            }
+          >
+            {u.soft_deleted_at
+              ? t("Ripristina", "Restore")
+              : t("Elimina", "Delete")}
+          </Button>
+        </div>
+      )}{" "}
       <Modal
         open={!!confirm}
         onClose={() => setConfirm(null)}
@@ -215,7 +329,7 @@ export function Users() {
                 ...confirm!.change,
               });
               setConfirm(null);
-              await query.refetch();
+              await refresh();
             })
           }
         >
@@ -247,7 +361,7 @@ export function Users() {
                   resetFactors: f.has("resetFactors"),
                 });
                 setReset(null);
-                await query.refetch();
+                await refresh();
               },
               t("Accesso ripristinato.", "Access reset."),
             )

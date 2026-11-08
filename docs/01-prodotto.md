@@ -22,9 +22,10 @@
 - Liste opere compatte come AO3, layout alternativo con copertine **solo se realmente presenti**; filtri disponibilità `Tutte` e `Eliminate`, unica indicazione discreta `Unavailable from AO3` quando supportata da prove.
 - Lettura capitolo o Entire Work; modalità classica ed ebook/immersiva; tipografia/temi/skin; Work Skins attivabili/disattivabili; media serviti localmente, senza eseguire codice non affidabile importato.
 - Posizione di lettura precisa e sincronizzata, capitoli letti, stati (`Da leggere`, `In lettura`, `Completato`, `In pausa`, `Abbandonato`), storia lettura, Mark for Later, bookmark, annotazioni.
+- Nella UI personale bookmark e aggiunta a collezione confluiscono in **Salva in biblioteca**: le collezioni organizzano facoltativamente le opere salvate; note e tag appartengono ai dettagli personali. La condivisione resta una proprietà delle collezioni. I dati esistenti e i bookmark sorgente AO3 sono conservati.
 - Collezioni private o condivise con ACL `Owner/Editor/Viewer`, senza trasferimento proprietà nella v1; consigli e liste condivise, attività di lettura visibile solo se consentito dall'utente, possibilità di condivisione con tutti i membri dell'istanza.
 - Versioni storiche accessibili con semplice selettore, nessun diff obbligatorio, nessun «pin» versione preferita; default **sempre ultima versione corrente**. Al cambio versione, tentativo affidabile di riallineare posizione e annotazioni, altrimenti fallback senza perdere l'originale.
-- Notifiche **in-app e push**, singole/aggregate secondo i casi e preferenze utente; nessuna email per notifiche. Statistiche personali (parole, opere, tempo, fandom e andamento).
+- Notifiche **in-app e push**, singole/aggregate secondo i casi e preferenze utente; nessuna email per notifiche. Statistiche personali (parole, opere, tempo, fandom e andamento), consultabili soltanto dal titolare e da Admin/Owner nella gestione utenti; nessuna condivisione fra utenti normali.
 - PWA con lettura offline e sincronizzazione al ritorno online; architettura per client Capacitor Android e, eventualmente, iOS; UI IT/EN inizialmente e i18n estensibile, lingua interfaccia distinta dalla lingua dell'opera.
 
 ## Account e contesto di privacy

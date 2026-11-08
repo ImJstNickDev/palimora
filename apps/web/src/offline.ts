@@ -1,5 +1,6 @@
 import {
   alignAnchor,
+  readingPercent,
   type Input,
   type Output,
   type Operation,
@@ -178,7 +179,14 @@ function alignedProgress(
         suffix: text.slice(80, 112),
       };
   }
-  return { ...p, aligned };
+  return {
+    ...p,
+    aligned,
+    chapter_lengths: [...map].map(([chapter, text]) => ({
+      chapter,
+      length: text.length,
+    })),
+  };
 }
 const objectURLs = new Map<string, string>();
 export function releaseMedia() {
@@ -296,18 +304,19 @@ async function enqueue(name: "readingSave" | "annotationSave", x: any) {
     if (name === "readingSave") {
       const p = await read<Output<"readingProgress">>("progress:" + x.id);
       if ((p?.revision ?? 0) !== x.revision) throw new ApiFailure("CONFLICT");
-      let total = 0,
-        before = 0;
-      for (const [chapter, text] of texts(w)) {
-        if (chapter === x.anchor.chapter) before = total + x.anchor.offset;
-        total += text.length;
-      }
+      const chapter_lengths = [...texts(w)].map(([chapter, text]) => ({
+        chapter,
+        length: text.length,
+      }));
       result = {
         revision: x.revision + 1,
         state: x.state,
         anchor: x.anchor,
+        chapter_lengths,
         percent:
-          x.state === "completed" ? 100 : total ? (before / total) * 100 : 0,
+          x.state === "completed"
+            ? 100
+            : (readingPercent(chapter_lengths, x.anchor) ?? 0),
         aligned: { anchor: x.anchor, status: "exact" },
       };
       changes.push(["progress:" + x.id, result]);

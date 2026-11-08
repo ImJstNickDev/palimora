@@ -1,7 +1,12 @@
+import { Icon } from "./icons";
+import {
+  useReadingPreferences,
+  readingPreferences,
+} from "./reading-preferences";
 import { listOffline } from "./offline";
 import { OfflineSave, useOffline } from "./offline-ui";
 import { Follow } from "./social";
-import { ReadingTools } from "./reading";
+import { ReadingTools, capture, scrollToAnchor } from "./reading";
 import { ReaderLibrary } from "./library";
 import {
   CatalogFilters,
@@ -10,7 +15,13 @@ import {
   filterParts,
 } from "./catalog-filters";
 import type { Input } from "@palimora/contracts";
-import { useState, useEffect, useRef, useContext } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useContext,
+} from "react";
 import {
   Link,
   NavLink,
@@ -183,46 +194,6 @@ function WorkStats({ m }: { m: Record<string, any> }) {
           ),
       )}
     </dl>
-  );
-}
-function Icon({
-  name,
-}: {
-  name:
-    | "search"
-    | "filter"
-    | "download"
-    | "type"
-    | "expand"
-    | "back"
-    | "next"
-    | "close"
-    | "history";
-}) {
-  const paths = {
-    search: "m21 21-5-5M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15",
-    filter: "M4 7h16M7 12h10M10 17h4",
-    download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
-    type: "M3 19 9 5l6 14M5 15h8M16 11h6m-3 0v8",
-    expand: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
-    back: "m14 6-6 6 6 6",
-    next: "m10 6 6 6-6 6",
-    close: "m6 6 12 12M6 18 18 6",
-    history: "M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2",
-  };
-  return (
-    <svg
-      className="catalog-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={paths[name]} />
-    </svg>
   );
 }
 function WorkSummary({ text }: { text: string }) {
@@ -1159,22 +1130,47 @@ function Interactions({ id, snapshot }: { id: string; snapshot?: string }) {
 function ReaderFrame({
   document,
   immersive,
-  onExit,
+  font,
+  size,
+  leading,
 }: {
+  font: string;
+  size: number;
+  leading: number;
   document: string;
   immersive: boolean;
-  onExit: () => void;
 }) {
   const t = useText();
   const frame = useRef<HTMLIFrameElement>(null);
   const observer = useRef<ResizeObserver | null>(null);
+  const typography = () => {
+    const doc = frame.current?.contentDocument;
+    if (!doc?.body) return;
+    let style = doc.getElementById(
+      "palimora-typography",
+    ) as HTMLStyleElement | null;
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = "palimora-typography";
+      doc.head.append(style);
+    }
+    // Chapter navigation focuses non-interactive text inside this separate document.
+    // Shell focus styles cannot cross the iframe boundary, including cached copies.
+    style.textContent = `@layer palimora-reader { body {font-family:${font === "sans" ? "system-ui,sans-serif" : "Georgia,serif"}!important;font-size:${size}px!important;line-height:${leading}!important} [tabindex="-1"]:focus {outline:none!important} }`;
+  };
   const resize = () => {
+    typography();
     observer.current?.disconnect();
     const el = frame.current,
       body = el?.contentDocument?.body;
     if (!el || !body) return;
     body.ownerDocument.onkeydown = (e) => {
-      if (e.key === "Escape" && immersive) onExit();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", cancelable: true }),
+        );
+      }
     };
     if (immersive) {
       el.style.height = "";
@@ -1188,10 +1184,13 @@ function ReaderFrame({
     observer.current = new ResizeObserver(measure);
     observer.current.observe(body);
   };
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (frame.current) delete frame.current.dataset.ready;
+  }, [document]);
+  useLayoutEffect(() => {
     resize();
     return () => observer.current?.disconnect();
-  }, [immersive]);
+  }, [immersive, font, size, leading]);
   return (
     <iframe
       ref={frame}
@@ -1199,7 +1198,11 @@ function ReaderFrame({
       title={t("Testo dell’opera", "Work text")}
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       srcDoc={document}
-      onLoad={resize}
+      onLoad={() => {
+        resize();
+        if (frame.current) frame.current.dataset.ready = "true";
+        window.dispatchEvent(new Event("reading-frame-ready"));
+      }}
     />
   );
 }
@@ -1215,8 +1218,21 @@ export function Reader() {
     t = useText(),
     [params, setParams] = useSearchParams();
   const { user } = useContext(Auth);
+  const appearance = useReadingPreferences(user.id);
   const [immersive, setImmersive] = useState(false);
+  const [visibleChapter, setVisibleChapter] = useState("");
   const readerRoot = useRef<HTMLElement>(null);
+  const pendingChapterFocus = useRef(false);
+  const transitionAnchor = useRef<ReturnType<typeof capture>>(null);
+  const beginTransition = () => {
+    const snapshot = readerRoot.current?.dataset.snapshot;
+    transitionAnchor.current ??= snapshot ? capture(snapshot) : null;
+    window.dispatchEvent(new Event("reading-transition-start"));
+  };
+  const changeImmersive = (next: boolean) => {
+    beginTransition();
+    setImmersive(next);
+  };
 
   useEffect(() => {
     if (!immersive || !readerRoot.current) return;
@@ -1252,7 +1268,10 @@ export function Reader() {
   );
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const change = () => setSystemDark(media.matches);
+    const change = () => {
+      beginTransition();
+      setSystemDark(media.matches);
+    };
     media.addEventListener("change", change);
     return () => media.removeEventListener("change", change);
   }, []);
@@ -1261,7 +1280,7 @@ export function Reader() {
     const before = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !panel) setImmersive(false);
+      if (e.key === "Escape" && !panel) changeImmersive(false);
     };
     window.addEventListener("keydown", key);
     return () => {
@@ -1271,6 +1290,7 @@ export function Reader() {
   }, [immersive, panel]);
   useEffect(() => {
     setImmersive(false);
+    setVisibleChapter("");
     setPanel(null);
   }, [id]);
   useEffect(() => {
@@ -1301,17 +1321,28 @@ export function Reader() {
   const siteDark =
     user.preferences.theme === "dark" ||
     (user.preferences.theme === "auto" && systemDark);
+  const appearanceValues = readingPreferences({
+    theme: (params.get("theme") ?? appearance.preferences.theme) as
+      | "auto"
+      | "light"
+      | "dark",
+    font: (params.get("font") ?? appearance.preferences.font) as
+      | "serif"
+      | "sans",
+    size: params.has("size")
+      ? Number(params.get("size"))
+      : appearance.preferences.size,
+    leading: params.has("leading")
+      ? Number(params.get("leading"))
+      : appearance.preferences.leading,
+  });
+  const { font, size, leading } = appearanceValues;
   const theme =
-    params.get("theme") === "dark"
-      ? "dark"
-      : params.get("theme") === "light"
-        ? "light"
-        : siteDark
-          ? "dark"
-          : "light";
-  const font = params.get("font") === "sans" ? "sans" : "serif";
-  const rawSize = Number(params.get("size") ?? 19),
-    size = Number.isFinite(rawSize) ? Math.max(14, Math.min(28, rawSize)) : 19;
+    appearanceValues.theme === "auto"
+      ? siteDark
+        ? "dark"
+        : "light"
+      : appearanceValues.theme;
   const work = useQuery({
     queryKey: ["reader", id, snapshot],
     queryFn: () => call("readerWork", { id, snapshot }),
@@ -1337,9 +1368,17 @@ export function Reader() {
     enabled: panel === "versions",
   });
   const content = useQuery({
-    queryKey: ["content", id, snapshot, chapter, skin, theme, font, size],
+    queryKey: ["content", id, snapshot, chapter, skin, theme],
     queryFn: () =>
-      call("readerContent", { id, snapshot, chapter, skin, theme, font, size }),
+      call("readerContent", {
+        id,
+        snapshot,
+        chapter,
+        skin,
+        theme,
+        font: "serif",
+        size: 19,
+      }),
     enabled: !!work.data?.manifest,
     placeholderData: (previous, query) =>
       query?.queryKey[1] === id &&
@@ -1348,7 +1387,78 @@ export function Reader() {
         ? previous
         : undefined,
   });
+  useLayoutEffect(() => {
+    let first = 0,
+      second = 0;
+    const restore = () => {
+      if (
+        content.isFetching ||
+        readerRoot.current?.querySelector<HTMLIFrameElement>(".reader-frame")
+          ?.dataset.ready !== "true"
+      )
+        return;
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+      first = requestAnimationFrame(() => {
+        second = requestAnimationFrame(() => {
+          if (transitionAnchor.current)
+            scrollToAnchor(transitionAnchor.current);
+          transitionAnchor.current = null;
+          if (pendingChapterFocus.current) {
+            const doc =
+              readerRoot.current?.querySelector<HTMLIFrameElement>(
+                "iframe",
+              )?.contentDocument;
+            const heading =
+              doc?.querySelector<HTMLElement>(".chapter h2, .chapter h1") ??
+              doc?.querySelector<HTMLElement>(".chapter");
+            if (heading) {
+              readerRoot.current
+                ?.querySelector<HTMLIFrameElement>("iframe")
+                ?.focus({ preventScroll: true });
+              heading.tabIndex = -1;
+              heading.focus({ preventScroll: true });
+              pendingChapterFocus.current = false;
+            }
+          }
+          window.dispatchEvent(new Event("reading-transition-end"));
+        });
+      });
+    };
+    window.addEventListener("reading-frame-ready", restore);
+    restore();
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+      window.removeEventListener("reading-frame-ready", restore);
+    };
+  }, [
+    immersive,
+    font,
+    size,
+    leading,
+    content.data?.document,
+    content.isFetching,
+    systemDark,
+    appearanceValues.theme,
+    skin,
+  ]);
   const update = (key: string, value: string) => {
+    const previous =
+      key === "skin"
+        ? skin
+        : key in appearanceValues
+          ? String(appearanceValues[key as keyof typeof appearanceValues])
+          : (params.get(key) ?? "");
+    if (previous === value) return;
+    if (["skin", "theme", "font", "size", "leading"].includes(key))
+      beginTransition();
+    if (["theme", "font", "size", "leading"].includes(key)) {
+      appearance.save({
+        ...appearanceValues,
+        [key]: ["size", "leading"].includes(key) ? Number(value) : value,
+      });
+    }
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
@@ -1357,11 +1467,12 @@ export function Reader() {
       if (!value && !offline) next.delete("local");
     }
     setParams(next, {
-      replace: ["skin", "theme", "font", "size"].includes(key),
+      replace: ["skin", "theme", "font", "size", "leading"].includes(key),
       state: location.state,
     });
   };
   const chapterChange = (value: string) => {
+    pendingChapterFocus.current = true;
     update("chapter", value);
     document
       .getElementById("reading-start")
@@ -1379,6 +1490,14 @@ export function Reader() {
     values(m.title).join(" · ") ||
     t("Titolo non disponibile", "Title unavailable");
   const selectedVersion = work.data.versions.find((v) => v.id === snapshot);
+  const localCopy = offline || params.get("local") === "1";
+  const historical =
+    !!snapshot && snapshot !== work.data.work.current_snapshot_id;
+  const versionLabel = localCopy
+    ? t("Copia offline", "Offline copy")
+    : historical
+      ? t("Versione storica", "Historical version")
+      : t("Versione corrente", "Current version");
   const download = async () => {
     setDownloading(true);
     setDownloadError("");
@@ -1411,37 +1530,71 @@ export function Reader() {
       setDownloading(false);
     }
   };
-  const chapterNav = (
-    <>
-      {pos > 0 && (
+  const readingPos = chapter
+    ? pos
+    : Math.max(
+        0,
+        chapters.findIndex((c) => c.chapter_id === visibleChapter),
+      );
+  const goChapter = (index: number) => {
+    const next = chapters[index];
+    if (!next) return;
+    if (chapter) {
+      chapterChange(next.chapter_id);
+      return;
+    }
+    const frame =
+      readerRoot.current?.querySelector<HTMLIFrameElement>("iframe");
+    const section = frame?.contentDocument?.getElementById(
+      "chapter-" + next.chapter_id,
+    );
+    const text = section?.textContent ?? "";
+    if (section && text && work.data.snapshot) {
+      scrollToAnchor({
+        snapshot: work.data.snapshot,
+        chapter: next.chapter_id,
+        offset: 0,
+        quote: text.slice(0, 80),
+        prefix: "",
+        suffix: text.slice(80, 112),
+      });
+      frame?.focus({ preventScroll: true });
+      section.tabIndex = -1;
+      section.focus({ preventScroll: true });
+      setVisibleChapter(next.chapter_id);
+    }
+  };
+  const chapterNav =
+    chapters.length > 1 ? (
+      <>
         <Button
-          onClick={() => chapterChange(chapters[pos - 1].chapter_id)}
+          disabled={readingPos <= 0}
+          onClick={() => goChapter(readingPos - 1)}
           aria-label={t("Capitolo precedente", "Previous chapter")}
         >
           <Icon name="back" />
           <span>{t("Precedente", "Previous")}</span>
         </Button>
-      )}
-      {pos >= 0 && pos < chapters.length - 1 && (
         <Button
-          onClick={() => chapterChange(chapters[pos + 1].chapter_id)}
+          disabled={readingPos >= chapters.length - 1}
+          onClick={() => goChapter(readingPos + 1)}
           aria-label={t("Capitolo successivo", "Next chapter")}
         >
           <span>{t("Successivo", "Next")}</span>
           <Icon name="next" />
         </Button>
-      )}
-    </>
-  );
+      </>
+    ) : null;
   return (
     <section
       ref={readerRoot}
       className={immersive ? "reader immersive" : "reader"}
+      data-snapshot={work.data.snapshot ?? undefined}
       data-reading-theme={theme}
     >
       {!immersive && (
         <div className="reader-breadcrumb">
-          <Link to={offline ? "/offline" : backTo}>
+          <Link to={offline ? "/library/offline" : backTo}>
             <Icon name="back" />
             {offline
               ? t("Copie offline", "Offline copies")
@@ -1467,8 +1620,8 @@ export function Reader() {
               onClick={() => setPanel("versions")}
             >
               <Icon name="history" />
-              {snapshot
-                ? t("Versione storica", "Historical version")
+              {localCopy || historical
+                ? versionLabel
                 : t("Versioni", "Versions")}
             </button>
             {!offline && !!work.data.manifest && (
@@ -1487,9 +1640,9 @@ export function Reader() {
         </div>
       )}
       <div className="reader-heading">
-        {snapshot && !immersive && (
+        {(historical || localCopy) && !immersive && (
           <p className="version-indicator">
-            {t("Versione storica", "Historical version")}
+            {versionLabel}
             {selectedVersion &&
               " · " +
                 new Date(selectedVersion.imported_at).toLocaleDateString(
@@ -1515,12 +1668,28 @@ export function Reader() {
                 values(m.creators).join(", ")
               )}
             </div>
-            <WorkStats m={m} />
-            {!offline && <ReaderLibrary id={id} />}
-            {work.data.snapshot && (
-              <OfflineSave id={id} snapshot={work.data.snapshot} />
+            <div className="reader-start-actions" id="reader-start-actions" />
+            {(values(m.rating).length > 0 || values(m.warnings).length > 0) && (
+              <p className="reader-warnings">
+                {[...values(m.rating), ...values(m.warnings)].join(" · ")}
+              </p>
             )}
-            {m.summary && <p className="work-summary">{m.summary}</p>}
+            <WorkStats m={m} />
+            <div
+              className="reader-library-actions"
+              aria-label={t("Azioni dell’opera", "Work actions")}
+            >
+              {work.data.snapshot && (
+                <OfflineSave id={id} snapshot={work.data.snapshot} compact />
+              )}
+              {!offline && <ReaderLibrary id={id} compact />}
+            </div>
+            {m.summary && (
+              <details className="reader-summary">
+                <summary>{t("Riassunto", "Summary")}</summary>
+                <p className="work-summary">{m.summary}</p>
+              </details>
+            )}
             <details className="reader-metadata">
               <summary>
                 {t("Dettagli dell’opera e tag", "Work details and tags")}
@@ -1578,29 +1747,59 @@ export function Reader() {
       </div>
       {!!work.data.manifest && (
         <div className="reader-toolbar" id="reading-start">
-          <label className="chapter-picker">
+          <label
+            className="chapter-picker"
+            style={{ width: chapter ? "min(32ch, 40vw)" : "16ch" }}
+          >
             <span className="sr-only">{t("Capitolo", "Chapter")}</span>
             <select
               value={chapter ?? ""}
               onChange={(e) => chapterChange(e.target.value)}
             >
-              <option value="">Entire Work</option>
+              <option value="">{t("Opera intera", "Entire Work")}</option>
               {chapters.map((c, i) => (
                 <option key={c.chapter_id} value={c.chapter_id}>
-                  {i + 1}
-                  {c.title ? ". " + c.title : ""}
+                  {i + 1}/{chapters.length}
+                  {c.title ? " · " + c.title : ""}
                 </option>
               ))}
             </select>
           </label>
           <div className="reader-tools">
-            <Button onClick={() => setPanel("appearance")}>
+            {pos > 0 && (
+              <Button
+                aria-label={t(
+                  "Vai al capitolo precedente",
+                  "Go to previous chapter",
+                )}
+                onClick={() => chapterChange(chapters[pos - 1].chapter_id)}
+              >
+                <Icon name="back" />
+              </Button>
+            )}
+            {pos >= 0 && pos < chapters.length - 1 && (
+              <Button
+                aria-label={t(
+                  "Vai al capitolo successivo",
+                  "Go to next chapter",
+                )}
+                onClick={() => chapterChange(chapters[pos + 1].chapter_id)}
+              >
+                <Icon name="next" />
+              </Button>
+            )}
+            <Button
+              onClick={() => setPanel("appearance")}
+              aria-label={t("Aspetto", "Appearance")}
+            >
               <Icon name="type" />
-              {t("Aspetto", "Appearance")}
+              <span className="reader-tool-label">
+                {t("Aspetto", "Appearance")}
+              </span>
             </Button>
             <Button
               data-focus-toggle
-              onClick={() => setImmersive(!immersive)}
+              onClick={() => changeImmersive(!immersive)}
               aria-label={
                 immersive
                   ? t("Esci dalla lettura immersiva", "Exit immersive mode")
@@ -1613,14 +1812,10 @@ export function Reader() {
               </span>
             </Button>
           </div>
+          {!immersive && (
+            <div id="reader-tools-host" className="reader-tools-host" />
+          )}
         </div>
-      )}
-      {work.data.snapshot && (
-        <ReadingTools
-          key={id + work.data.snapshot}
-          id={id}
-          snapshot={work.data.snapshot}
-        />
       )}
       <div className="reader-paper" aria-busy={content.isFetching}>
         {!work.data.manifest ? (
@@ -1633,13 +1828,30 @@ export function Reader() {
           <QueryError retry={() => void content.refetch()} />
         ) : (
           <ReaderFrame
+            font={font}
+            size={size}
+            leading={leading}
             document={content.data.document}
             immersive={immersive}
-            onExit={() => setImmersive(false)}
           />
         )}
       </div>
-      <div className="reader-chapter-nav">{chapterNav}</div>
+      <div className="reader-chapter-nav">
+        {chapterNav}
+        {immersive && (
+          <div id="reader-tools-host" className="reader-tools-host" />
+        )}
+      </div>
+      {work.data.snapshot && (
+        <ReadingTools
+          key={id + work.data.snapshot}
+          id={id}
+          snapshot={work.data.snapshot}
+          chapter={chapter}
+          immersive={immersive}
+          onPosition={setVisibleChapter}
+        />
+      )}
       {!immersive && !offline && work.data.manifest && (
         <Interactions id={id} snapshot={work.data.snapshot ?? undefined} />
       )}
@@ -1653,15 +1865,19 @@ export function Reader() {
           <fieldset>
             <legend>{t("Tema", "Theme")}</legend>
             <div className="appearance-options">
-              {["light", "dark"].map((v) => (
+              {["auto", "light", "dark"].map((v) => (
                 <button
                   key={v}
                   className={"theme-option " + v}
-                  aria-pressed={theme === v}
+                  aria-pressed={appearanceValues.theme === v}
                   onClick={() => update("theme", v)}
                 >
                   <span aria-hidden="true">Aa</span>
-                  {v === "dark" ? t("Scuro", "Dark") : t("Chiaro", "Light")}
+                  {v === "auto"
+                    ? t("Automatico", "Auto")
+                    : v === "dark"
+                      ? t("Scuro", "Dark")
+                      : t("Chiaro", "Light")}
                 </button>
               ))}
             </div>
@@ -1681,17 +1897,54 @@ export function Reader() {
               ))}
             </div>
           </fieldset>
-          <label className="size-control">
-            {t("Dimensione testo", "Text size")}
-            <output>{size} px</output>
+          <div className="size-control">
+            <label htmlFor="reader-size">
+              {t("Dimensione testo", "Text size")}
+            </label>
+            <output htmlFor="reader-size" id="reader-size-value">
+              {size} px
+            </output>
             <input
+              id="reader-size"
+              aria-describedby="reader-size-value"
               type="range"
               min="14"
               max="28"
               value={size}
               onChange={(e) => update("size", e.target.value)}
             />
-          </label>
+          </div>
+          <fieldset>
+            <legend>{t("Interlinea", "Line spacing")}</legend>
+            <div className="appearance-options">
+              {(
+                [
+                  [1.55, t("Compatta", "Compact")],
+                  [1.7, t("Normale", "Normal")],
+                  [1.85, t("Ampia", "Spacious")],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  aria-pressed={leading === value}
+                  onClick={() => update("leading", String(value))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <small role="status">
+            {appearance.persistent
+              ? t(
+                  "Aspetto salvato per questo account su questo dispositivo",
+                  "Appearance saved for this account on this device",
+                )
+              : t(
+                  "Memoria del browser non disponibile: aspetto valido per questa sessione",
+                  "Browser storage unavailable: appearance applies to this session",
+                )}
+          </small>
           <label className="skin-control">
             <span>
               Work Skin

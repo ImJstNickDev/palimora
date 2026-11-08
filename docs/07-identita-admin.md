@@ -25,9 +25,17 @@ La prima installazione è visibile **solo tramite DNS locale** per scelta operat
 | Vedere/modificare collezioni | secondo ACL | secondo ACL, con accesso admin documentato | secondo ACL |
 | Impersonazione per debug | sì | sì | no |
 
-Le policy vengono applicate **sul server** e sull'oggetto, non soltanto nascondendo controlli UI. `Owner` inviti e ruoli critici sono riservati al proprietario anche se l'admin vede altri dati. Collezioni locali con `Owner` (immutabile in v1), `Editor` e `Viewer`; condivisione revocabile; visibilità di lettura/statistiche privata per default, opt-in per utenti selezionati o istanza intera.
+Le policy vengono applicate **sul server** e sull'oggetto, non soltanto nascondendo controlli UI. `Owner` inviti e ruoli critici sono riservati al proprietario anche se l'admin vede altri dati. Collezioni locali con `Owner` (immutabile in v1), `Editor` e `Viewer`; condivisione revocabile; visibilità dell’attività di lettura privata per default, opt-in per utenti selezionati o istanza intera. Le statistiche sono consultabili solo dal titolare e, tramite amministrazione, da Admin/Owner; le precedenti preferenze di condivisione non autorizzano più alcun accesso.
 
 L'amministrazione può ispezionare anche dati personali privati come richiesto; non aggiungere banner di spiegazione ridondanti nelle pagine di lettura. Le operazioni amministrative di ispezione sensibile e impersonazione devono essere auditabili. L'utente impersonato resta distinto da `actor_admin_id` e dall'identità della sessione amministrativa originale.
+
+La lista Utenti apre la scheda `/admin/users/:id`: Account riunisce stato, ruolo,
+sessioni e ripristino accesso; Statistiche riusa lo stesso calcolo della pagina
+personale. Admin/Owner possono consultare tutti gli account, inclusi sé stessi,
+Owner e account disabilitati/eliminati. Questo non amplia i permessi di modifica:
+restano le protezioni dell'Owner, del proprio account e degli altri Admin.
+Le letture `userDetail` e `userStatistics` registrano attore, sessione, target e
+request ID nell'audit; non vi copiano le statistiche o segreti dell'account.
 
 ## Admin panel
 

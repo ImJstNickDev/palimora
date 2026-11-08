@@ -1,3 +1,4 @@
+import { reconstructTextChapter } from "./catalog-text-preparation";
 import { mediaDescriptor, resourceRef, workStyles } from "./reader-media";
 import { safeInlineHtml } from "./reader-safety";
 import {
@@ -526,23 +527,15 @@ export async function catalogOperation(
 }
 
 export async function chapterBytes(db: DB, m: any, c: any) {
-  let bytes = await readObject(db, c.hash);
+  const objects = new Map<string, Buffer>([
+    [c.hash, await readObject(db, c.hash)],
+  ]);
   for (const note of [...(c.notes ?? [])].sort((a, b) => a.offset - b.offset)) {
     const ref = m.objects.find((o: any) => o.name === note.name);
     if (!ref) throw Error("NOTE_MISSING");
-    const fragment = await readObject(db, ref.hash);
-    bytes = Buffer.concat([
-      bytes.subarray(0, note.offset),
-      fragment,
-      bytes.subarray(note.offset),
-    ]);
+    objects.set(ref.hash, await readObject(db, ref.hash));
   }
-  if (
-    c.source_html_sha256 &&
-    createHash("sha256").update(bytes).digest("hex") !== c.source_html_sha256
-  )
-    throw Error("CHAPTER_RECONSTRUCTION");
-  return bytes;
+  return reconstructTextChapter(m, c, objects);
 }
 
 /** Layout offsets distinguish work preface notes from endnotes without guessing filenames. */

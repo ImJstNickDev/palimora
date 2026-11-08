@@ -4,7 +4,7 @@
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
-le implementazioni P1A/P1B.1 e le nuove misure sono documentate in fondo.
+le implementazioni P1A/P1B.1/P2A/P2B.1 e le nuove misure sono documentate in fondo.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -1850,3 +1850,179 @@ Non è stata misurata un'accelerazione end-to-end.
 modifica dei dump, del formato canonico, del parser o di PackStore. Fixture ed
 esiti privati conservati in `/mnt/sdb/palimora-p2a-20261108`; container temporanei
 rimossi dopo le verifiche.
+
+## P2B.1 — preparazione collettiva dei documenti
+
+Il runtime `projectText()` usa `catalog-text-preparation.ts` per acquisire gruppi
+coerenti, poi applica l'unica trasformazione `prepareTextDocument()` e pubblica
+attraverso il motore P2A. Non esegue una serie di builder individuali in parallelo.
+Il riferimento differenziale è `ad6f91ff16d8f66aaa36fd70025fbd096414cfc6`.
+
+Una transazione **REPEATABLE READ, READ ONLY** per gruppo verifica token,
+revisione e generazione richiesta; acquisisce catalogo/bibliografia, riferimenti
+agli snapshot e manifest, identità/alias AO3, date archivistiche, tag canonici e
+source IDs, epoch e dati dei filtri. Le query ricorsive sono collettive e restano
+esatte: crossover cerca una radice che intersechi tutte le chiusure
+synonym/meta; OTP conta i terminali della chiusura synonym. Le array dei tag
+mantengono l'ordine del percorso precedente. Nessuna nuova migrazione o indice.
+
+Il piano legge prima le dimensioni dei metadata, dei tag e dei manifest, poi
+quelle degli oggetti referenziati. Seleziona un prefisso dei claim entro un
+budget di **16 MiB**, ulteriormente limitato dal numero di documenti richiesto.
+Il budget conta ogni inserimento delle note condivise nel testo ricostruito.
+Le finestre di lettura deduplicano gli hash e chiamano `readObjectBatches()` /
+`PackStore.readMany()`: lookup collettivo, raggruppamento per pack, decompressione
+e SHA-256 nativi invariati. Capitoli e note vengono ricostruiti nell'ordine
+originale. Il lettore e il builder condividono la funzione di inserimento note e
+verifica `source_html_sha256`; la trasformazione bibliografica finale è unica.
+
+Il budget limita i gruppi ordinari e i buffer decodificati, **non il valore RSS**:
+una singola opera o un frame indivisibile oltre budget viene isolato, secondo
+l'API nativa esistente. Stringhe JavaScript, ricostruzione e serializzazione
+NDJSON aggiungono copie. Non si accumulano centinaia di capitoli grandi; rimane
+il limite esplicito P2A di 64 MiB per documento, senza troncamento silenzioso.
+Non c'è una cache persistente né riuso del testo prodotto durante ingest.
+
+I lock della coda appartengono soltanto al claim breve P2A. La lettura mantiene
+la protezione archivistica condivisa già prevista dalle API, e termina prima
+dell'HTTP. Lease, revisione monotona, external versioning, barriera di flush sui
+conflitti e ACK condizionato restano quelli P2A: una preparazione superata da
+un'invalidazione non può cancellarla né sovrascrivere una revisione successiva.
+Un oggetto mancante/corrotto produce un esito per la sola opera interessata;
+le letture fallite vengono suddivise per isolare il problema. Un errore SQL
+che abortisce la transazione provoca rollback e suddivisione del gruppo, fino
+all'identificazione del documento in retry. I documenti sani vengono pubblicati.
+
+### Riproduzione e verifiche P2B.1
+
+`scripts/benchmark-p2b1.sh` usa una copia fredda della fixture PostgreSQL P2A,
+PackStore originale in sola lettura e PostgreSQL 17.6/OpenSearch 2.19.4 isolati,
+senza porte host. Durabilità PostgreSQL attiva, heap OpenSearch 1 GiB,
+`UV_THREADPOOL_SIZE=8`. Servono le immagini API compilate dai due riferimenti:
+
+```sh
+docker build -f infra/Dockerfile --target api -t palimora-p2b1-api .
+P2B1_SOURCE=/mnt/sdb/palimora-p2a-20261108 \
+ P2B1_PACK_ROOT=/mnt/sdb/palimora-p1b1d-b-20261108/storage \
+ P2B1_ROOT=/mnt/sdb/palimora-p2b1-repeat \
+ P2B1_OLD_IMAGE=palimora-p2a-api P2B1_IMAGE=palimora-p2b1-api \
+ ./scripts/benchmark-p2b1.sh
+```
+
+La misura comprende claim, transazioni coerenti, letture, trasformazione,
+pubblicazione e ACK durevoli. Refresh e confronto successivo sono fuori dal
+cronometro. Il controllo P2A viene ripetuto sull'indice popolato; i risultati
+principali usano il codice finale. La variante `sql-16` mantiene acquisizione
+collettiva e trasformazione, forzando soltanto letture fisiche singleton nelle
+API native: misura separatamente il contributo del raggruppamento dei pack.
+Questa modalità appartiene esclusivamente allo strumento di benchmark.
+
+Il controllo calcola SHA-256 di ogni `_source` completo per tutte le 11.032
+opere e confronta cinque ricerche (totale e primi 100 ID con ordinamento esplicito).
+ID, generation, snapshot, testi e campi bibliografici fanno parte dell'hash.
+`verify-text-bulk.cjs` P2A è eseguito senza modifiche: errori parziali, timeout
+accettato, SIGKILL nelle quattro finestre, lease scaduto, invalidazione durante
+preparazione, risposte fuori ordine, retry/flush durevole, pause, manutenzione,
+cronologia, ricreazione e drenaggio dell'indice. I fault di trasporto sono
+iniettati intorno a scritture reali; l'expiry viene anticipata via SQL dopo crash.
+
+`verify-text-preparation.cjs` aggiunge uno schema, un indice e pack sintetici
+separati: due capitoli per opera, note e capitoli condivisi, metadata incompleti,
+alias, sinonimi/meta-tag transitivi, crossover/OTP, opera da 18 MiB, nota condivisa
+da circa 9,35 MiB inserita in entrambi i capitoli, oggetto
+mancante, frame realmente corrotto e errore SQL isolato con successiva
+pubblicazione. Confronta anche lettore e sei snapshot storici con il builder
+P2A compilato. Le fixture sintetiche non leggono né modificano i dump.
+
+### Risultati P2B.1 — 2026-11-08
+
+Aggregati in [performance-p2b1.json](performance-p2b1.json). Il riferimento
+storico P2A resta **276,305 s full-text, 170,064 s preparazione, 39,927 documenti/s**.
+La tabella usa la ripetizione locale P2A sullo stesso indice già popolato,
+con durabilità attiva. Tutte le varianti finali usano il budget definitivo,
+compreso il conteggio delle note condivise ripetute.
+
+| Misura, 11.032 opere | P2A 16 | SQL collettivo, letture singleton 16 | P2B.1 16 | P2B.1 64 | P2B.1 128 |
+|---|---:|---:|---:|---:|---:|
+| Full-text, s | 270,560 | 156,884 | 154,593 | 130,614 | 128,641 |
+| Documenti/s | 40,775 | 70,319 | 71,362 | 84,463 | 85,758 |
+| Preparazione, s | 172,589 | 65,188 | 55,715 | 48,504 | 40,501 |
+| Documenti preparati/s | 63,921 | 169,234 | 198,008 | 227,444 | 272,386 |
+| SQL client / documento | 250.240 / 22,683 | 14.493 / 1,314 | 14.493 / 1,314 | 3.636 / 0,330 | 1.830 / 0,166 |
+| Transazioni incluse ACK | 12.413 | 2.071 | 2.071 | 520 | 262 |
+| Richieste bulk / HTTP totali | 690 / 1.381 | 690 / 1.381 | 690 / 1.381 | 173 / 347 | 87 / 175 |
+| HTTP bulk con parsing, s | 84,191 | 76,621 | 84,427 | 72,796 | 81,266 |
+| Claim / ACK, s | 4,851 / 2,056 | 5,656 / 2,944 | 5,686 / 2,373 | 2,649 / 0,855 | 1,202 / 0,456 |
+| Chiamate PackStore.readMany | 52.124 | 51.923 | 1.382 | 391 | 275 |
+| Oggetti letti / aperture pack | 52.124 / 52.124 | 51.923 / 51.923 | 51.923 / 18.933 | 51.923 / 12.531 | 51.923 / 10.974 |
+| Letture file / MiB logici | 104.248 / 202,358 | 103.846 / 202,264 | 65.806 / 331,064 | 57.716 / 375,219 | 54.060 / 429,062 |
+| MiB decodificati | 449,899 | 449,830 | 449,830 | 449,830 | 449,830 |
+| Estrazione HTML, s | 12,243 | 11,549 | 11,799 | 12,768 | 11,304 |
+| CPU preparazione Node, s | 97,413 | 52,793 | 45,575 | 44,953 | 38,853 |
+| CPU Node totale, s | 111,893 | 70,353 | 63,426 | 60,314 | 51,373 |
+| CPU PostgreSQL, s campionati | 78,297 | 20,543 | 19,849 | 10,949 | 7,991 |
+| CPU OpenSearch, s | 107,610 | 159,710 | 196,710 | 175,530 | 165,200 |
+| RSS Node medio / massimo, MiB | 199,58 / 272,71 | 210,55 / 271,87 | 203,12 / 262,00 | 248,04 / 324,26 | 297,35 / 399,57 |
+| WAL PostgreSQL, MiB | 5,195 | 4,944 | 4,311 | 5,335 | 6,977 |
+
+Al default, il tempo di preparazione diminuisce del **67,72%**,
+con **94,21%** di chiamate SQL client in meno. L'ablazione attribuisce
+**107,401 s** all'acquisizione collettiva e **9,473 s** aggiuntivi
+al raggruppamento fisico dei pack in questa sequenza di misure. Sono differenze
+fra prove su host condiviso, non componenti garantite o additive in ogni carico.
+Il full-text diminuisce del **42,86%**; non è una misura end-to-end.
+
+Il nuovo costo dominante è la pubblicazione HTTP/OpenSearch: **84,427 s,
+54,61%** del full-text a 16. Restano **55,715 s** di preparazione,
+di cui **11,799 s** di estrazione HTML; il resto include SQL,
+letture, decompressione verificata, ricostruzione e trasformazione. Questi ultimi
+costi non sono ulteriormente separati dal profiler. Il wrapper misura anche
+HTTP fino agli header; quel valore si sovrappone al tempo HTTP dello stadio.
+Le transazioni di preparazione passano da **11.032 a 690**,
+con **247.477 → 11.730** round-trip SQL al loro interno.
+
+La deduplicazione del corpus risparmia **201 letture di oggetti**:
+la quantità decodificata rimane quasi identica. Le aperture diminuiscono, ma
+le letture logiche aumentano da **212.187.964 a 347.145.819 byte** per
+il range reading già previsto da PackStore, che include gli spazi fra frame.
+Anche la RAM è un costo da osservare nella tabella; non si cambia il default.
+
+La CPU OpenSearch complessiva aumenta da **107,610 a 196,710 s**:
+è un costo osservato, incluso nelle misure. Le reindicizzazioni successive
+condividono l'indice popolato ma non uno stato identico dei segmenti; i contatori
+includono attività di fondo, fra cui i merge, senza una loro attribuzione separata.
+Non è quindi una misura isolata dell'effetto del builder sulla CPU OpenSearch.
+
+PostgreSQL, controllo P2A → default P2B.1: RAM cgroup media/massima
+**143,54 / 143,92 → 176,97 / 178,95 MiB**
+(inclusa cache); I/O fisico letto/scritto
+**0 / 12.144.640 → 0 / 19.537.920 byte**.
+Rete ricevuta/inviata: **87.505.579 / 175.981.334 → 47.748.215 / 133.426.352 byte**.
+
+OpenSearch, controllo P2A → default P2B.1: RAM cgroup media/massima
+**2.963,61 / 3.589,56 → 3.897,54 / 4.331,70 MiB**
+(inclusa cache); I/O fisico letto/scritto
+**28.672 / 1.248.964.608 → 16.384 / 1.931.444.224 byte**.
+Rete ricevuta/inviata: **427.099.388 / 2.034.886 → 428.578.953 / 1.981.202 byte**.
+
+Node legge fisicamente **81.920 → 9.293.824 byte** da `/proc/self/io`;
+le scritture sono **0 → 0 byte**. Questi valori dipendono dalla cache e sono
+diversi dai byte logici dei pack. RSS riguarda il processo full-text, non singole
+allocazioni del builder. CPU di preparazione è misurata durante le transazioni
+coerenti; RSS ogni 100 ms, risorse dei container ogni secondo. I contatori cgroup
+omettono frazioni ai bordi dello stadio; WAL include attività di fondo. Il report
+conserva anche rete/I/O del worker, working set e dati completi degli altri batch.
+
+**Tutti i 11.032 documenti equivalenti**, incluse generazioni e snapshot; cinque
+ricerche identiche, code catalogo/snapshot/grafo/testo a zero dopo recupero.
+Zero errori e retry nelle misure. Passati i controlli P2A originali e le nuove
+fixture di preparazione; build completa riuscita, otto test mirati
+`ingest-pipeline`, `archive` e `archive-native` passati con PostgreSQL/OpenSearch
+isolati, senza skip. Il warning Vite sui chunk rimane quello preesistente.
+Nessuna regressione funzionale osservata; aperture e query ridotte, aumento
+misurato delle letture logiche e limiti di memoria dichiarati sopra.
+
+**P2B.1 completata; P2 non conclusa. P2B.2 e P2C non avviate.** Default 16
+invariato. Nessuna modifica a parser, formato canonico, PackStore, bibliografia,
+UI o dati di produzione; nessun ingest massivo. Risultati privati conservati
+in `/mnt/sdb/palimora-p2b1-20261108`, servizi temporanei rimossi dopo le verifiche.

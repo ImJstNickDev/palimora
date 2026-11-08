@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { DB, transaction } from "./db";
 import { fail } from "./security";
 import { plain, values, tagKinds } from "./catalog-bibliography";
-import { chapterBytes, loadSnapshot } from "./catalog";
+import { loadTextInputs } from "./catalog-text-preparation";
 export const SEARCH_INDEX = "palimora-works-v2";
 export const SEARCH_WRITE_ALIAS = SEARCH_INDEX + "-write";
 const analyzers: Record<string, string> = {
@@ -238,20 +238,15 @@ export async function ensureSearchIndex() {
   }
   return true;
 }
-export async function prepareTextDocument(db: DB, row: any) {
-  const { manifest: m } = row.snapshot_id
-    ? await loadSnapshot(db, row.work_id, row.snapshot_id)
-    : { manifest: null };
-  const metadata = row.metadata,
-    text: string[] = [];
-  if (m)
-    for (const c of m.chapters)
-      text.push(plain((await chapterBytes(db, m, c)).toString()));
+export async function prepareTextDocument(db: DB, row: any, input?: any) {
+  // One transformation for both single-document callers and collective preparation.
+  const data = input ?? (await loadTextInputs(db, [row])).get(row.work_id);
+  if (data instanceof Error) throw data;
+  if (!data) throw Error("TEXT_INPUT_MISSING");
+  const { manifest: m, text, epoch } = data;
+  const metadata = row.metadata;
   const language = values(metadata.language)[0] ?? "und",
     code = languageCode(language);
-  const epoch = (
-    await db.query("SELECT epoch FROM catalog_search_state WHERE id=1")
-  ).rows[0].epoch;
   const document: any = {
     epoch,
     memberships: (row.bibliography.entities ?? [])
@@ -331,17 +326,7 @@ export async function prepareTextDocument(db: DB, row: any) {
     fandomEvidence.every((t: any) => t.source_id) &&
     document.crossover === undefined
   ) {
-    const reach = (
-      await db.query(
-        `WITH RECURSIVE reach(root,id) AS(SELECT t.id,t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='fandom' UNION SELECT r.root,e.parent FROM reach r JOIN catalog_tag_edges e ON e.child=r.id WHERE e.kind IN('synonym','meta')) SELECT root,array_agg(id) nodes FROM reach GROUP BY root`,
-        [row.work_id],
-      )
-    ).rows;
-    document.crossover = !reach.some((g) =>
-      reach.every((other) =>
-        g.nodes.some((id: string) => other.nodes.includes(id)),
-      ),
-    );
+    document.crossover = data.crossover;
   }
   const relationshipEvidence = (row.bibliography.tags ?? []).filter(
     (t: any) => t.kind === "relationships",
@@ -353,12 +338,7 @@ export async function prepareTextDocument(db: DB, row: any) {
     relationshipEvidence.every((t: any) => t.source_id) &&
     document.otp === undefined
   ) {
-    const resolved = (
-      await db.query(
-        `WITH RECURSIVE tags(id) AS(SELECT t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='relationships' UNION SELECT e.parent FROM catalog_tag_edges e JOIN tags t ON t.id=e.child WHERE e.kind='synonym') SELECT count(*)::int n FROM tags WHERE NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=tags.id AND e.kind='synonym')`,
-        [row.work_id],
-      )
-    ).rows[0];
+    const resolved = { n: data.otpCount };
     document.otp = resolved.n === 1;
   }
   let title = document.title.toLowerCase().replace(/^["'./]/, "");
@@ -382,52 +362,19 @@ export async function prepareTextDocument(db: DB, row: any) {
       .filter((e: any) => e.kind === kind)
       .map((e: any) => e.source_id)
       .filter(Boolean);
-  const ext = (
-    await db.query(
-      "SELECT external_id,(SELECT min(imported_at) FROM archive_snapshots WHERE work_id=$1) AS archived_at FROM archive_work_heads WHERE id=$1",
-      [row.work_id],
-    )
-  ).rows[0];
-  document.alias = !!(
-    await db.query("SELECT 1 FROM archive_identity_links WHERE work_id=$1", [
-      row.work_id,
-    ])
-  ).rowCount;
+  const ext = data.ext;
+  document.alias = data.alias;
   document.external_id = ext.external_id;
   document.archived_at = ext.archived_at;
   if (/^\d+$/.test(ext.external_id ?? ""))
     document.ao3_id = Number(ext.external_id);
-  if (m) {
-    const chapterNotes = new Set(
-      m.chapters.flatMap((c: any) => (c.notes ?? []).map((n: any) => n.name)),
-    );
-    const notes = [];
-    for (const n of m.objects.filter(
-      (o: any) => o.kind === "notes_html" && !chapterNotes.has(o.name),
-    ))
-      notes.push(
-        plain(
-          (await (await import("./archive")).readObject(db, n.hash)).toString(),
-        ),
-      );
-    document.notes = notes.join("\n");
-  }
-  const canonicalTags = (
-    await db.query(
-      "SELECT * FROM catalog_tags WHERE id=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=catalog_tags.id AND e.kind='synonym')",
-      [document.filter_ids],
-    )
-  ).rows;
+  if (m) document.notes = data.notes.join("\n");
+  const canonicalTags: any[] = data.canonicalTags;
   for (const kind of tagKinds)
     document[kind] = canonicalTags
       .filter((t) => t.kind === kind)
       .map((t) => t.name);
-  const sourceTags = (
-    await db.query(
-      "SELECT kind,source_id FROM catalog_tags WHERE id=ANY($1::text[]) AND source_id IS NOT NULL",
-      [row.bibliography.filterTags ?? []],
-    )
-  ).rows;
+  const sourceTags: any[] = data.sourceTags;
   document.filter_ids = [
     ...document.filter_ids,
     ...sourceTags.map((t) => t.source_id),

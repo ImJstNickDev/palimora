@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool, transaction } from "./db";
+import { selectTextGroup } from "./catalog-text-preparation";
 import {
   ensureSearchIndex,
   prepareTextDocument,
@@ -183,55 +184,101 @@ export async function projectText(limit = 16, stopped = () => false) {
     stats.acknowledged += await acknowledgeText(complete);
     stats.ack_ms += performance.now() - ackStart;
   };
+  let preparationLimit = claims.length;
   try {
-    for (const claim of claims) {
+    for (let offset = 0; offset < claims.length; ) {
       if (stopped()) {
-        await release(claim, null);
-        continue;
+        for (const claim of claims.slice(offset)) await release(claim, null);
+        break;
       }
       start = performance.now();
-      let document: any;
+      let consumed = 0;
+      let prepared: { claim: Claim; document?: any; error?: unknown }[] = [];
       try {
-        document = await transaction(async (db) => {
+        prepared = await transaction(async (db) => {
           await db.query(
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
           );
-          const row = (
-            await db.query(
-              `SELECT d.* FROM catalog_documents d
-            JOIN catalog_text_pending p USING(work_id)
-            WHERE p.work_id=$1 AND p.revision=$2 AND p.claim=$3 AND d.generation=p.requested_generation`,
-              [claim.work_id, claim.revision, claim.claim],
-            )
-          ).rows[0];
-          return row ? prepareTextDocument(db, row) : null;
+          const group = await selectTextGroup(
+            db,
+            claims.slice(offset, offset + preparationLimit),
+          );
+          consumed = group.consumed;
+          const rows = new Map(group.rows.map((r) => [r.work_id, r]));
+          const result: { claim: Claim; document?: any; error?: unknown }[] =
+            [];
+          for (const claim of claims.slice(offset, offset + consumed)) {
+            const row = rows.get(claim.work_id);
+            if (!row || stopped()) {
+              result.push({ claim });
+              continue;
+            }
+            try {
+              result.push({
+                claim,
+                document: await prepareTextDocument(
+                  db,
+                  row,
+                  group.inputs.get(claim.work_id),
+                ),
+              });
+            } catch (error) {
+              result.push({ claim, error });
+            }
+          }
+          return result;
         });
-      } catch {
-        await release(claim, "DOCUMENT_PREPARATION_FAILED");
-        stats.failures++;
-        continue;
+      } catch (error) {
+        // A SQL failure aborts the read transaction. Bisect exceptional failing
+        // groups after rollback so a poison document cannot starve healthy peers.
+        if (preparationLimit > 1) {
+          preparationLimit = Math.max(1, Math.floor(preparationLimit / 2));
+          continue;
+        }
+        consumed = consumed || 1;
+        prepared = claims
+          .slice(offset, offset + consumed)
+          .map((claim) => ({ claim, error }));
       } finally {
         stats.prepare_ms += performance.now() - start;
       }
-      if (!document) {
-        await release(claim, null);
-        continue;
+      offset += consumed;
+      preparationLimit = claims.length - offset;
+      for (const { claim, document, error } of prepared) {
+        if (error) {
+          const oversized =
+            error instanceof Error &&
+            error.message === "DOCUMENT_EXCEEDS_64_MIB";
+          await release(
+            claim,
+            oversized
+              ? "DOCUMENT_EXCEEDS_64_MIB"
+              : "DOCUMENT_PREPARATION_FAILED",
+            oversized,
+          );
+          stats.failures++;
+          continue;
+        }
+        if (!document) {
+          await release(claim, null);
+          continue;
+        }
+        // bigint is emitted as decimal JSON, never rounded through a JS number.
+        const body =
+          `{"index":{"_index":"${SEARCH_WRITE_ALIAS}","_id":"${claim.work_id}","version":${claim.revision},"version_type":"external","require_alias":true}}\n` +
+          JSON.stringify(document) +
+          "\n";
+        const size = Buffer.byteLength(body);
+        if (size > maximumBytes) {
+          await release(claim, "DOCUMENT_EXCEEDS_64_MIB", true);
+          stats.failures++;
+          continue;
+        }
+        if (bytes + size > targetBytes) await flush();
+        batch.push({ claim, body });
+        bytes += size;
+        if (bytes >= targetBytes) await flush();
       }
-      // bigint is emitted as decimal JSON, never rounded through a JS number.
-      const body =
-        `{"index":{"_index":"${SEARCH_WRITE_ALIAS}","_id":"${claim.work_id}","version":${claim.revision},"version_type":"external","require_alias":true}}\n` +
-        JSON.stringify(document) +
-        "\n";
-      const size = Buffer.byteLength(body);
-      if (size > maximumBytes) {
-        await release(claim, "DOCUMENT_EXCEEDS_64_MIB", true);
-        stats.failures++;
-        continue;
-      }
-      if (bytes + size > targetBytes) await flush();
-      batch.push({ claim, body });
-      bytes += size;
-      if (bytes >= targetBytes) await flush();
     }
     await flush();
   } finally {

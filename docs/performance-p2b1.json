@@ -1,0 +1,926 @@
+{
+  "schema": "palimora.performance-p2b1.v1",
+  "status": "P2B.1 complete; P2B.2 and P2C not started; P2 not complete",
+  "scope": "Full-text reindex, including durable claim/preparation/publication/ACK; no end-to-end ingest campaign",
+  "end_to_end_after": null,
+  "baseline_commit": "ad6f91ff16d8f66aaa36fd70025fbd096414cfc6",
+  "historical_p2a": {
+    "fulltext_seconds": 276.305,
+    "documents_per_second": 39.927,
+    "preparation_seconds": 170.064,
+    "sql": 250240,
+    "bulk_requests": 690
+  },
+  "runtime": {
+    "node": "v22.21.1",
+    "baseline_js_sha256": {
+      "catalog-search": "cf17e2d4f87d66cf74e1ec3690937bd13cf9129c0d71c3c7334a67e6e123c41b",
+      "catalog-text-bulk": "4e31adfab79d242f9cef4dab7284f71f61ddb158f5dc14c896eedb795c953fc6"
+    }
+  },
+  "conditions": {
+    "works": 11032,
+    "postgres": "17.6",
+    "opensearch": "2.19.4",
+    "opensearch_heap_bytes": 1073741824,
+    "uv_threadpool_size": 8,
+    "source": "Cold copy of retained P2A PostgreSQL; original P1B.1d B canonical packs mounted read-only",
+    "durability": {
+      "fsync": true,
+      "synchronous_commit": "on",
+      "full_page_writes": true
+    },
+    "network": "Internal isolated Docker network; no published ports",
+    "default_documents": 16,
+    "preparation_window_bytes": 16777216,
+    "bulk_target_bytes": 8388608,
+    "maximum_document_bytes": 67108864,
+    "execution": "Sequential single worker; no persistent cache or advanced preparation parallelism"
+  },
+  "first_baseline_control": {
+    "started_at": 1794147623684,
+    "ended_at": 1794147895050,
+    "label": "p2a-16",
+    "count": 11032,
+    "seconds": 271.331919178,
+    "documents_per_second": 40.65868856646664,
+    "sql": 250240,
+    "transactions": 11723,
+    "http": 1381,
+    "document_requests": 0,
+    "bulk_requests": 690,
+    "bytes": 428013939,
+    "http_ms": 87674.40341700002,
+    "preparation_io": {
+      "pack_calls": 52124,
+      "pack_objects": 52124,
+      "pack_compressed_bytes": 211770972,
+      "pack_decoded_bytes": 471752881,
+      "pack_open": 52124,
+      "pack_read_calls": 104248,
+      "pack_read_bytes": 212187964,
+      "plain_calls": 22928,
+      "plain_ms": 12049.350620999016
+    },
+    "wal_bytes": "5127488",
+    "node_cpu": {
+      "user": 87652536,
+      "system": 23237679
+    },
+    "rss_mean": 209999204.9630724,
+    "rss_max": 270426112,
+    "equivalent": null,
+    "sql_per_document": 22.683103698332125,
+    "transactions_including_ack_autocommit": 12413,
+    "opensearch_cpu_seconds": 135.44,
+    "server_sql_calls": 261966.0,
+    "server_sql_ms": 11573.119016999903,
+    "node_io": {
+      "rchar": 375866484,
+      "wchar": 500634055,
+      "syscr": 652372,
+      "syscw": 548050,
+      "read_bytes": 28856320,
+      "write_bytes": 0,
+      "cancelled_write_bytes": 0
+    },
+    "stages": {
+      "claimed": 11032,
+      "acknowledged": 11032,
+      "requests": 690,
+      "bytes": 428013939,
+      "http_ms": 86550.7213629997,
+      "prepare_ms": 171165.79931999967,
+      "claim_ms": 4321.1241639995405,
+      "ack_ms": 2175.406812999732,
+      "failures": 0,
+      "conflict_flushes": 0
+    },
+    "preparation_documents_per_second": 64.45212795913359,
+    "containers": {
+      "worker": {
+        "sampled_seconds": 196.02091455459595,
+        "cpu_seconds": 0.0,
+        "ram_mean": 409600,
+        "ram_max": 409600,
+        "working_mean": 409600,
+        "working_max": 409600,
+        "io_bytes": {},
+        "network_bytes": {
+          "rx_bytes": 70,
+          "tx_bytes": 0
+        }
+      },
+      "baseline": {
+        "sampled_seconds": 196.02222228050232,
+        "cpu_seconds": 77.316023,
+        "ram_mean": 185550775.2284264,
+        "ram_max": 228073472,
+        "working_mean": 184901548.83248731,
+        "working_max": 227729408,
+        "io_bytes": {
+          "write": 0,
+          "read": 14655488
+        },
+        "network_bytes": {
+          "rx_bytes": 128477459,
+          "tx_bytes": 377228353
+        }
+      },
+      "pg": {
+        "sampled_seconds": 196.0197730064392,
+        "cpu_seconds": 54.801111,
+        "ram_mean": 134585307.6142132,
+        "ram_max": 151474176,
+        "working_mean": 132539095.71573605,
+        "working_max": 149430272,
+        "io_bytes": {
+          "write": 1372160,
+          "read": 139264
+        },
+        "network_bytes": {
+          "rx_bytes": 63146252,
+          "tx_bytes": 126964477
+        }
+      },
+      "search": {
+        "sampled_seconds": 196.01683068275452,
+        "cpu_seconds": 81.054768,
+        "ram_mean": 2255104738.1116753,
+        "ram_max": 2583572480,
+        "working_mean": 1719735124.467005,
+        "working_max": 1772036096,
+        "io_bytes": {
+          "write": 944578560,
+          "read": 122880
+        },
+        "network_bytes": {
+          "rx_bytes": 314080408,
+          "tx_bytes": 1503332
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "started_at": 1794148617614,
+      "ended_at": 1794148888209,
+      "label": "p2a-16",
+      "count": 11032,
+      "seconds": 270.559778199,
+      "documents_per_second": 40.77472295932262,
+      "sql": 250240,
+      "transactions": 11723,
+      "http": 1381,
+      "document_requests": 0,
+      "bulk_requests": 690,
+      "bytes": 428013939,
+      "http_ms": 84950.25514800003,
+      "preparation_io": {
+        "pack_calls": 52124,
+        "pack_objects": 52124,
+        "pack_compressed_bytes": 211770972,
+        "pack_decoded_bytes": 471752881,
+        "pack_open": 52124,
+        "pack_read_calls": 104248,
+        "pack_read_bytes": 212187964,
+        "plain_calls": 22928,
+        "plain_ms": 12243.172032998144
+      },
+      "preparation": {
+        "transactions": 11032,
+        "sql_calls": 247477,
+        "wall_ms": 172400.78116100057,
+        "cpu_user_us": 76287517,
+        "cpu_system_us": 21125652
+      },
+      "wal_bytes": "5447704",
+      "node_cpu": {
+        "user": 88249654,
+        "system": 23642994
+      },
+      "rss_mean": 209278663.49037036,
+      "rss_max": 285958144,
+      "equivalent": null,
+      "sql_per_document": 22.683103698332125,
+      "transactions_including_ack_autocommit": 12413,
+      "opensearch_cpu_seconds": 107.61,
+      "server_sql_calls": 261965.0,
+      "server_sql_ms": 11954.710944999591,
+      "node_io": {
+        "rchar": 375845670,
+        "wchar": 500605118,
+        "syscr": 648759,
+        "syscw": 544402,
+        "read_bytes": 81920,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 690,
+        "bytes": 428013939,
+        "http_ms": 84190.84016899957,
+        "prepare_ms": 172589.320529,
+        "claim_ms": 4851.066989000302,
+        "ack_ms": 2055.7577700002757,
+        "failures": 0,
+        "conflict_flushes": 0
+      },
+      "preparation_documents_per_second": 63.92052512974756,
+      "containers": {
+        "worker": {
+          "sampled_seconds": 269.03236413002014,
+          "cpu_seconds": 0.0,
+          "ram_mean": 21053440,
+          "ram_max": 21053440,
+          "working_mean": 20147526.162962962,
+          "working_max": 20152320,
+          "io_bytes": {
+            "write": 8192,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 70,
+            "tx_bytes": 0
+          }
+        },
+        "baseline": {
+          "sampled_seconds": 269.0345892906189,
+          "cpu_seconds": 111.038364,
+          "ram_mean": 184412781.98518518,
+          "ram_max": 252325888,
+          "working_mean": 183733467.97037038,
+          "working_max": 251645952,
+          "io_bytes": {
+            "write": 0,
+            "read": 81920
+          },
+          "network_bytes": {
+            "rx_bytes": 178001154,
+            "tx_bytes": 514601943
+          }
+        },
+        "pg": {
+          "sampled_seconds": 269.02977895736694,
+          "cpu_seconds": 78.297294,
+          "ram_mean": 150510463.05185184,
+          "ram_max": 150908928,
+          "working_mean": 149392664.65185186,
+          "working_max": 149680128,
+          "io_bytes": {
+            "write": 12144640,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 87505579,
+            "tx_bytes": 175981334
+          }
+        },
+        "search": {
+          "sampled_seconds": 269.02720952033997,
+          "cpu_seconds": 107.230078,
+          "ram_mean": 3107573259.3777776,
+          "ram_max": 3763924992,
+          "working_mean": 2105142992.5925925,
+          "working_max": 2226176000,
+          "io_bytes": {
+            "write": 1248964608,
+            "read": 28672
+          },
+          "network_bytes": {
+            "rx_bytes": 427099388,
+            "tx_bytes": 2034886
+          }
+        }
+      }
+    },
+    {
+      "started_at": 1794150413717,
+      "ended_at": 1794150570624,
+      "label": "sql-16",
+      "count": 11032,
+      "seconds": 156.88438380099998,
+      "documents_per_second": 70.31929968245623,
+      "sql": 14493,
+      "transactions": 1381,
+      "http": 1381,
+      "document_requests": 0,
+      "bulk_requests": 690,
+      "bytes": 428013939,
+      "http_ms": 77239.2133030001,
+      "preparation_io": {
+        "pack_calls": 51923,
+        "pack_objects": 51923,
+        "pack_compressed_bytes": 211673373,
+        "pack_decoded_bytes": 471681155,
+        "pack_open": 51923,
+        "pack_read_calls": 103846,
+        "pack_read_bytes": 212088757,
+        "plain_calls": 22928,
+        "plain_ms": 11549.220094999962
+      },
+      "preparation": {
+        "transactions": 690,
+        "sql_calls": 11730,
+        "wall_ms": 65167.629176000075,
+        "cpu_user_us": 43475728,
+        "cpu_system_us": 9317392
+      },
+      "wal_bytes": "5184560",
+      "node_cpu": {
+        "user": 58403491,
+        "system": 11949166
+      },
+      "rss_mean": 220775565.70234987,
+      "rss_max": 285077504,
+      "equivalent": true,
+      "sql_per_document": 1.313723712835388,
+      "transactions_including_ack_autocommit": 2071,
+      "opensearch_cpu_seconds": 159.71,
+      "server_sql_calls": 15876.0,
+      "server_sql_ms": 13052.08245300001,
+      "node_io": {
+        "rchar": 347363860,
+        "wchar": 476626366,
+        "syscr": 395741,
+        "syscw": 285924,
+        "read_bytes": 716800,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 690,
+        "bytes": 428013939,
+        "http_ms": 76620.80510499989,
+        "prepare_ms": 65187.94424699995,
+        "claim_ms": 5656.288693999938,
+        "ack_ms": 2943.8136530001784,
+        "failures": 0,
+        "conflict_flushes": 0
+      },
+      "preparation_documents_per_second": 169.23374601596996,
+      "containers": {
+        "worker": {
+          "sampled_seconds": 156.0191888809204,
+          "cpu_seconds": 69.581815,
+          "ram_mean": 196867091.56687897,
+          "ram_max": 257310720,
+          "working_mean": 195687287.03184712,
+          "working_max": 256004096,
+          "io_bytes": {
+            "write": 0,
+            "read": 716800
+          },
+          "network_bytes": {
+            "rx_bytes": 135548789,
+            "tx_bytes": 475477526
+          }
+        },
+        "baseline": {
+          "sampled_seconds": 156.01820731163025,
+          "cpu_seconds": 0.0,
+          "ram_mean": 32088064,
+          "ram_max": 32088064,
+          "working_mean": 31364089.477707006,
+          "working_max": 31404032,
+          "io_bytes": {
+            "write": 0,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 0,
+            "tx_bytes": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 156.01935625076294,
+          "cpu_seconds": 20.542889,
+          "ram_mean": 200974362.08917198,
+          "ram_max": 204148736,
+          "working_mean": 173080002.03821656,
+          "working_max": 175431680,
+          "io_bytes": {
+            "write": 23117824,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 47782541,
+            "tx_bytes": 133533100
+          }
+        },
+        "search": {
+          "sampled_seconds": 156.02062344551086,
+          "cpu_seconds": 159.274404,
+          "ram_mean": 3135126560.611465,
+          "ram_max": 3714437120,
+          "working_mean": 2212686411.0063696,
+          "working_max": 2620755968,
+          "io_bytes": {
+            "write": 1427460096,
+            "read": 12288
+          },
+          "network_bytes": {
+            "rx_bytes": 427694985,
+            "tx_bytes": 2015689
+          }
+        }
+      }
+    },
+    {
+      "started_at": 1794150960039,
+      "ended_at": 1794151114666,
+      "label": "batch-16",
+      "count": 11032,
+      "seconds": 154.592792264,
+      "documents_per_second": 71.36167112604137,
+      "sql": 14493,
+      "transactions": 1381,
+      "http": 1381,
+      "document_requests": 0,
+      "bulk_requests": 690,
+      "bytes": 428013939,
+      "http_ms": 85054.70945599966,
+      "preparation_io": {
+        "pack_calls": 1382,
+        "pack_objects": 51923,
+        "pack_compressed_bytes": 211673373,
+        "pack_decoded_bytes": 471681155,
+        "pack_open": 18933,
+        "pack_read_calls": 65806,
+        "pack_read_bytes": 347145819,
+        "plain_calls": 22928,
+        "plain_ms": 11799.16306700084
+      },
+      "preparation": {
+        "transactions": 690,
+        "sql_calls": 11730,
+        "wall_ms": 55695.090546000094,
+        "cpu_user_us": 39136126,
+        "cpu_system_us": 6438877
+      },
+      "wal_bytes": "4520408",
+      "node_cpu": {
+        "user": 54443307,
+        "system": 8983077
+      },
+      "rss_mean": 212982526.12890366,
+      "rss_max": 274731008,
+      "equivalent": true,
+      "sql_per_document": 1.313723712835388,
+      "transactions_including_ack_autocommit": 2071,
+      "opensearch_cpu_seconds": 196.71,
+      "server_sql_calls": 15876.0,
+      "server_sql_ms": 12669.555894999998,
+      "node_io": {
+        "rchar": 481550277,
+        "wchar": 475759757,
+        "syscr": 249817,
+        "syscw": 175936,
+        "read_bytes": 9293824,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 690,
+        "bytes": 428013939,
+        "http_ms": 84426.74258399986,
+        "prepare_ms": 55715.01901500038,
+        "claim_ms": 5685.7917410001755,
+        "ack_ms": 2373.2770269998946,
+        "failures": 0,
+        "conflict_flushes": 0
+      },
+      "preparation_documents_per_second": 198.00765027164059,
+      "containers": {
+        "worker": {
+          "sampled_seconds": 154.02818155288696,
+          "cpu_seconds": 62.931939,
+          "ram_mean": 210508238.4516129,
+          "ram_max": 268374016,
+          "working_mean": 208461427.61290324,
+          "working_max": 265920512,
+          "io_bytes": {
+            "write": 0,
+            "read": 9248768
+          },
+          "network_bytes": {
+            "rx_bytes": 135406983,
+            "tx_bytes": 476325156
+          }
+        },
+        "baseline": {
+          "sampled_seconds": 154.03279733657837,
+          "cpu_seconds": 0.0,
+          "ram_mean": 32088064,
+          "ram_max": 32088064,
+          "working_mean": 31103068.490322582,
+          "working_max": 31272960,
+          "io_bytes": {
+            "write": 0,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 387,
+            "tx_bytes": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 154.02760362625122,
+          "cpu_seconds": 19.849004,
+          "ram_mean": 185562488.56774193,
+          "ram_max": 187641856,
+          "working_mean": 170103973.16129032,
+          "working_max": 170385408,
+          "io_bytes": {
+            "write": 19537920,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 47748215,
+            "tx_bytes": 133426352
+          }
+        },
+        "search": {
+          "sampled_seconds": 154.02649879455566,
+          "cpu_seconds": 196.359633,
+          "ram_mean": 4086866580.645161,
+          "ram_max": 4542111744,
+          "working_mean": 2941265378.270968,
+          "working_max": 3145601024,
+          "io_bytes": {
+            "write": 1931444224,
+            "read": 16384
+          },
+          "network_bytes": {
+            "rx_bytes": 428578953,
+            "tx_bytes": 1981202
+          }
+        }
+      }
+    },
+    {
+      "started_at": 1794150617624,
+      "ended_at": 1794150748262,
+      "label": "batch-64",
+      "count": 11032,
+      "seconds": 130.61359344000002,
+      "documents_per_second": 84.46287793978941,
+      "sql": 3636,
+      "transactions": 347,
+      "http": 347,
+      "document_requests": 0,
+      "bulk_requests": 173,
+      "bytes": 428013939,
+      "http_ms": 72936.05966399999,
+      "preparation_io": {
+        "pack_calls": 391,
+        "pack_objects": 51923,
+        "pack_compressed_bytes": 211673373,
+        "pack_decoded_bytes": 471681155,
+        "pack_open": 12531,
+        "pack_read_calls": 57716,
+        "pack_read_bytes": 393445572,
+        "plain_calls": 22928,
+        "plain_ms": 12768.373074999814
+      },
+      "preparation": {
+        "transactions": 173,
+        "sql_calls": 2941,
+        "wall_ms": 48498.18634900002,
+        "cpu_user_us": 39033629,
+        "cpu_system_us": 5919616
+      },
+      "wal_bytes": "5593664",
+      "node_cpu": {
+        "user": 52236499,
+        "system": 8077273
+      },
+      "rss_mean": 260089049.8358459,
+      "rss_max": 340008960,
+      "equivalent": true,
+      "sql_per_document": 0.3295866569978245,
+      "transactions_including_ack_autocommit": 520,
+      "opensearch_cpu_seconds": 175.53,
+      "server_sql_calls": 3985.0,
+      "server_sql_ms": 8551.837400999852,
+      "node_io": {
+        "rchar": 525975052,
+        "wchar": 472725092,
+        "syscr": 203436,
+        "syscw": 138711,
+        "read_bytes": 11280384,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 173,
+        "bytes": 428013939,
+        "http_ms": 72796.24629899995,
+        "prepare_ms": 48504.348854999975,
+        "claim_ms": 2649.045774999934,
+        "ack_ms": 854.6303730000466,
+        "failures": 0,
+        "conflict_flushes": 0
+      },
+      "preparation_documents_per_second": 227.44352332157507,
+      "containers": {
+        "worker": {
+          "sampled_seconds": 129.01340532302856,
+          "cpu_seconds": 59.394767,
+          "ram_mean": 241236535.13846153,
+          "ram_max": 320348160,
+          "working_mean": 238987799.63076922,
+          "working_max": 317317120,
+          "io_bytes": {
+            "write": 0,
+            "read": 11124736
+          },
+          "network_bytes": {
+            "rx_bytes": 131276300,
+            "tx_bytes": 465890320
+          }
+        },
+        "baseline": {
+          "sampled_seconds": 129.01455807685852,
+          "cpu_seconds": 0.0,
+          "ram_mean": 32088064,
+          "ram_max": 32088064,
+          "working_mean": 31053508.923076924,
+          "working_max": 31358976,
+          "io_bytes": {
+            "write": 0,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 0,
+            "tx_bytes": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 129.01259541511536,
+          "cpu_seconds": 10.949342,
+          "ram_mean": 194176047.26153848,
+          "ram_max": 208592896,
+          "working_mean": 170770526.52307692,
+          "working_max": 173785088,
+          "io_bytes": {
+            "write": 10051584,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 43806638,
+            "tx_bytes": 130228737
+          }
+        },
+        "search": {
+          "sampled_seconds": 129.01231932640076,
+          "cpu_seconds": 172.895321,
+          "ram_mean": 3581397716.6769233,
+          "ram_max": 4158529536,
+          "working_mean": 2656692444.5538464,
+          "working_max": 3017969664,
+          "io_bytes": {
+            "write": 1504436224,
+            "read": 4096
+          },
+          "network_bytes": {
+            "rx_bytes": 425749605,
+            "tx_bytes": 1052315
+          }
+        }
+      }
+    },
+    {
+      "started_at": 1794150791021,
+      "ended_at": 1794150919684,
+      "label": "batch-128",
+      "count": 11032,
+      "seconds": 128.64062325400002,
+      "documents_per_second": 85.75829097327515,
+      "sql": 1830,
+      "transactions": 175,
+      "http": 175,
+      "document_requests": 0,
+      "bulk_requests": 87,
+      "bytes": 428013939,
+      "http_ms": 81297.361737,
+      "preparation_io": {
+        "pack_calls": 275,
+        "pack_objects": 51923,
+        "pack_compressed_bytes": 211673373,
+        "pack_decoded_bytes": 471681155,
+        "pack_open": 10974,
+        "pack_read_calls": 54060,
+        "pack_read_bytes": 449903971,
+        "plain_calls": 22928,
+        "plain_ms": 11304.239248999173
+      },
+      "preparation": {
+        "transactions": 87,
+        "sql_calls": 1479,
+        "wall_ms": 40498.186692,
+        "cpu_user_us": 34203497,
+        "cpu_system_us": 4649269
+      },
+      "wal_bytes": "7315408",
+      "node_cpu": {
+        "user": 44832313,
+        "system": 6540771
+      },
+      "rss_mean": 311797341.2113891,
+      "rss_max": 418979840,
+      "equivalent": true,
+      "sql_per_document": 0.16588107324147933,
+      "transactions_including_ack_autocommit": 262,
+      "opensearch_cpu_seconds": 165.2,
+      "server_sql_calls": 2007.0,
+      "server_sql_ms": 6439.704715000233,
+      "node_io": {
+        "rchar": 582092046,
+        "wchar": 472175795,
+        "syscr": 187617,
+        "syscw": 126773,
+        "read_bytes": 5754880,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 87,
+        "bytes": 428013939,
+        "http_ms": 81265.86168599996,
+        "prepare_ms": 40501.326753999994,
+        "claim_ms": 1202.1808320000393,
+        "ack_ms": 455.84644800002684,
+        "failures": 0,
+        "conflict_flushes": 0
+      },
+      "preparation_documents_per_second": 272.38613853336193,
+      "containers": {
+        "worker": {
+          "sampled_seconds": 128.02706623077393,
+          "cpu_seconds": 50.805716,
+          "ram_mean": 301602260.34108526,
+          "ram_max": 407904256,
+          "working_mean": 299755726.3875969,
+          "working_max": 406142976,
+          "io_bytes": {
+            "write": 0,
+            "read": 5578752
+          },
+          "network_bytes": {
+            "rx_bytes": 130887052,
+            "tx_bytes": 472027324
+          }
+        },
+        "baseline": {
+          "sampled_seconds": 128.02699327468872,
+          "cpu_seconds": 0.0,
+          "ram_mean": 32088064,
+          "ram_max": 32088064,
+          "working_mean": 31261656.31007752,
+          "working_max": 31342592,
+          "io_bytes": {
+            "write": 0,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 0,
+            "tx_bytes": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 128.0267403125763,
+          "cpu_seconds": 7.990795,
+          "ram_mean": 196837217.24031007,
+          "ram_max": 205078528,
+          "working_mean": 171133515.4108527,
+          "working_max": 171630592,
+          "io_bytes": {
+            "write": 11587584,
+            "read": 0
+          },
+          "network_bytes": {
+            "rx_bytes": 43317250,
+            "tx_bytes": 130100228
+          }
+        },
+        "search": {
+          "sampled_seconds": 128.02542662620544,
+          "cpu_seconds": 164.580407,
+          "ram_mean": 3761229919.255814,
+          "ram_max": 4278251520,
+          "working_mean": 2781490501.4573646,
+          "working_max": 2998353920,
+          "io_bytes": {
+            "write": 1542053888,
+            "read": 32768
+          },
+          "network_bytes": {
+            "rx_bytes": 428710074,
+            "tx_bytes": 786824
+          }
+        }
+      }
+    }
+  ],
+  "ablation": {
+    "sql_16_definition": "Collective SQL, bounded acquisition and same transformer; native readMany forced to sequential singleton reads by benchmark instrumentation only",
+    "collective_acquisition_prepare_seconds_saved": 107.40137628200004,
+    "pack_grouping_additional_prepare_seconds_saved": 9.472925231999572,
+    "fulltext_seconds_saved_at_default": 115.966985935,
+    "preparation_seconds_saved_at_default": 116.87430151399961
+  },
+  "validation": {
+    "p2a_protocol_unchanged_tests": {
+      "partial_failure_and_no_http_transaction": true,
+      "accepted_timeout_idempotent_retry": true,
+      "lease_expiry_and_stale_owner": true,
+      "out_of_order_publication": true,
+      "invalidation_during_preparation": true,
+      "crash_claim-before-commit": true,
+      "crash_before-send": true,
+      "crash_after-send": true,
+      "crash_before-ack": true,
+      "transient_backoff": true,
+      "oversize_utf8_preserved": true,
+      "large_documents_sent_alone": true,
+      "scheduler_pause_resume_replica_and_stop": true,
+      "operational_failure_history_and_retry": true,
+      "maintenance_modes": true,
+      "retry_durability": {
+        "failed_flush_preserves_queue": true,
+        "confirmed_flush_before_ack": true,
+        "source_unchanged": true,
+        "all_projection_queues_drained": true
+      },
+      "stop": true,
+      "no_automatic_index_without_mapping": true,
+      "recreation_and_drain": true,
+      "canonical_snapshots_and_history_unchanged": true,
+      "all_projection_queues_drained": true
+    },
+    "preparation_fixtures": {
+      "multichapter_shared_notes_incomplete_metadata_alias_graph_crossover_otp": true,
+      "missing_object_isolated": true,
+      "historical_reader_equivalence": true,
+      "corrupt_object_isolated": true,
+      "large_work_isolated_by_byte_budget": true,
+      "shared_note_occurrences_counted_in_reconstruction_budget": true,
+      "sql_failure_isolated_and_retried_with_real_publication": true
+    },
+    "final_checks": {
+      "full_build": true,
+      "targeted_tests": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files": [
+          "ingest-pipeline",
+          "archive",
+          "archive-native"
+        ],
+        "real_postgres_and_opensearch": true
+      },
+      "final_sources_verified": 11032,
+      "final_reference_searches_verified": 5,
+      "all_projection_queues": {
+        "catalog": 0,
+        "snapshot": 0,
+        "graph": 0,
+        "text": 0
+      },
+      "durability": {
+        "fsync": "on",
+        "full_page_writes": "on",
+        "synchronous_commit": "on"
+      },
+      "synthetic_test_documents_removed": 2
+    }
+  },
+  "limits": [
+    "Shared host and uncontrolled caches/segment merges; sequential subsystem runs, not statistical guarantees or end-to-end acceleration. OpenSearch CPU rises in the final repeated runs; counters include background work and are not a causal attribution to the builder.",
+    "Primary comparison uses repeated P2A and final batch16, both replacing populated documents. First P2A populated an empty index; its cgroup sampling began late.",
+    "All final ablation/16/64/128 runs use final preparation code and unchanged durable P2A protocol. Default stays 16.",
+    "Initial enqueue/index bootstrap and final refresh/verification are outside the timer for both versions; per-call index HEAD, claim, preparation, HTTP and ACK remain included.",
+    "Full _source SHA256, IDs/generations/snapshots and five reference searches compared for every completed batch run, after timed refresh. Search checks compare total counts and first 100 IDs in explicit ID order.",
+    "Preparation timing includes read-only repeatable-read transactions and pack reads. SQL count is client calls/round trips, including BEGIN/COMMIT; server count also includes observer queries.",
+    "Preparation SQL/CPU instrumentation covers transaction callbacks; preparation stage telemetry also includes surrounding control work. HTTP wrapper ends at headers; stage HTTP includes response parsing. These overlap and must not be added.",
+    "Pack bytes are logical file reads, including existing readMany range gaps and headers. They increase with grouping; /proc and cgroup physical I/O are reported separately.",
+    "Decoded bytes are sum of native object sizes, not heap allocation. Deduplication is within bounded windows, never persistent; cross-window rereads remain possible.",
+    "16MiB bounds ordinary metadata/manifest/raw-text groups and decoded read windows, not process RSS. One indivisible exceptional work/frame is isolated; native API decodes a whole frame. Reconstruction and JavaScript/string/NDJSON copies add memory; P2A 64MiB output limit remains explicit permanent failure.",
+    "RSS describes the whole full-text process, not separate heap allocations for SQL, decompression or HTML extraction; preparation CPU is measured over its read transactions.",
+    "RSS sampled at 100ms, cgroup CPU/RAM/I/O/network at one second; intervals omit boundary fractions. WAL includes background activity. Physical I/O depends on cache/checkpoints.",
+    "Zero retries/errors in timed runs. Fault probes inject transport loss/overload around real writes; crash leases forced expired after SIGKILL. Synthetic fixtures use a separate schema, index and writable packs.",
+    "No P2B.2, P2C, parser, canonical format, PackStore implementation, bibliography or production data changes."
+  ]
+}

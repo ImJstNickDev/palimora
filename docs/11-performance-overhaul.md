@@ -4,7 +4,7 @@
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
-l'implementazione P1A e le nuove misure sono documentate in fondo.
+le implementazioni P1A/P1B.1 e le nuove misure sono documentate in fondo.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -1403,3 +1403,291 @@ produzione. Percorsi, misure complete e limiti in `performance-p1b1c.json`;
 evidenze private in `/mnt/sdb/palimora-p1b1c-results/`, riferimento compilato in
 `/mnt/sdb/palimora-p1b1c-old-dist/`. Container/rete della fixture rimossi al
 termine, bind mount conservati. Nessun servizio di produzione modificato.
+
+## P1B.1d — integrazione e campagne complete (2026-11-08)
+
+Codice applicativo misurato: `c3dcb57118d19e8aeabaa70da1b21e29629c8486`.
+Le tre trasformazioni bibliografiche sono integrate nel normale `projectCatalog`:
+normalizzazione comune, tag/entità bulk, filtri per opera, documenti correnti e
+viste storiche collettivi. Storico e corrente conservano le rispettive precedenze;
+il lettore esplicito usa lo stesso materializzatore storico. Nessuna nuova
+architettura, modifica al parser/PackStore, al grafo, allo scheduler o a OpenSearch.
+
+Le sonde SQL sul nuovo runtime registrano **zero INSERT individuali** per tag,
+entità, associazioni opera-tag/opera-entità e viste; il profiler registra zero
+chiamate al vecchio `projectBibliography` nella proiezione normale. Le barriere
+ordinate per modifiche del grafo e `tagEdges()` rimangono intenzionalmente: questo
+corpus non ha archi e non misura il loro costo su un grafo popolato.
+
+### Metodo e confini
+
+Riutilizzati `benchmark-p0.sh`, `benchmark-release.cjs`, runner operativo,
+profiler P0, sampler cgroup e verificatore HTTP. Aggiunto un preload opzionale
+`performance-bibliography-profiler.cjs`: separa le sezioni corrente/storica
+all'interno del batch e aggrega tempi SQL/arricchimento/lock, senza salvare
+parametri o contenuti. Il runner accetta `BENCH_NODE_OPTIONS`, vuoto per default.
+Il verificatore conserva tutti i controlli precedenti e aggiunge **11.032
+corrispondenze di generazione** e conteggio delle viste storiche prima di fermare
+il timer: verifica più forte, nessuna condizione rimossa. Il checksum iniziale
+del setup A precede il rafforzamento del verificatore, caricato solo dopo la
+proiezione: hash finali separati e output della verifica attestano il codice
+effettivamente eseguito; il manifest iniziale è conservato.
+
+Stesso ZIP `queue119_archive05.zip`, SHA-256
+`fd8e01e155c1a668c91bd86bc67cfc9b2ac3ad9da1322a35925a74c226e85429`,
+11.032 EPUB; parser 2 / commit 2, gruppo ingest 256, Zstd 3, PostgreSQL 17.6,
+Redis 7.4.6, OpenSearch 2.19.4 heap 1 GiB. Batch di produzione invariati 20/20/16.
+Fixture nuove sullo stesso disco, rete interna senza porte host, dump read-only,
+nessuna quota CPU/RAM (verificata anche via Docker inspect). Fsync,
+synchronous_commit e full_page_writes attivi. Build finita prima dei benchmark;
+A, B e C sequenziali, senza altri benchmark concorrenti. Restano host condiviso,
+cache non svuotate e una passata A/B: nessuna garanzia statistica o SLO.
+
+### A — pipeline sequenziale
+
+| Fase | P0 A2, s | P1B.1, s | P1B.1 opere/s |
+| --- | ---: | ---: | ---: |
+| Ingest canonico | 51,117 | 48,271 | 228,54 |
+| Catalogo corrente + storico | 413,530 | 85,627 | 128,84 |
+| Corrente, quota interna al catalogo | non separata | 52,449 | 210,34 |
+| Storico, quota interna al catalogo | non separata | 32,577 | 338,65 |
+| Full-text | 386,423 | 357,110 | 30,89 |
+| Refresh e verifica finale | 5,317 | 6,899 | 1.599,03 |
+| **End-to-end ricercabile** | **869,978** | **511,889** | **21,552** |
+
+A conserva il drenaggio diretto dei processori dopo ingest e prima del full-text;
+corrente e storico sono quote dello stesso batch normale, non due esperimenti
+indipendenti. La strumentazione separa acquisizione corrente fino alla selezione
+storica, quindi storico fino al commit; coordinamento iniziale circa 0,592 s.
+Le quote non si aggiungono di nuovo al totale catalogo. Avvii, probe e verifica
+sono inclusi nel tempo end-to-end, esclusi dai timer dei singoli motori.
+
+**−41,16% end-to-end / 1,700× throughput** rispetto ad A2. Catalogo **4,829×**;
+query catalogo **862.392 → 23.194**, **78,172 → 2,102/opera**. Nel nuovo percorso:
+42 query per batch ordinario corrente+storico; 553 transazioni catalogo incluso
+l'ultimo controllo vuoto. Full-text: 247.499 query, 11.032 PUT. Le variazioni di
+ingest e full-text non sono presentate come riscritture di quei motori.
+
+### B — runtime operativo e riepilogo P0 / P1A / P1B.1
+
+| Metrica, scenario B | P0 | P1A | P1B.1 |
+| --- | ---: | ---: | ---: |
+| Tempo end-to-end, s | 1.474,721 | 602,783 | **434,043** |
+| Opere/s end-to-end | 7,481 | 18,302 | **25,417** |
+| Tempo catalogo corrente, s attivi | non separato | non separato | 75,322 |
+| Tempo storico, s attivi | non separato | non separato | 50,103 |
+| Catalogo corrente + storico, s attivi | 790,891 | 581,222 | 127,028 |
+| Tempo full-text, s attivi | 695,075 | 464,166 | 411,849 |
+| Query SQL client catalogo | 1.179.090 | 859.731 | **27.229** |
+| CPU totale campionata, CPU-s | 1.851,926 | 1.275,433 | 804,125 |
+| RAM working set massima simultanea, MiB | 3.629,10 | 3.154,32 | 3.266,29 |
+| WAL rispetto al DB migrato, MiB | 1.247,876 | 790,537 | 670,181 |
+
+I tempi attivi B **si sovrappongono**; non sommarli per ricavare end-to-end.
+Le quote corrente/storico sono nuove misure; non sono disponibili separatamente
+nelle baseline. RAM simultanea ricavata dai cicli completi del sampler originale,
+non sommando massimi di container avvenuti in istanti diversi. Il sampler include
+avvio e verifica (442,05 s nella nuova sessione); WAL comprende monitor e attività
+di fondo del database isolato. Nessuna baseline storica modificata.
+
+Rispetto a P1A: **−168,740 s / −27,99%**, throughput **1,389×**. Rispetto a P0 B:
+**3,398×** throughput. Il target finale 2.000 opere/s resta lontano: questo ZIP
+richiederebbe 5,516 s, contro i 434,043 s misurati.
+
+Ingest persistente B: **55,863 s / 197,48 opere/s**, attesa iniziale 0,445 s.
+Catalogo e viste storiche: **11.032 ciascuno**, **11.032 PUT**, **zero riproiezioni
+ridondanti**. Seeding AO3 attivo: 1.792 job work, oltre a discovery/backfill;
+nessuna rete AO3 esterna, come nelle baseline. La minore durata comporta meno
+cicli di seeding, senza disabilitarlo. Tutti gli ID e le generazioni coincidono;
+ricerca autenticata restituisce 11.032 opere, lettore verificato, code vuote.
+
+Query catalogo: **77,931 → 2,468/opera**, **832.502 eliminate (−96,83%)**.
+Query client registrate API+worker: **1.198.703 → 346.585**, **108,657 →
+31,416/opera**; quelle full-text restano **247.533**, il 71,42% del totale nuovo.
+Questi sono round-trip intercettati dal profiler P0, non statement interni PG.
+Commit espliciti nello scope catalogo: 1.226 (incluse chiamate senza lavoro e
+backpressure); nello scope full-text: 11.051. Delta commit dell'intero DB:
+36.410, comprendenti autocommit amministrativi, sonde e monitor. Zero rollback,
+deadlock e byte temporanei prima dei fault test.
+
+| Coda | Massimo P1B.1 | Residenza P1A → P1B.1, s/visita | Intervallo attesa P1B.1, s |
+| --- | ---: | ---: | ---: |
+| Corrente | 8.352 | 276,08 → 128,45 | 124,50–130,61 |
+| Storico | 6.512 | 276,08 → 23,23 | 19,28–25,39 |
+| Full-text | 2.065 | 1,29 → 67,45 | 57,16–69,61 |
+
+Residenza dall'integrale dei campioni, **servizio incluso**, non timestamp
+individuali; stessa metodologia P0/P1A. Backpressure raggiunta: soglia 2.048 più
+al massimo un batch corrente. Lo storico continua e termina prima; la coda
+corrente segue poi la capacità del full-text. La maggiore residenza testo è
+coerente con questo spostamento del limite, non lavoro perso.
+
+### Risorse B
+
+| Container | CPU-s | Working set medio / massimo, MiB | I/O letto / scritto, MiB | Rete RX / TX, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| API + worker + parser + sonde | 355,242 | 898,93 / 1.046,71 | ≥47,39 / ≥830,07 | 307,39 / 973,63 |
+| PostgreSQL | 234,756 | 393,53 / 480,75 | 19,86 / 2.499,41 | 561,43 / 300,03 |
+| OpenSearch | 210,482 | 1.648,53 / 1.788,68 | 6,90 / 1.266,73 | 411,18 / 6,81 |
+| Redis | 3,644 | 5,18 / 5,54 | 0,32 / 0,70 | 1,03 / 0,55 |
+
+CPU totale **−36,95%** rispetto a P1A; working set massimo simultaneo **+3,55%**;
+WAL **−15,22%**. Il primo campione I/O applicativo è `null`, i successivi 442
+hanno contatori: il report conserva il dato completo mancante e aggiunge soltanto
+il delta dell'intervallo osservato, senza assumere zero per il campione assente.
+I/O fisico include cache/writeback, WAL non equivale a scritture fisiche; rete
+interna osservata da entrambi gli estremi, non sommare RX/TX come traffico unico.
+
+### C — latenza interattiva e controllo del precedente +8,17%
+
+Probe HTTP P0 invariato: 3 warmup e 100 richieste sequenziali per endpoint,
+autenticate, HTTP interno senza gateway. Stesso corpus B, prima P1A poi P1B.1,
+API riavviata fra varianti, nessun ingest/AO3 worker. Ogni prova termina drenando
+le code prima della successiva. Valori **P50 / P95 in ms**:
+
+| Carico | Variante | Ricerca | Dettaglio | Lettore |
+| --- | --- | ---: | ---: | ---: |
+| Vuoto, prova standard | P1A | 68,18 / 102,46 | 13,30 / 22,76 | 22,73 / 39,41 |
+| Vuoto, prova standard | P1B.1 | 71,13 / 104,77 | 14,27 / 23,06 | 20,87 / 31,32 |
+| 1.000 corrente + 1.000 storico già presente | P1A | 65,60 / 116,05 | 20,41 / 34,14 | 26,03 / 50,50 |
+| 1.000 corrente + 1.000 storico già presente | P1B.1 | 112,01 / 186,97 | 15,87 / 36,24 | 28,06 / 55,81 |
+
+La prova standard conserva esattamente il carico P1A, ma a fine richieste P1A ha
+ancora 800 correnti/800 storici/0 testo, P1B.1 **0/0/628**. Il nuovo percorso
+salta correttamente le viste già persistite e drena il catalogo durante il probe:
+non si presenta tutta questa finestra come contesa bibliografica costante.
+
+Prova aggiuntiva: **5.000 correnti + 5.000 viste derivate eliminate e riaccodate**,
+in entrambe le varianti; snapshot canonici intatti. Asserzione aggiuntiva:
+entrambe le code bibliografiche ancora non vuote a fine HTTP. P1A termina il
+probe con 4.800/4.800/23 pendenti, P1B.1 con **3.540/3.540/1.130**.
+
+| Carico | Variante | Ricerca P50 / P95 | Dettaglio P50 / P95 | Lettore P50 / P95 |
+| --- | --- | ---: | ---: | ---: |
+| 5.000 corrente + storico da materializzare | P1A | 67,66 / 117,35 | 17,73 / 33,93 | 27,33 / 45,89 |
+| 5.000 corrente + storico da materializzare | P1B.1 | 105,16 / 166,21 | 22,09 / 36,20 | 32,12 / 50,60 |
+| Solo full-text, 1.000 documenti | P1A | 72,04 / 114,93 | 16,21 / 29,55 | 29,91 / 50,74 |
+| Solo full-text, 1.000 documenti | P1B.1 | 80,02 / 134,45 | 19,73 / 31,55 | 32,12 / 55,27 |
+
+**Peggioramento osservato della ricerca sotto backlog:** 116,05 → 186,97 ms nel
+probe standard; **117,35 → 166,21 ms** con entrambe le code bibliografiche attive.
+Nella seconda prova dettaglio 33,93 → 36,20 ms, lettore 45,89 → 50,60 ms.
+La baseline P1A precedente era 159,92 / 32,91 / 57,21 ms: conservata, senza
+sostituirla con la nuova coppia più favorevole o sfavorevole.
+
+Il controllo con solo full-text lascia 669/675 documenti in coda dopo il probe:
+carico comparabile, senza corrente/storico. Anche questo motore, il cui codice
+non è cambiato, mostra variazione del P95 ricerca **114,93 → 134,45 ms**. I dati
+non separano completamente cache/host dalla contesa dovuta al diverso ritmo di
+produzione. Il peggioramento sotto carico rimane documentato: **nessuna promessa
+di latenza invariata**, nessun rallentamento artificiale o modifica allo scheduler
+per nasconderlo. Non è stato identificato un errore funzionale o una regressione
+isolata e riproducibile del motore corrente che giustifichi un nuovo intervento
+applicativo in questa fase.
+
+Controllo dedicato P1B.1b → P1B.1c sul precedente **+8,17%**: runner
+`probe-history-contention.cjs` invariato, 256 opere, stessi dati copiati e ANALYZE,
+tre campioni per variante, ordine **vecchio/nuovo/nuovo/vecchio/vecchio/nuovo**.
+
+| Scenario | P1B.1b, tre durate s | P1B.1c, tre durate s |
+| --- | --- | --- |
+| Solo corrente | 1,368; 1,158; 1,250 | 1,055; 1,092; 1,441 |
+| Corrente + storico | 5,681; 5,992; 5,006 | 2,189; 2,069; 2,179 |
+
+Mediana solo corrente **1,250 → 1,092 s**; intervalli sovrapposti. Il singolo
++8,17% **non è confermato come regressione**. Sei misure non sono un intervallo
+di confidenza universale; la variabilità osservata è esplicita.
+
+### Limite dominante e decisioni successive
+
+Full-text: **411,849 s attivi**, rispetto a 434,043 s end-to-end. PUT fino agli
+header **163,287 s (39,65% dello stadio)**; residuo **248,562 s**: ricostruzione,
+lookup/SQL, letture, parsing, risposta JSON e commit, non sola CPU. Span annidati:
+`loadSnapshot` 86,848 s, `chapterBytes` 87,305 s, `plain` 12,634 s. Non sommarli
+fra loro o al full-text. Limitarsi a inviare `_bulk` non eliminerebbe quel residuo.
+
+PostgreSQL usa **234,756 CPU-s, 29,19%** della CPU totale campionata. Il catalogo
+rimane serializzato dal lock globale, ma i round-trip di acquisizione del lock
+sommano **1,490 s**, massimo 18,23 ms: non sono tempo puro di contesa né prova
+che il lock sia eliminabile. Arricchimento manifest/HTML inclusivo: **11,407 s
+corrente + 12,221 storico**, dentro i relativi tempi catalogo. `projectGraph`
+**0,520 s**; il corpus senza archi non rappresenta un grafo complesso.
+
+Lo scheduler full-text registra **2,261 s** complessivi fra batch con lavoro,
+massimo **18,80 ms**: nessuna attesa obbligatoria di un secondo sotto backlog.
+I 220,528 s fra batch catalogo produttivi includono backpressure/attese quando
+il testo è pieno; non sono tempo SQL sprecato da eliminare aumentando i batch.
+
+**Default conservati a 20/20/16.** I microbenchmark 64/256 di P1B.1b/c dimostrano
+maggior throughput del sottosistema e maggior memoria; non dimostrano miglior
+end-to-end o latenza. Il nuovo limite full-text e i P95 osservati non giustificano
+un aumento del default. Raccomandazione: nella fase autorizzata successivamente,
+misurare e ridurre ricostruzione/lookup dei documenti **insieme** ai PUT individuali
+(P2); per P1B.2 serve anche un corpus con grafo reale. Nessuna delle due fasi è
+stata iniziata.
+
+### Equivalenza, recupero e consegna
+
+Confronto completo eseguito nuovamente con `compare-bibliography.cjs` invariato,
+su una copia isolata del database P1A con **gli stessi ID** e PackStore originale
+montato read-only: rigenerati tutti gli storici, riproiettate tutte le opere
+correnti e reindicizzato il corpus. **Zero aggiunte, rimozioni o modifiche** nei
+valori normalizzati e nelle relazioni: 11.032 opere/snapshot/documenti/viste,
+57.661 tag, 22.140 entità, 167.736 associazioni opera-tag, 24.909 opera-entità,
+167.736 filtri. Metadata, identità, hash manifest/versioni e provenienza
+confrontati, non solo conteggi. Generazioni PostgreSQL/OpenSearch tutte coerenti;
+non si richiede l'identità con l'ordinamento instabile dei vecchi hash P1A,
+già documentato in P1B.1b. Le nuove acquisizioni A/B hanno ID locali propri:
+il confronto esatto usa correttamente la copia con ID conservati.
+
+Verificati **107.054 oggetti canonici** attraverso il reader PackStore con hash e
+checksum. Il percorso API normale verifica ricerca e lettore; le fixture
+storiche coprono tre versioni, anonimato, alias, evidenze condivise, modifica del
+grafo e materializzazione concorrente on-demand/background. Confermata la
+particolarità storica e la correzione del fallback alias documentate in P1B.1c,
+senza ulteriori cambi di semantica.
+
+`verify-projections.cjs` passa invariato: invalidazioni durante proiezione/PUT
+sopravvivono agli ACK, disponibilità e ricerca aggiornate, seeding/watchlist,
+pausa/ripresa, retry, lock concorrenti, fairness con backpressure, manutenzione,
+stop pulito e SIGKILL/ripresa. Recupero mirato **5,109 s**, massimo intervallo
+fra batch **218,82 ms** nella fixture di fault, non throughput del corpus.
+`verify-history.cjs` passa: rollback e crash dopo INSERT prima del commit,
+retry, viste già materializzate immutate, catalogo/generazioni correnti invariati.
+Due test `ingest-pipeline` passati: ACK solo sul prefisso completato, nessun ACK
+oltre un errore asincrono. Nessuna asserzione rimossa o indebolita.
+
+Build Docker API completa riuscita, inclusi build di tutti i workspace (solo
+warning Vite sui chunk grandi). Non ripetute le altre suite delle fasi a–c,
+il cui codice applicativo è invariato. **P1B.1 consolidata e verificata**:
+campagne A/B/C e controlli di correttezza terminati; resta il peggioramento
+interattivo sotto backlog riportato sopra, senza spacciarlo per risolto.
+
+Riproduzione dopo la build, in sequenza:
+
+```sh
+RELEASE_IMAGE=palimora-p1b1-api P0_SCENARIO=A RELEASE_KEEP=1 \
+ BENCH_NODE_OPTIONS=--require=/app/scripts/performance-bibliography-profiler.cjs \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p1b1d-a-20261108 ./scripts/benchmark-p0.sh
+# Arrestare i container A prima di B; mantenere i bind mount.
+RELEASE_IMAGE=palimora-p1b1-api P0_SCENARIO=B RELEASE_KEEP=1 \
+ BENCH_NODE_OPTIONS=--require=/app/scripts/performance-bibliography-profiler.cjs \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p1b1d-b-20261108 ./scripts/benchmark-p0.sh
+```
+
+I percorsi devono essere nuovi. Per C, worker temporanei delle immagini P1A e
+P1B.1 sullo stesso database/PackStore B, risultati separati e API del benchmark
+arrestata: `node scripts/benchmark-projection-latency.cjs`; poi, in entrambe le
+varianti, `BENCH_LATENCY_WORKS=5000 BENCH_REGENERATE_HISTORY=1
+BENCH_REQUIRE_BIBLIOGRAPHY_BACKLOG=1` per il caso con vero lavoro storico.
+Diagnostica separata `BENCH_LATENCY_TEXT_ONLY=1` mantiene il carico a 1.000.
+Il probe HTTP rimane invariato. Gli script rifiutano database non `_test`.
+
+`collect-bibliography-integration.cjs` raccoglie solo aggregati dopo la misura;
+`summarize-performance.py` e `summarize-bibliography-integration.py` elaborano
+A/B; `summarize-p1b1d.py /mnt/sdb` consolida anche C, controlli alternati e
+verifiche. Comandi effettivi, log e hash della strumentazione conservati nei
+risultati privati. Report pubblico: [performance-p1b1d.json](performance-p1b1d.json).
+Fixture `/mnt/sdb/palimora-p1b1d-{a,b,equivalence}-20261108/` e directory sorelle
+`c-*`, `cold-*`, `text-latency-*`, `control-*`. Container/reti temporanei rimossi,
+bind mount ed evidenze conservati; baseline e servizi di produzione intatti.

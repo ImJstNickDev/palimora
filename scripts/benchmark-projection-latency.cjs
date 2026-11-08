@@ -9,6 +9,11 @@ if (
   !process.env.ARCHIVE_ROOT?.startsWith("/benchmark/")
 )
   throw Error("Private fixture required");
+const workload = Number(process.env.BENCH_LATENCY_WORKS ?? 1000);
+const textOnly = process.env.BENCH_LATENCY_TEXT_ONLY === "1";
+const regenerateHistory = process.env.BENCH_REGENERATE_HISTORY === "1";
+assert.ok(!textOnly || !regenerateHistory);
+assert.ok(Number.isInteger(workload) && workload >= 1000 && workload <= 11032);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const queues = async () =>
   (
@@ -36,13 +41,28 @@ let child;
   assert.ok(ready);
   execFileSync(process.execPath, ["scripts/benchmark-performance-http.cjs"]);
   fs.renameSync("/results/http-latency.json", "/results/http-idle.json");
-  // Same 1,000 works and snapshots in both variants of this diagnostic.
-  await pool.query(
-    "INSERT INTO catalog_pending SELECT id FROM archive_work_heads ORDER BY id LIMIT 1000",
-  );
-  await pool.query(
-    "INSERT INTO catalog_snapshot_pending SELECT id FROM archive_snapshots ORDER BY id LIMIT 1000",
-  );
+  if (regenerateHistory)
+    await pool.query(
+      "DELETE FROM catalog_snapshot_views WHERE snapshot_id IN (SELECT id FROM archive_snapshots ORDER BY id LIMIT $1)",
+      [workload],
+    );
+  // Default retains the P1A probe. Larger controlled backlog can keep both
+  // bibliography queues nonempty after the faster bulk projection.
+  if (textOnly) {
+    await pool.query(
+      "INSERT INTO catalog_text_pending SELECT id FROM archive_work_heads ORDER BY id LIMIT $1",
+      [workload],
+    );
+  } else {
+    await pool.query(
+      "INSERT INTO catalog_pending SELECT id FROM archive_work_heads ORDER BY id LIMIT $1",
+      [workload],
+    );
+    await pool.query(
+      "INSERT INTO catalog_snapshot_pending SELECT id FROM archive_snapshots ORDER BY id LIMIT $1",
+      [workload],
+    );
+  }
   const before = await queues();
   execFileSync(process.execPath, ["scripts/benchmark-performance-http.cjs"]);
   fs.renameSync("/results/http-latency.json", "/results/http-backlog.json");
@@ -51,11 +71,20 @@ let child;
     after.catalog + after.historical + after.text > 0,
     "Backlog must remain throughout HTTP probe",
   );
+  if (process.env.BENCH_REQUIRE_BIBLIOGRAPHY_BACKLOG === "1")
+    assert.ok(
+      after.catalog > 0 && after.historical > 0,
+      "Both bibliography queues must remain backlogged",
+    );
   fs.writeFileSync(
     "/results/latency-load.json",
-    JSON.stringify({ before, after }, null, 2),
+    JSON.stringify(
+      { workload, textOnly, regenerateHistory, before, after },
+      null,
+      2,
+    ),
   );
-  const end = Date.now() + 300000;
+  const end = Date.now() + Math.max(300000, workload * 120);
   while (Object.values(await queues()).some((n) => n > 0)) {
     assert.ok(Date.now() < end, "Drain deadline");
     await delay(1000);

@@ -52,30 +52,37 @@ if (!new URL(process.env.DATABASE_URL).pathname.endsWith("_test"))
   ).count;
   const sql = (
     await pool.query(
-      `SELECT (SELECT count(*) FROM archive_work_heads)::int works,(SELECT count(*) FROM archive_snapshots)::int snapshots,(SELECT count(*) FROM catalog_documents)::int documents,(SELECT count(*) FROM catalog_pending)::int pending,(SELECT count(*) FROM catalog_snapshot_pending)::int historical_pending,(SELECT count(*) FROM catalog_text_pending)::int text_pending`,
+      `SELECT (SELECT count(*) FROM archive_work_heads)::int works,(SELECT count(*) FROM archive_snapshots)::int snapshots,(SELECT count(*) FROM catalog_documents)::int documents,(SELECT count(*) FROM catalog_snapshot_views)::int historical_views,(SELECT count(*) FROM catalog_pending)::int pending,(SELECT count(*) FROM catalog_snapshot_pending)::int historical_pending,(SELECT count(*) FROM catalog_text_pending)::int text_pending`,
     )
   ).rows[0];
   assert.equal(count, 11032);
   assert.equal(sql.works, 11032);
+  assert.equal(sql.snapshots, 11032);
   assert.equal(sql.documents, 11032);
+  assert.equal(sql.historical_views, 11032);
   assert.equal(sql.pending + sql.historical_pending + sql.text_pending, 0);
-  const expected = new Set(
-    (await pool.query("SELECT work_id FROM catalog_documents")).rows.map(
-      (r) => r.work_id,
-    ),
+  const expected = new Map(
+    (
+      await pool.query("SELECT work_id,generation FROM catalog_documents")
+    ).rows.map((r) => [r.work_id, r.generation]),
   );
   let after,
     seen = 0;
   while (true) {
     const page = await searchRequest("/" + SEARCH_INDEX + "/_search", {
       size: 1000,
-      _source: false,
+      _source: ["generation"],
       sort: [{ id: "asc" }],
       ...(after ? { search_after: after } : {}),
       query: { match_all: {} },
     });
     if (!page.hits.hits.length) break;
     for (const hit of page.hits.hits) {
+      assert.equal(
+        expected.get(hit._id),
+        hit._source.generation,
+        "Search generation mismatch",
+      );
       assert.ok(expected.delete(hit._id));
       seen++;
     }
@@ -94,6 +101,7 @@ if (!new URL(process.env.DATABASE_URL).pathname.endsWith("_test"))
     api_count: search.total,
     reader_verified: true,
     all_search_ids_verified: seen,
+    all_search_generations_verified: seen,
     refresh_and_verify_seconds: (performance.now() - t) / 1000,
     verified_at: Date.now(),
     monotonic_ns: process.hrtime.bigint().toString(),

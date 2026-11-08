@@ -29,7 +29,7 @@ docker run -d --name "$release_name-search" --network "$release_name" --network-
 for attempt in {1..90}; do if docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null 2>&1 && docker exec "$release_name-pg" pg_isready -U postgres >/dev/null 2>&1; then break; fi; sleep 1; done
 docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null
 docker exec "$release_name-pg" pg_isready -U postgres >/dev/null
-docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" sleep infinity >/dev/null
+docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:-}" -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" sleep infinity >/dev/null
 printf '%s\n' "$release_name" > "$release_root/name"
 git rev-parse HEAD > "$release_root/results/source-commit.txt"
 docker image inspect --format '{{.Id}}' "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" > "$release_root/results/image-id.txt"
@@ -60,7 +60,7 @@ else
  python3 -c 'import time; print(time.monotonic_ns())' > "$release_root/results/start-monotonic.txt"
  run_measure ingest-default ingest
  docker exec "$release_name-worker" node scripts/performance-snapshot.cjs after-ingest
- run_measure projection project -e P0_SNAPSHOTS=1 -e P0_PROFILE=/results/projection-profile.json -e NODE_OPTIONS=--require=/app/scripts/performance-profiler.cjs
+ run_measure projection project -e P0_SNAPSHOTS=1 -e P0_PROFILE=/results/projection-profile.json -e NODE_OPTIONS="--require=/app/scripts/performance-profiler.cjs ${BENCH_NODE_OPTIONS:-}"
  ./scripts/benchmark-performance-api.sh "$release_root"
 fi
 python3 scripts/summarize-resources.py "$release_root/results"

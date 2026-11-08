@@ -3,6 +3,7 @@ import { safeInlineHtml } from "./reader-safety";
 import {
   projectBibliography,
   projectCurrentBibliographies,
+  projectHistoricalBibliographies,
   enrichBibliography,
   enrichBibliographyBatch,
   projectGraph,
@@ -68,28 +69,87 @@ export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
         [historicalLimit],
       )
     ).rows;
-    for (const item of pending) {
-      const m = JSON.parse(
-        (await readObject(db, item.manifest_hash)).toString(),
-      );
-      const projected = await projectBibliography(
+    if (pending.length) {
+      await materializeHistoricalViews(
         db,
-        { id: item.work_id, current_snapshot_id: item.snapshot_id },
-        await enrichBibliography(db, m.metadata, m),
-        true,
+        pending.map((p) => p.snapshot_id),
       );
       await db.query(
-        "INSERT INTO catalog_snapshot_views VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
-        [item.snapshot_id, projected.metadata, projected.details],
-      );
-      await db.query(
-        "DELETE FROM catalog_snapshot_pending WHERE snapshot_id=$1",
-        [item.snapshot_id],
+        "DELETE FROM catalog_snapshot_pending WHERE snapshot_id=ANY($1::uuid[])",
+        [pending.map((p) => p.snapshot_id)],
       );
     }
     return rows.length + pending.length;
   });
 }
+// Same immutable snapshot identity for background and explicit reader requests.
+// Recheck after the bibliography lock: a concurrent materializer may have won.
+export async function materializeHistoricalViews(
+  db: DB,
+  snapshotIds: string[],
+  verified?: { snapshot: string; manifest: any },
+) {
+  await db.query("SELECT pg_advisory_xact_lock(70210408)");
+  const existing = (
+    await db.query(
+      "SELECT * FROM catalog_snapshot_views WHERE snapshot_id=ANY($1::uuid[])",
+      [snapshotIds],
+    )
+  ).rows;
+  const result = new Map(existing.map((v) => [v.snapshot_id, v]));
+  const missing = [...new Set(snapshotIds)].filter((id) => !result.has(id));
+  if (!missing.length) return result;
+  const snapshots = (
+    await db.query(
+      "SELECT id AS snapshot_id,work_id,manifest_hash FROM archive_snapshots WHERE id=ANY($1::uuid[])",
+      [missing],
+    )
+  ).rows;
+  if (snapshots.length !== missing.length) fail("NOT_FOUND", 404);
+  const byId = new Map(snapshots.map((s) => [s.snapshot_id, s]));
+  const ordered = missing.map((id) => byId.get(id)!);
+  const manifests = new Map<string, any>();
+  // Only reader-internal data already verified by loadSnapshot; never user JSON.
+  if (verified) {
+    const snapshot = byId.get(verified.snapshot);
+    if (snapshot) manifests.set(snapshot.manifest_hash, verified.manifest);
+  }
+  for await (const { hash, bytes } of readObjectBatches(
+    db,
+    ordered
+      .filter((s) => !manifests.has(s.manifest_hash))
+      .map((s) => s.manifest_hash),
+  ))
+    manifests.set(hash, JSON.parse(bytes.toString()));
+  const raw = await enrichBibliographyBatch(
+    db,
+    ordered.map((s) => ({
+      raw: manifests.get(s.manifest_hash).metadata,
+      manifest: manifests.get(s.manifest_hash),
+    })),
+  );
+  const views = await projectHistoricalBibliographies(
+    db,
+    ordered.map((s, i) => ({
+      work: { id: s.work_id, current_snapshot_id: s.snapshot_id },
+      raw: raw[i],
+    })),
+  );
+  const records = ordered.map((s, i) => ({
+    snapshot_id: s.snapshot_id,
+    metadata: views[i].metadata,
+    bibliography: views[i].details,
+  }));
+  await db.query(
+    `INSERT INTO catalog_snapshot_views(snapshot_id,metadata,bibliography)
+    SELECT snapshot_id,metadata,bibliography FROM jsonb_to_recordset($1::jsonb) s(snapshot_id uuid,metadata jsonb,bibliography jsonb)
+    ORDER BY snapshot_id ON CONFLICT DO NOTHING`,
+    [JSON.stringify(records)],
+  );
+  for (const record of records) result.set(record.snapshot_id, record);
+  return result;
+}
+
 // Works are already hydrated by the queue acquisition. Validate snapshot ownership
 // (including canonical aliases) without reloading work payloads per snapshot.
 export async function loadCurrentBibliographies(db: DB, works: any[]) {
@@ -312,6 +372,13 @@ export async function catalogOperation(
             )
           ).rows[0]
         : null;
+    if (!view && x.snapshot && data.snapshot)
+      view = (
+        await materializeHistoricalViews(db, [data.snapshot], {
+          snapshot: data.snapshot,
+          manifest: data.manifest,
+        })
+      ).get(data.snapshot);
     if (!view) {
       const projected = await projectBibliography(
         db,

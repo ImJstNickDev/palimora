@@ -1203,3 +1203,203 @@ interattiva in questa fase. Nessuna implementazione P1B.1c/d, P1B.2 o P2.
 Dati aggregati: `docs/performance-p1b1b.json`; evidenze private:
 `/mnt/sdb/palimora-p1b1b-results/`. Baseline precedenti conservate. Fixture isolate
 rimosse al termine, bind mount conservati; nessun servizio estraneo modificato.
+
+## P1B.1c — materializzazione storica bulk (2026-11-08)
+
+Riferimento: P1B.1b `d5fcde3837890cd82aa52dc80f2e8afb2b437c10`.
+**P1B.1c completata**, limitatamente allo storico; P1B.1d, P1B.2 e P2 non avviate.
+Baseline precedenti e strumenti di confronto conservati.
+
+### Percorso integrato e semantica
+
+`projectCatalog()` acquisisce il gruppo storico dalla coda persistente e chiama
+`materializeHistoricalViews()`: verifica collettiva delle viste già presenti,
+lookup degli snapshot mancanti, manifest verificati con `readObjectBatches()`,
+HTML condiviso con `enrichBibliographyBatch()`, normalizzazione comune, dizionari
+bulk, chiusura ricorsiva per opera, un INSERT set-based delle viste e un ACK
+collettivo. Le letture condivise sono deduplicate. Nessun parser, formato o
+motore di catalogazione aggiuntivo; nessuna migrazione necessaria.
+
+Le componenti P1B.1a/b sono estese con modalità storica: i tag generici conservano
+gli attributi già noti; gli attributi/archi dei tag sorgente non sono applicati,
+come nel vecchio storico. Le entità esistenti usano `DO NOTHING`; per una nuova
+identità vince la **prima evidenza nell'ordine del gruppo**, senza il merge usato
+in modalità corrente. Nessuna modifica alle associazioni, ai filtri o ai
+documenti correnti, né alle generazioni OpenSearch. La chiusura storica conserva
+la particolarità preesistente: usa associazioni **correnti** e grafo attuale;
+`filterTags` è restituito ma non salvato nella bibliografia della vista.
+Non viene reinterpretato il grafo storico.
+
+Rimangono lock bibliografico globale, lock di coda e transazione di produzione;
+INSERT e ACK sono atomici, un errore annulla l'intero gruppo. Dopo il lock si
+ricontrollano le viste già materializzate, senza sovrascriverle. Il background e
+il lettore esplicito usano lo stesso materializzatore; il lettore riutilizza il
+manifest già verificato da `loadSnapshot()`. Il limite esistente
+`PROJECTION_HISTORICAL_BATCH` resta 20, configurabile fino a 256. Le letture
+PackStore mantengono il limite esistente di 256 oggetti / 16 MiB raw per gruppo,
+salvo un singolo oggetto più grande; metadata e oggetti parsati restano limitati
+al batch di snapshot. Nessuna modifica allo scheduler.
+
+**Divergenza preesistente esplicitata:** il fallback del lettore per snapshot
+esplicito non persisteva la vista e, passando tramite alias canonico, poteva
+calcolare gli ID delle entità locali dal contesto dell'opera richiesta; il
+background usava invece l'opera proprietaria dello snapshot. La prima risposta
+non materializzata poteva quindi differire da quella successiva. Ora il lettore
+esplicito persiste una sola vista con il proprietario dello snapshot, come il
+background: necessario per l'identità del risultato concorrente. Il test
+riproduce la differenza con P1B.1b. Nessuna vista esistente viene riscritta,
+nessuna identità canonica modificata; il fallback senza snapshot esplicito
+continua a non salvare metadata correnti come vista storica.
+
+### Equivalenza e recupero
+
+Il confronto invariato `compare-bibliography.cjs` è stato eseguito sul corpus
+reale completo: riferimento P1B.1b, rigenerazione precedente e rigenerazione
+bulk, sempre contro lo stesso riferimento. **Zero valori o relazioni aggiunti,
+rimossi o cambiati**: 11.032 opere, 11.032 snapshot e viste storiche, 11.032
+documenti, 57.661 tag, 22.140 entità, 167.736 associazioni opera-tag,
+24.909 opera-entità e 167.736 filtri. Nel corpus non ci sono archi/alias:
+questi casi sono coperti dalla fixture mirata.
+
+`scripts/reproject-history-fixture.cjs` verifica inoltre il fingerprint completo
+dei documenti (incluse generazioni e `indexed_at`) e delle associazioni correnti:
+immutati dopo entrambe le rigenerazioni; code correnti, storiche e full-text
+vuote. Solo viste derivate eliminate nella copia isolata, mai snapshot canonici.
+Nessuna reindicizzazione del corpus richiesta o eseguita in questa fase; non si
+presenta questa verifica come un nuovo controllo di tutti gli ID OpenSearch.
+
+`scripts/verify-history.cjs` confronta vecchio e nuovo sullo stesso PostgreSQL:
+tre versioni con metadata diversi, entità condivise e precedenze, anonimato,
+tag storici, chiusura transitiva synonym/meta con ciclo e modifica del grafo,
+alias, lettore concorrente col background. Tre manifest e un HTML condiviso
+sono letti/verificati una sola volta ciascuno. Verificati vista già presente
+immutata (`xmin`/`ctid`), rollback e **SIGKILL dopo INSERT prima di COMMIT/ACK**:
+la vista non persiste, la coda resta e il retry completa. Catalogo corrente e
+generazioni invariati. Build completa riuscita (warning Vite sui chunk grandi);
+suite `archive-native`, `archive`, `ao3`: **8 passati, 0 falliti, 0 saltati**, con
+PostgreSQL/OpenSearch reali e Typst runtime, inclusi ricerca, lettore e integrità.
+
+### Benchmark circoscritto riproducibile
+
+`scripts/benchmark-history.cjs` esegue **il vero `projectCatalog(0,batch)`** su
+1.024 snapshot reali ordinati per ID, stessa copia PostgreSQL 17.6 e PackStore
+montato in sola lettura. Sei tabelle shadow **logged**, indici/unicità conservati,
+dizionari completi copiati per ogni coppia; associazioni correnti reali in sola
+lettura. Vincoli FK verificati separatamente nella fixture migrata completa.
+Inclusi entrambi i percorsi: coda, lookup canonici, manifest/HTML, arricchimento,
+tag/entità, chiusura, INSERT, ACK, transazione/commit e impostazione LZ4.
+Esclusi setup/teardown e controlli esterni al timer. La rigenerazione elimina
+soltanto viste derivate e riaccoda gli stessi ID: **non è una prova di cache hit**.
+
+Una coppia per caso, baseline prima, worker riavviati prima della coppia finale;
+nessun build/test concorrente, cache del sistema non svuotata. Nessun intervallo
+di confidenza o attribuzione end-to-end. La sessione privata conserva anche le
+prove preliminari escluse: prima della strumentazione I/O definitiva e del riuso
+del manifest verificato; primo pilot di contesa sovrapposto al build e senza
+ANALYZE delle copie. La contesa finale usa ANALYZE per entrambi, senza build.
+
+| Batch | Fase | P1B.1b s → P1B.1c s | Snapshot/s prima → dopo | Fattore | Query prima → dopo | Query/snapshot prima → dopo |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 20 | Iniziale | 19,127 → 3,381 | 53,54 → 302,87 | 5,66× | 27.795 → 1.040 | 27,144 → 1,016 |
+| 20 | Rigenerata | 14,120 → 2,901 | 72,52 → 352,98 | 4,87× | 27.795 → 1.040 | 27,144 → 1,016 |
+| 64 | Iniziale | 18,891 → 2,041 | 54,21 → 501,64 | 9,25× | 27.579 → 320 | 26,933 → 0,313 |
+| 64 | Rigenerata | 21,667 → 2,135 | 47,26 → 479,73 | 10,15× | 27.579 → 320 | 26,933 → 0,313 |
+| 256 | Iniziale | 14,941 → 1,396 | 68,54 → 733,69 | 10,71× | 27.507 → 80 | 26,862 → 0,078 |
+| 256 | Rigenerata | 11,978 → 1,353 | 85,49 → 756,73 | 8,85× | 27.507 → 80 | 26,862 → 0,078 |
+
+Transazioni/commit invariati: **52 / 16 / 4**. Sempre 1.024 viste inserite;
+**20 query client per batch** nel percorso nuovo misurato, compresi i comandi
+transazionali. Le query corrispondono a round-trip client, non a statement
+interni PostgreSQL. Riduzione al default: **96,26%**.
+
+| Attribuzione, iniziale batch 20 | P1B.1b s | P1B.1c s |
+| --- | ---: | ---: |
+| Bibliografia inclusiva (normalizzazione/dizionari/chiusura) | 14,151 | 1,394 |
+| Arricchimento inclusivo delle letture HTML | 2,079 | 0,778 |
+| PackStore inclusivo delle decompressioni, manifest + HTML | 1,431 | 0,896 |
+| Somma durate native delle decompressioni | 0,251 | 0,194 |
+| SQL tag | 11,598 | 0,954 |
+| SQL entità | 0,643 | 0,080 |
+| SQL chiusure | 0,908 | 0,090 |
+| SQL INSERT viste | 0,592 | 0,201 |
+| Altre query SQL | 2,676 | 0,566 |
+
+**Queste righe non sono additive:** SQL e letture sono annidati nei tempi
+inclusivi; le durate native possono sovrapporsi fra lane. Il totale autorevole
+è il timer della materializzazione. Residui al default: bibliografia inclusiva
+1,394 s (41,2% del totale), di cui tag SQL 0,954 s; arricchimento 0,778 s (23,0%).
+Il lock globale continua a serializzare il catalogo.
+
+PackStore al default: chiamate `readMany` **2.048 → 104**, file aperti
+**2.048 → 1.696**, letture file **4.096 → 3.737**. Byte logici letti
+**3.443.100 → 3.752.086**, aumentati per gli intervalli accorpati dalle API
+esistenti. Oggetti decompressi **2.048 → 2.048**, 6.147.887 byte raw: il campione
+non ha hash condivisi da eliminare. Chiamate codec 2.048 → 2.041; nessun credito
+per decompressioni risparmiate sul corpus. A batch 64/256 i file aperti scendono
+a 1.104/374. Deduplicazione effettiva provata nella fixture multiversione.
+
+### WAL, CPU, memoria e I/O
+
+| Batch | WAL iniziale prima → dopo, byte | WAL rigenerato prima → dopo, byte |
+| --- | ---: | ---: |
+| 20 | 9.916.288 → 4.869.296 | 32.469.304 → 4.869.832 |
+| 64 | 10.507.992 → 4.800.152 | 8.423.288 → 4.800.512 |
+| 256 | 13.025.208 → 4.711.568 | 9.124.488 → 4.711.888 |
+
+LSN globali della fixture, sensibili a checkpoint/FPI e attività di fondo;
+il picco precedente nella rigenerazione batch 20 non è un costo garantito.
+CPU Node al default: **7,336 → 2,462 CPU-s** iniziali e **5,912 → 1,989** rigenerate.
+RSS a fine fase: **142,28 → 143,79 MiB** iniziali, **163,83 → 147,21** rigenerate.
+A batch 256 RSS cresce da **156,97/157,29 a 180,47/183,79 MiB**: non si aumenta
+il default sulla base del solo throughput.
+
+Sampler cgroup P0 invariato, tutte le sei prove **inclusi setup/teardown**,
+finestra 107,01 s prima e 20,00 s dopo. Working set non equivalente a RSS;
+picchi di processi distinti non vanno sommati.
+
+| Risorsa | P1B.1b | P1B.1c |
+| --- | ---: | ---: |
+| CPU worker, CPU-s | 38,047 | 9,984 |
+| CPU PostgreSQL, CPU-s | 71,254 | 11,073 |
+| Working set worker medio / massimo, MiB | 99,30 / 113,72 | 94,47 / 140,96 |
+| Working set PostgreSQL medio / massimo, MiB | 181,21 / 197,46 | 184,74 / 201,03 |
+| I/O fisico worker letto / scritto | non disponibile | non disponibile |
+| I/O fisico PostgreSQL letto / scritto, MiB | 0,00 / 191,78 | 0,00 / 289,03 |
+
+Le scritture fisiche PostgreSQL **aumentano nella finestra misurata**, pur con
+meno WAL nei timer. Includono setup, checkpoint e writeback, non isolati per
+fase: non si dichiara un miglioramento I/O né si attribuisce tutto il delta al
+codice. I byte logici PackStore non sono letture fisiche del disco.
+
+### Interazione mirata con il catalogo corrente
+
+`probe-history-contention.cjs`: 256 opere correnti, sole oppure insieme a 256
+snapshot storici, batch 20+20 nella stessa transazione come nel projector reale,
+13 commit. Code entrambe drenate e 256 invalidazioni full-text preservate.
+
+| Scenario | Durata P1B.1b → P1B.1c, s | P95 batch P1B.1b → P1B.1c, ms |
+| --- | ---: | ---: |
+| Solo corrente | 1,196 → 1,294 | 136,79 → 180,78 |
+| Corrente + storico | 5,759 → 1,832 | 680,46 → 185,98 |
+
+Costo aggiuntivo del backlog storico in questa prova: **4,563 → 0,538 s**.
+Il controllo solo corrente è **8,17% più lento** nella nuova esecuzione: una
+singola coppia non ne isola la causa. P95 di soli 13 batch, coincidente col
+massimo: **non è latenza HTTP/interattiva** e non sostituisce P1B.1d.
+
+Riproduzione: compilare il riferimento e il codice nuovo nelle rispettive
+`apps/api/dist` di due worker sul database isolato con `DATABASE_URL` terminante
+in `_test`, `ARCHIVE_ROOT=/benchmark/main` e `/results` privato; usare le API
+native della stessa immagine runtime. Eseguire in sequenza
+`node scripts/benchmark-history.cjs old` / `new`, campionando ciascuna sessione
+con `benchmark-resources.py` e aggregando con `summarize-resources.py`.
+Per il confronto completo: `compare-bibliography.cjs capture`, poi
+`reproject-history-fixture.cjs old` / `new`, ciascuno seguito da
+`compare-bibliography.cjs compare` contro la cattura originale.
+`verify-history.cjs` richiede anche il riferimento compilato in
+`apps/api/old-dist`; `probe-history-contention.cjs old` / `new` esegue la prova
+mista senza ingest o indicizzazione. Nessuno di questi runner va eseguito su
+produzione. Percorsi, misure complete e limiti in `performance-p1b1c.json`;
+evidenze private in `/mnt/sdb/palimora-p1b1c-results/`, riferimento compilato in
+`/mnt/sdb/palimora-p1b1c-old-dist/`. Container/rete della fixture rimossi al
+termine, bind mount conservati. Nessun servizio di produzione modificato.

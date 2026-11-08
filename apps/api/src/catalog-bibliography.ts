@@ -264,6 +264,7 @@ async function upsertTags(db: DB, tags: any[]) {
 export async function projectTagBatch(
   db: DB,
   items: { work: any; raw: Record<string, any> }[],
+  historical = false,
 ) {
   const prepared = items.map((i) => bibliography(i.raw));
   const names = [
@@ -294,7 +295,7 @@ export async function projectTagBatch(
   const result: PreparedTags[] = [];
   for (let i = 0; i < items.length; i++) {
     const p = prepared[i];
-    for (const t of p.source.tags ?? []) ensure(t);
+    if (!historical) for (const t of p.source.tags ?? []) ensure(t);
     classifyTags(
       p.metadata,
       [...byKey.values()].filter(
@@ -309,6 +310,7 @@ export async function projectTagBatch(
     result.push({ ...p, tags });
   }
   await upsertTags(db, [...touched.values()]);
+  if (historical) return result;
   const pairs = JSON.stringify(associations),
     ids = items.map((i) => i.work.id);
   await db.query(
@@ -415,6 +417,7 @@ export async function projectEntityBatch(
   db: DB,
   items: { work: any; raw: Record<string, any> }[],
   prepared: PreparedTags[],
+  historical = false,
 ) {
   const results = items.map((item, i) =>
     prepareEntities(
@@ -430,14 +433,15 @@ export async function projectEntityBatch(
     for (const fact of results[i].facts) {
       const previous = entities.get(fact.id);
       // Match jsonb ||: omit undefined properties, replace nested values as units.
-      entities.set(fact.id, {
-        ...fact,
-        url: fact.url ?? previous?.url ?? null,
-        details: {
-          ...previous?.details,
-          ...JSON.parse(JSON.stringify(fact.details)),
-        },
-      });
+      if (!historical || !previous)
+        entities.set(fact.id, {
+          ...fact,
+          url: fact.url ?? previous?.url ?? null,
+          details: {
+            ...previous?.details,
+            ...JSON.parse(JSON.stringify(fact.details)),
+          },
+        });
       if (
         !prepared[i].metadata.anonymous ||
         !["author", "pseud"].includes(fact.kind)
@@ -454,11 +458,16 @@ export async function projectEntityBatch(
     `INSERT INTO catalog_entities(id,kind,source_id,name,url,details)
     SELECT id,kind,source_id,name,url,details FROM jsonb_to_recordset($1::jsonb)
       s(id text,kind text,source_id text,name text,url text,details jsonb) ORDER BY id
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,url=coalesce(excluded.url,catalog_entities.url),details=catalog_entities.details||excluded.details
+    ON CONFLICT(id) ${
+      historical
+        ? "DO NOTHING"
+        : `DO UPDATE SET name=excluded.name,url=coalesce(excluded.url,catalog_entities.url),details=catalog_entities.details||excluded.details
     WHERE (catalog_entities.name,catalog_entities.url,catalog_entities.details) IS DISTINCT FROM
-      (excluded.name,coalesce(excluded.url,catalog_entities.url),catalog_entities.details||excluded.details)`,
+      (excluded.name,coalesce(excluded.url,catalog_entities.url),catalog_entities.details||excluded.details)`
+    }`,
     [JSON.stringify([...entities.values()])],
   );
+  if (historical) return results.map((r) => r.entities);
   const pairs = JSON.stringify([...associations.values()]);
   await db.query(
     `DELETE FROM catalog_entity_works t WHERE work_id=ANY($1::uuid[]) AND NOT EXISTS(
@@ -477,7 +486,11 @@ export async function projectEntityBatch(
   return results.map((r) => r.entities);
 }
 
-export async function projectFilterBatch(db: DB, workIds: string[]) {
+export async function projectFilterBatch(
+  db: DB,
+  workIds: string[],
+  persist = true,
+) {
   // Generations serialize filterTags: planner/batch changes must not reorder it.
   const pairs = (
     await db.query(
@@ -488,18 +501,20 @@ export async function projectFilterBatch(db: DB, workIds: string[]) {
       [workIds],
     )
   ).rows;
-  const json = JSON.stringify(pairs);
-  await db.query(
-    `DELETE FROM catalog_work_filters t WHERE work_id=ANY($1::uuid[]) AND NOT EXISTS(
+  if (persist) {
+    const json = JSON.stringify(pairs);
+    await db.query(
+      `DELETE FROM catalog_work_filters t WHERE work_id=ANY($1::uuid[]) AND NOT EXISTS(
     SELECT 1 FROM jsonb_to_recordset($2::jsonb) s(work_id uuid,tag_id text) WHERE s.work_id=t.work_id AND s.tag_id=t.tag_id)`,
-    [workIds, json],
-  );
-  await db.query(
-    `INSERT INTO catalog_work_filters(work_id,tag_id)
+      [workIds, json],
+    );
+    await db.query(
+      `INSERT INTO catalog_work_filters(work_id,tag_id)
     SELECT work_id,tag_id FROM jsonb_to_recordset($1::jsonb) s(work_id uuid,tag_id text)
     ORDER BY work_id,tag_id ON CONFLICT DO NOTHING`,
-    [json],
-  );
+      [json],
+    );
+  }
   const result = new Map<string, string[]>();
   for (const row of pairs) {
     const tags = result.get(row.work_id) ?? [];
@@ -563,6 +578,33 @@ export async function* projectCurrentBibliographies(
   }
 }
 
+/** Historical dictionaries keep existing facts; they never update current links.
+ * The first new entity fact wins, matching sequential ON CONFLICT DO NOTHING. */
+export async function projectHistoricalBibliographies(
+  db: DB,
+  items: { work: any; raw: Record<string, any> }[],
+) {
+  await db.query("SELECT pg_advisory_xact_lock(70210408)");
+  const prepared = await projectTagBatch(db, items, true);
+  const entities = await projectEntityBatch(db, items, prepared, true);
+  // Historical filterTags follow the CURRENT work associations/graph, as before.
+  // They are returned to callers but are not stored in snapshot bibliography.
+  const filters = await projectFilterBatch(
+    db,
+    [...new Set(items.map((i) => i.work.id))],
+    false,
+  );
+  return prepared.map((p, i) => ({
+    metadata: p.metadata,
+    details: {
+      tags: p.tags,
+      entities: entities[i],
+      relations: p.source.relations ?? [],
+    },
+    filterTags: filters.get(items[i].work.id) ?? [],
+  }));
+}
+
 export async function projectBibliography(
   db: DB,
   work: any,
@@ -572,7 +614,8 @@ export async function projectBibliography(
 ) {
   // Historical views can also be materialized by a reader before the queue reaches
   // them. Use the same lock as the background projector for shared tag/entity rows.
-  if (historical) await db.query("SELECT pg_advisory_xact_lock(70210408)");
+  if (historical)
+    return (await projectHistoricalBibliographies(db, [{ work, raw }]))[0];
   const { metadata, source } = prepared ?? bibliography(raw);
   const tags: any[] = prepared?.tags ?? [];
   if (!prepared) {

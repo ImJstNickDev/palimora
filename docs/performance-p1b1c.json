@@ -1,0 +1,785 @@
+{
+  "phase": "P1B.1c",
+  "date": "2026-11-08",
+  "status": "complete",
+  "baseline_commit": "d5fcde3837890cd82aa52dc80f2e8afb2b437c10",
+  "scope": "Historical bibliography materialization only; no ingest, full-text or end-to-end A/B/C campaign",
+  "method": {
+    "runner": "scripts/benchmark-history.cjs",
+    "sample": "First 1024 real archive snapshot IDs, ordered by ID, from an isolated copy of the retained P1B.1b database; original PackStore mounted read-only",
+    "postgresql": "17.6",
+    "batch_sizes": [20, 64, 256],
+    "default_batch_unchanged": 20,
+    "runs_per_case": 1,
+    "order": ["P1B.1b", "P1B.1c"],
+    "tables": "Six isolated logged shadow tables, LIKE INCLUDING ALL; full real tag/entity dictionaries copied before each batch-size pair. Current associations read unchanged from public. FK correctness separately checked on fully migrated fixtures.",
+    "timed": "Actual projectCatalog(0,batch): queue acquisition, canonical lookup, verified manifest/HTML reads, enrichment, tag/entity resolution, recursive closure, view INSERT, queue ACK, transaction and commit; same phases in both variants",
+    "excluded": "Schema setup/teardown, queue seeding, validation queries, ingest, scheduler idle time, current projection and full-text",
+    "regenerate": "Delete only derived shadow views and requeue identical snapshot IDs; canonical snapshots untouched. This is recomputation, not a cache-hit test.",
+    "transactions": "Production transaction wrapper, SET LOCAL default_toast_compression=lz4; same global advisory lock and queue row locks",
+    "query_count": "Awaited client SQL calls including BEGIN/SET/COMMIT; no pipelining, corresponds to PostgreSQL round trips; no pg_stat_statements server-internal query count",
+    "attribution": "Top-level duration is wall time. projectBibliography/projectHistoricalBibliographies and enrichBibliography/Batch are inclusive; pack_seconds includes decode; SQL categories are nested inside these phases. decode_seconds sums native lane durations and may overlap. Do not add these measurements.",
+    "wal": "Global pg_current_wal_insert_lsn delta; includes possible background WAL and full-page images",
+    "pack_io": "Instrumented existing store.readMany, FileHandle.read and native codec.batch; bytes read are logical file bytes, not physical device I/O",
+    "resources": "Unmodified P0 benchmark-resources.py, 1-second cgroup samples over all six cases INCLUDING setup/teardown; both workers restarted before final pair; worker physical I/O unavailable, not zero",
+    "memory": "Existing PROJECTION_HISTORICAL_BATCH (default20, max256); existing PackStore chunks at most256 objects/16MiB raw except one larger object; parsed metadata retained for bounded snapshot batch",
+    "environment": "Same runtime image, isolated PostgreSQL17.6 and read-only real PackStore, internal Docker network with no host ports; no concurrent builds/tests during final benchmarks. OpenSearch started afterwards for integration tests.",
+    "private_evidence": "/mnt/sdb/palimora-p1b1c-results",
+    "baseline_compiled": "/mnt/sdb/palimora-p1b1c-old-dist",
+    "preliminary_excluded": "Retained under preliminary/: initial run before final I/O instrumentation and verified-manifest optimization; first contention pilot overlapped build and lacked ANALYZE on copied facts. Final contention run has ANALYZE in both variants and runs without concurrent build."
+  },
+  "implementation": {
+    "shared_pipeline": [
+      "projectTagBatch historical mode",
+      "projectEntityBatch historical mode",
+      "projectFilterBatch read-only mode",
+      "enrichBibliographyBatch",
+      "readObjectBatches",
+      "materializeHistoricalViews"
+    ],
+    "historical_semantics": "Ignore source-tag upsert/edges as previously; generic tags preserve existing dictionary attributes. Existing entities never updated, first new fact per ID wins in input order. Filters follow current work links and graph, returned but not persisted in snapshot bibliography.",
+    "persistence": "One set-based snapshot-view INSERT and one bulk queue ACK per batch in same transaction; recheck cached views under existing advisory lock and never overwrite them; current documents, links, filters and OpenSearch generations untouched.",
+    "on_demand_difference": "Preexisting uncached explicit reader via canonical alias derived local entity IDs from reader work context, unlike background snapshot owner, and did not persist the view. Explicit on-demand now materializes once using snapshot owner, matching background/concurrent readers. This intentionally resolves that preexisting divergence; existing cached views unchanged. Default current-reader fallback is not cached as historical."
+  },
+  "measurements": {
+    "p1b1b": [
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 19.12744091,
+        "snapshots_per_second": 53.53565094349048,
+        "queries": 27795,
+        "commits": 52,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.6762407889999404,
+          "tags": 11.598374796999815,
+          "entities": 0.6428767249999768,
+          "filters": 0.9080521440000173,
+          "views": 0.5924493259999918
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.4313726760000594,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.25106724699995236,
+        "enrichBibliography": 2.07857413100002,
+        "projectBibliography": 14.150793659,
+        "queries_per_snapshot": 27.1435546875,
+        "wal_bytes": 9916288,
+        "node_cpu_seconds": 7.33559,
+        "rss_mib": 142.28125,
+        "peak_rss_mib": 142.28125
+      },
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 14.1201276,
+        "snapshots_per_second": 72.52059110287361,
+        "queries": 27795,
+        "commits": 52,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.5361252329999266,
+          "tags": 7.207260669000304,
+          "entities": 0.5917180299998178,
+          "filters": 0.8869291160000348,
+          "views": 0.5907665209999245
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.2986326999999616,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.2518087789999121,
+        "enrichBibliography": 1.8542235310000708,
+        "projectBibliography": 9.52976743900001,
+        "queries_per_snapshot": 27.1435546875,
+        "wal_bytes": 32469304,
+        "node_cpu_seconds": 5.911926,
+        "rss_mib": 163.83203125,
+        "peak_rss_mib": 163.83203125
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 18.890867608,
+        "snapshots_per_second": 54.20608630841028,
+        "queries": 27579,
+        "commits": 16,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.5264005169993484,
+          "tags": 11.909823967999847,
+          "entities": 0.6238529420001728,
+          "filters": 0.9150783339999468,
+          "views": 0.5992587880000501
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.290666101000162,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.25594674700017667,
+        "enrichBibliography": 1.884669356000164,
+        "projectBibliography": 14.348991658000113,
+        "queries_per_snapshot": 26.9326171875,
+        "wal_bytes": 10507992,
+        "node_cpu_seconds": 6.249091,
+        "rss_mib": 158.359375,
+        "peak_rss_mib": 164.86328125
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 21.667262878000003,
+        "snapshots_per_second": 47.26023798048461,
+        "queries": 27579,
+        "commits": 16,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.832147037000376,
+          "tags": 13.871254662000698,
+          "entities": 0.7202972550000925,
+          "filters": 1.027809580999798,
+          "views": 0.6716183029998134
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.4526004009998856,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.29247546099987803,
+        "enrichBibliography": 2.1054787309999172,
+        "projectBibliography": 16.571807614000086,
+        "queries_per_snapshot": 26.9326171875,
+        "wal_bytes": 8423288,
+        "node_cpu_seconds": 7.001009,
+        "rss_mib": 156.82421875,
+        "peak_rss_mib": 164.86328125
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 14.941026877000011,
+        "snapshots_per_second": 68.53611926609476,
+        "queries": 27507,
+        "commits": 4,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.4710799230001466,
+          "tags": 8.145299511999708,
+          "entities": 0.6067236660003258,
+          "filters": 0.9527686669998648,
+          "views": 0.6071854059999892
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.252036179999879,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.26320250799958006,
+        "enrichBibliography": 1.8377216710000788,
+        "projectBibliography": 10.505665955000186,
+        "queries_per_snapshot": 26.8623046875,
+        "wal_bytes": 13025208,
+        "node_cpu_seconds": 5.725931,
+        "rss_mib": 156.96875,
+        "peak_rss_mib": 164.86328125
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 11.977723750000004,
+        "snapshots_per_second": 85.49203683212343,
+        "queries": 27507,
+        "commits": 4,
+        "inserted": 1024,
+        "sql": {
+          "other": 2.3899759680008654,
+          "tags": 5.415419761000407,
+          "entities": 0.5936200809998111,
+          "filters": 0.9227853600004448,
+          "views": 0.5903283080000103
+        },
+        "pack_files_opened": 2048,
+        "pack_file_reads": 4096,
+        "pack_file_bytes": 3443100,
+        "pack_calls": 2048,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 1.2016145030003076,
+        "decode_calls": 2048,
+        "decode_objects": 2048,
+        "decode_seconds": 0.2432811450004374,
+        "enrichBibliography": 1.7994482299996026,
+        "projectBibliography": 7.690641751000186,
+        "queries_per_snapshot": 26.8623046875,
+        "wal_bytes": 9124488,
+        "node_cpu_seconds": 5.407439,
+        "rss_mib": 157.29296875,
+        "peak_rss_mib": 164.86328125
+      }
+    ],
+    "p1b1c": [
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 3.380952282,
+        "snapshots_per_second": 302.87324830099453,
+        "queries": 1040,
+        "commits": 52,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.5664336689999998,
+          "tags": 0.9537721060000053,
+          "entities": 0.08021344899999941,
+          "filters": 0.08975168399999847,
+          "views": 0.20119025600000215
+        },
+        "pack_files_opened": 1696,
+        "pack_file_reads": 3737,
+        "pack_file_bytes": 3752086,
+        "pack_calls": 104,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.8960115250000027,
+        "decode_calls": 2041,
+        "decode_objects": 2048,
+        "decode_seconds": 0.19405770900000108,
+        "enrichBibliographyBatch": 0.7781313040000003,
+        "projectHistoricalBibliographies": 1.3935913810000014,
+        "queries_per_snapshot": 1.015625,
+        "wal_bytes": 4869296,
+        "node_cpu_seconds": 2.462084,
+        "rss_mib": 143.78515625,
+        "peak_rss_mib": 144.0078125
+      },
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 2.9010284760000005,
+        "snapshots_per_second": 352.97826562940634,
+        "queries": 1040,
+        "commits": 52,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.4877758040000066,
+          "tags": 0.8945809940000063,
+          "entities": 0.08144621099999494,
+          "filters": 0.08206283500000607,
+          "views": 0.19288956400000004
+        },
+        "pack_files_opened": 1696,
+        "pack_file_reads": 3737,
+        "pack_file_bytes": 3752086,
+        "pack_calls": 104,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.7506665629999969,
+        "decode_calls": 2041,
+        "decode_objects": 2048,
+        "decode_seconds": 0.17912514200002155,
+        "enrichBibliographyBatch": 0.6105023150000025,
+        "projectHistoricalBibliographies": 1.263710725000002,
+        "queries_per_snapshot": 1.015625,
+        "wal_bytes": 4869832,
+        "node_cpu_seconds": 1.988685,
+        "rss_mib": 147.21484375,
+        "peak_rss_mib": 157.65625
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 2.041321527,
+        "snapshots_per_second": 501.6358209404216,
+        "queries": 320,
+        "commits": 16,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.22251611099998805,
+          "tags": 0.4622571280000012,
+          "entities": 0.05362607400000161,
+          "filters": 0.05927687499999229,
+          "views": 0.17868091400000594
+        },
+        "pack_files_opened": 1104,
+        "pack_file_reads": 3115,
+        "pack_file_bytes": 4710800,
+        "pack_calls": 32,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.7005798429999979,
+        "decode_calls": 2011,
+        "decode_objects": 2048,
+        "decode_seconds": 0.2055339110000203,
+        "enrichBibliographyBatch": 0.4526697620000031,
+        "projectHistoricalBibliographies": 0.7524789330000003,
+        "queries_per_snapshot": 0.3125,
+        "wal_bytes": 4800152,
+        "node_cpu_seconds": 1.429451,
+        "rss_mib": 162.97265625,
+        "peak_rss_mib": 164.75390625
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 2.1345346499999995,
+        "snapshots_per_second": 479.72985587280124,
+        "queries": 320,
+        "commits": 16,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.26288906900000053,
+          "tags": 0.47983823499999384,
+          "entities": 0.052999896000002995,
+          "filters": 0.05927372299999478,
+          "views": 0.2070801370000026
+        },
+        "pack_files_opened": 1104,
+        "pack_file_reads": 3115,
+        "pack_file_bytes": 4710800,
+        "pack_calls": 32,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.6901031340000063,
+        "decode_calls": 2011,
+        "decode_objects": 2048,
+        "decode_seconds": 0.18556835200002048,
+        "enrichBibliographyBatch": 0.5002610319999967,
+        "projectHistoricalBibliographies": 0.7660854359999992,
+        "queries_per_snapshot": 0.3125,
+        "wal_bytes": 4800512,
+        "node_cpu_seconds": 1.35137,
+        "rss_mib": 179.84375,
+        "peak_rss_mib": 179.84375
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "initial",
+        "snapshots": 1024,
+        "seconds": 1.3956835060000012,
+        "snapshots_per_second": 733.6906939129501,
+        "queries": 80,
+        "commits": 4,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.09784589099999355,
+          "tags": 0.22360666499999937,
+          "entities": 0.03319190199999866,
+          "filters": 0.050193720999999636,
+          "views": 0.16478735100000266
+        },
+        "pack_files_opened": 374,
+        "pack_file_reads": 2279,
+        "pack_file_bytes": 7606384,
+        "pack_calls": 8,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.43925649999999583,
+        "decode_calls": 1905,
+        "decode_objects": 2048,
+        "decode_seconds": 0.15105369199993932,
+        "enrichBibliographyBatch": 0.3512486790000003,
+        "projectHistoricalBibliographies": 0.4957122299999974,
+        "queries_per_snapshot": 0.078125,
+        "wal_bytes": 4711568,
+        "node_cpu_seconds": 1.110918,
+        "rss_mib": 180.47265625,
+        "peak_rss_mib": 194.53125
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "regenerate",
+        "snapshots": 1024,
+        "seconds": 1.3531822429999993,
+        "snapshots_per_second": 756.7347305192213,
+        "queries": 80,
+        "commits": 4,
+        "inserted": 1024,
+        "sql": {
+          "other": 0.14247826199999325,
+          "tags": 0.250798568000002,
+          "entities": 0.030543567000000618,
+          "filters": 0.0399505390000013,
+          "views": 0.1246266220000034
+        },
+        "pack_files_opened": 374,
+        "pack_file_reads": 2279,
+        "pack_file_bytes": 7606384,
+        "pack_calls": 8,
+        "pack_objects": 2048,
+        "pack_raw_bytes": 6147887,
+        "pack_seconds": 0.40675228499999505,
+        "decode_calls": 1905,
+        "decode_objects": 2048,
+        "decode_seconds": 0.14398176200002105,
+        "enrichBibliographyBatch": 0.3486167039999964,
+        "projectHistoricalBibliographies": 0.48978094700000285,
+        "queries_per_snapshot": 0.078125,
+        "wal_bytes": 4711888,
+        "node_cpu_seconds": 1.081476,
+        "rss_mib": 183.7890625,
+        "peak_rss_mib": 194.53125
+      }
+    ]
+  },
+  "comparisons": [
+    {
+      "batch": 20,
+      "phase": "initial",
+      "speedup": 5.657412265719756,
+      "query_reduction_percent": 96.25831984169815
+    },
+    {
+      "batch": 20,
+      "phase": "regenerate",
+      "speedup": 4.867283350306554,
+      "query_reduction_percent": 96.25831984169815
+    },
+    {
+      "batch": 64,
+      "phase": "initial",
+      "speedup": 9.254234258609277,
+      "query_reduction_percent": 98.8396968708075
+    },
+    {
+      "batch": 64,
+      "phase": "regenerate",
+      "speedup": 10.150813376583045,
+      "query_reduction_percent": 98.8396968708075
+    },
+    {
+      "batch": 256,
+      "phase": "initial",
+      "speedup": 10.705168337068532,
+      "query_reduction_percent": 99.7091649398335
+    },
+    {
+      "batch": 256,
+      "phase": "regenerate",
+      "speedup": 8.851523002138604,
+      "query_reduction_percent": 99.7091649398335
+    }
+  ],
+  "resources": {
+    "old-history-resources": {
+      "worker": {
+        "samples": 108,
+        "seconds": 107.01025795936584,
+        "cpu_seconds": 38.04711,
+        "cpu_mean_percent": 35.554638149220544,
+        "cpu_max_percent": 75.45289705944649,
+        "working_mean_mib": 99.29890046296296,
+        "working_max_mib": 113.72265625,
+        "memory_max_mib": 113.7265625,
+        "read_mib": null,
+        "write_mib": null,
+        "rx_mib": 56.24658393859863,
+        "tx_mib": 96.82801342010498
+      },
+      "pg": {
+        "samples": 108,
+        "seconds": 107.01017928123474,
+        "cpu_seconds": 71.254314,
+        "cpu_mean_percent": 66.58648221935567,
+        "cpu_max_percent": 151.28706619494176,
+        "working_mean_mib": 181.21213107638889,
+        "working_max_mib": 197.46484375,
+        "memory_max_mib": 307.09375,
+        "read_mib": 0.0,
+        "write_mib": 191.77734375,
+        "rx_mib": 96.8313570022583,
+        "tx_mib": 56.24830722808838
+      }
+    },
+    "new-history-resources": {
+      "worker": {
+        "samples": 21,
+        "seconds": 19.998132467269897,
+        "cpu_seconds": 9.983536,
+        "cpu_mean_percent": 49.92234158034324,
+        "cpu_max_percent": 82.7437039477196,
+        "working_mean_mib": 94.46781994047619,
+        "working_max_mib": 140.9609375,
+        "memory_max_mib": 140.96484375,
+        "read_mib": null,
+        "write_mib": null,
+        "rx_mib": 22.287660598754883,
+        "tx_mib": 48.6885871887207
+      },
+      "pg": {
+        "samples": 21,
+        "seconds": 19.99873924255371,
+        "cpu_seconds": 11.073084,
+        "cpu_mean_percent": 55.36891033830009,
+        "cpu_max_percent": 93.86074595361562,
+        "working_mean_mib": 184.74107142857142,
+        "working_max_mib": 201.03125,
+        "memory_max_mib": 446.125,
+        "read_mib": 0.0,
+        "write_mib": 289.02734375,
+        "rx_mib": 48.698363304138184,
+        "tx_mib": 22.287755012512207
+      }
+    }
+  },
+  "equivalence": {
+    "runner": "scripts/compare-bibliography.cjs (unchanged)",
+    "procedure": "Capture original P1B.1b full corpus, regenerate all historical views with baseline and compare; regenerate all with new code and compare same original reference; hash complete current documents including generations/indexed_at and current associations before/after each regeneration.",
+    "counts": {
+      "works": 11032,
+      "snapshots": 11032,
+      "historical_views": 11032,
+      "documents": 11032,
+      "tags": 57661,
+      "entities": 22140,
+      "work_tags": 167736,
+      "work_entities": 24909,
+      "filters": 167736,
+      "edges": 0,
+      "identity_links": 0
+    },
+    "baseline_regeneration": {
+      "heads": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "snapshots": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "identities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "documents": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "historical": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "edges": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "filters": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      }
+    },
+    "bulk_regeneration": {
+      "heads": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "snapshots": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "identities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "documents": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "historical": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "edges": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "filters": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      }
+    },
+    "current_state_unchanged": true,
+    "current_pending": 0,
+    "text_pending": 0,
+    "historical_pending": 0,
+    "opensearch": "Existing full-corpus generation/indexed_at fingerprints unchanged; no full-corpus reindex in this phase. Real OpenSearch search/reader covered by integration suite; no new full-corpus ID/generation verification claimed."
+  },
+  "targeted_tests": {
+    "versions": 3,
+    "shared_pack_objects_read_once": true,
+    "equivalence": true,
+    "first_entity_fact": true,
+    "historical_tag_attributes_ignored": true,
+    "current_graph_filter_semantics": true,
+    "anonymous": true,
+    "alias_difference_preexisting": true,
+    "on_demand_background_concurrency": true,
+    "immutable_existing_views": true,
+    "crash_after_insert_and_retry": true,
+    "rollback": true,
+    "current_documents_associations_generations_unchanged": true
+  },
+  "contention": {
+    "runner": "scripts/probe-history-contention.cjs",
+    "method": "256 current works, with/without 256 pending historical snapshots, actual projectCatalog(20,0/20), 13 commits each, isolated logged copied/ANALYZEd facts, no concurrent build/tests; same transactions service both queues as in normal projector",
+    "p1b1b": [
+      {
+        "scenario": "current_only",
+        "current": 256,
+        "historical": 0,
+        "seconds": 1.1960380679999998,
+        "commits": 13,
+        "batch_seconds_p95": 0.13678870099999949,
+        "batch_seconds_max": 0.13678870099999949,
+        "both_queues_drained": true
+      },
+      {
+        "scenario": "mixed",
+        "current": 256,
+        "historical": 256,
+        "seconds": 5.758752087,
+        "commits": 13,
+        "batch_seconds_p95": 0.6804611470000018,
+        "batch_seconds_max": 0.6804611470000018,
+        "both_queues_drained": true
+      }
+    ],
+    "p1b1c": [
+      {
+        "scenario": "current_only",
+        "current": 256,
+        "historical": 0,
+        "seconds": 1.2937211740000003,
+        "commits": 13,
+        "batch_seconds_p95": 0.18077595099999963,
+        "batch_seconds_max": 0.18077595099999963,
+        "both_queues_drained": true
+      },
+      {
+        "scenario": "mixed",
+        "current": 256,
+        "historical": 256,
+        "seconds": 1.8319315040000002,
+        "commits": 13,
+        "batch_seconds_p95": 0.18597597200000018,
+        "batch_seconds_max": 0.18597597200000018,
+        "both_queues_drained": true
+      }
+    ],
+    "limits": "Single pair; p95 from13 transaction durations equals maximum, not HTTP latency. New current-only control is slower; do not attribute all differences to code. Both queues drained,256 full-text invalidations preserved."
+  },
+  "verification": {
+    "build": "npm run build passed; existing Vite large-chunk warning",
+    "integration": "archive-native.test.ts, archive.test.ts, ao3.test.ts:8 passed,0 failed,0 skipped with real PostgreSQL/OpenSearch and runtime Typst",
+    "functional": "verify-history.cjs passed:3 versions, shared objects, anonymous, first-fact entity semantics, alias divergence, recursive synonym/meta cycle and graph change, concurrent reader/background, immutable cached view, SIGKILL after INSERT before ACK/COMMIT, rollback and retry"
+  },
+  "limitations": [
+    "Existing global bibliography lock retained; graph semantics and invalidation design unchanged.",
+    "At default batch20 inclusive bibliography1.394s (41.2% of3.381s), SQL tags0.954s; enrichment0.778s (23.0%). Overlapping measurements, not additive decomposition.",
+    "No sample shared object hashes:2048 decompressions before/after. Dedicated multi-version fixture proves deduplication for shared objects.",
+    "Node end-phase RSS at256 grows from156.97/157.29MiB to180.47/183.79MiB; default batch not raised.",
+    "Cgroup PostgreSQL physical writes191.78 to289.03MiB including setup/checkpoints/writeback; no physical-I/O reduction claimed. Logical PackStore bytes increase at20 due existing read coalescing gaps.",
+    "Current-only256-work control1.196 to1.294s (+8.17%); single pair cannot isolate cause.",
+    "One paired run per case on shared host, warm caches not cleared; WAL affected by checkpoints/FPI; no statistical confidence interval.",
+    "P1B.1d/P1B.2/P2 not started; no full-pipeline speedup or interactive-latency claim."
+  ]
+}

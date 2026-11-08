@@ -1,7 +1,12 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/browser",
-  testIgnore: "offline.spec.ts",
+  testIgnore: [
+    "offline.spec.ts",
+    "backups.spec.ts",
+    "operations.spec.ts",
+    "maintenance.spec.ts",
+  ],
   workers: 1,
   timeout: 60000,
   use: { baseURL: "http://localhost:5173", trace: "retain-on-failure" },

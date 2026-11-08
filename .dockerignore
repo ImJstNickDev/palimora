@@ -12,3 +12,22 @@ playwright-report
 **/*.pyc
 
 **/native/build
+
+**/*.sqlite3
+**/*.pmpack
+**/*.pmarc
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3-*
+**/*.db
+**/*.db-*
+**/*.dump
+**/*.sql.gz
+**/*.zip
+**/*.epub
+**/*.pem
+**/*.key
+**/secrets
+**/backups
+**/dumps
+unslop-story

@@ -1,7 +1,7 @@
 {
   "name": "palimora",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -10,13 +10,14 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "build": "npm run build -w @palimora/contracts && npm run build -w @palimora/ui && npm run build -w @palimora/api && npm run build -w @palimora/web",
+    "build": "npm run notices -- --check && npm run build -w @palimora/contracts && npm run build -w @palimora/ui && npm run build -w @palimora/api && npm run build -w @palimora/web",
     "check": "npm run build && npm run test",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
-    "test:browser": "playwright test",
+    "test:browser": "node node_modules/@playwright/test/cli.js test",
     "dev": "npm run dev -w @palimora/web",
     "migrate": "npm run migrate -w @palimora/api",
-    "test:offline": "playwright test --config playwright.offline.config.ts"
+    "test:offline": "node node_modules/@playwright/test/cli.js test --config playwright.offline.config.ts",
+    "notices": "node scripts/npm-notices.cjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
@@ -29,5 +30,15 @@
   },
   "overrides": {
     "multer": "2.5.0"
+  },
+  "license": "MIT",
+  "description": "Self-hosted AO3 archive with canonical storage, historical versions and a personal library.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ImJstNickDev/palimora.git"
+  },
+  "homepage": "https://github.com/ImJstNickDev/palimora#readme",
+  "bugs": {
+    "url": "https://github.com/ImJstNickDev/palimora/issues"
   }
 }

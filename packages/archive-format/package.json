@@ -1,0 +1,17 @@
+{
+  "name": "@palimora/archive-format",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "license": "MIT",
+  "types": "index.d.ts",
+  "description": "Palimora archival format reader and writer.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ImJstNickDev/palimora.git",
+    "directory": "packages/archive-format"
+  },
+  "homepage": "https://github.com/ImJstNickDev/palimora#readme",
+  "bugs": {
+    "url": "https://github.com/ImJstNickDev/palimora/issues"
+  }
+}

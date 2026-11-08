@@ -83,6 +83,63 @@ test("collection management and reader progress with anchored annotations on mob
     await expect(
       page.getByRole("heading", { name: "Reading group" }),
     ).toBeVisible();
+    await pool.query(
+      "INSERT INTO users(id,username,password_hash,role) VALUES($1,'invitedreader','test','User')",
+      [randomUUID()],
+    );
+    await expect(page.locator("details.library-options")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Membri e condivisione", exact: true })
+      .click();
+    const membersMenu = page.getByRole("dialog", {
+      name: "Membri e condivisione",
+    });
+    await membersMenu.getByLabel("Cerca utenti").fill("invited");
+    await membersMenu
+      .getByRole("checkbox", { name: "invitedreader", exact: true })
+      .check();
+    await membersMenu
+      .getByRole("button", { name: "Invita (1)", exact: true })
+      .click();
+    await expect(
+      membersMenu.getByText("Sola lettura · Invito in attesa", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      membersMenu.getByRole("checkbox", { name: "invitedreader", exact: true }),
+    ).toHaveCount(0);
+    await membersMenu
+      .getByRole("button", {
+        name: "Modifica permesso di invitedreader",
+        exact: true,
+      })
+      .click();
+    await membersMenu
+      .getByLabel("Permessi di invitedreader")
+      .selectOption("Editor");
+    await expect(
+      membersMenu.getByText("Può modificare · Invito in attesa", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const bounds = await membersMenu.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    await page.screenshot({
+      path: testInfo.outputPath("collection-members-mobile.png"),
+    });
+    await membersMenu
+      .getByRole("button", { name: "Rimuovi invitedreader", exact: true })
+      .click();
+    await membersMenu
+      .getByRole("button", { name: "Rimuovi", exact: true })
+      .click();
+    await expect(
+      membersMenu.locator(".collection-member-list"),
+    ).not.toContainText("invitedreader");
+    await page.keyboard.press("Escape");
+    await expect(membersMenu).toHaveCount(0);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/works/" + work);
     await expect(page.locator(".reader-library-actions")).toBeVisible();
     await expect(page.locator(".reading-panel")).not.toHaveAttribute("open");
@@ -383,7 +440,7 @@ test("collection management and reader progress with anchored annotations on mob
     await page
       .getByRole("combobox", { name: "Capitolo", exact: true })
       .selectOption(second!);
-    await expect(frame.locator("p")).toHaveText("A separate chapter.");
+    await expect(frame.locator("p")).toHaveText(["A separate chapter."]);
     await expect
       .poll(async () =>
         parseInt(await page.locator(".reader-progress-status").innerText()),

@@ -981,8 +981,62 @@ test(
           ),
         );
       const beforeReset = await identitySnapshot();
+      await pool.query(
+        "INSERT INTO personal_event_receipts SELECT id FROM archive_outbox LIMIT 1 ON CONFLICT DO NOTHING",
+      );
       process.env.PALIMORA_DEV = "1";
       try {
+        await pool.query(
+          "INSERT INTO library_bookmarks(user_id,work_id) SELECT $1,id FROM archive_work_heads LIMIT 1",
+          [userId],
+        );
+        await assert.rejects(
+          transaction((db) =>
+            archiveOperation(db, "archiveDevReset", resetInput),
+          ),
+          (e: any) => {
+            assert.deepEqual(e.getResponse(), {
+              code: "RESET_REFERENCED_DATA",
+            });
+            return true;
+          },
+        );
+        await pool.query("DELETE FROM library_bookmarks WHERE user_id=$1", [
+          userId,
+        ]);
+        await transaction((db) =>
+          archiveOperation(db, "archiveDevReset", resetInput),
+        );
+        // A reference created after enqueue must also stop the worker transaction.
+        await pool.query(
+          "INSERT INTO library_bookmarks(user_id,work_id) SELECT $1,id FROM archive_work_heads LIMIT 1",
+          [userId],
+        );
+        await resetDevArchive(async () => {
+          throw Error("Must not reach queues");
+        });
+        assert.equal(
+          (
+            await pool.query(
+              "SELECT result->>'code' AS code FROM archive_jobs WHERE id=$1",
+              [resetId],
+            )
+          ).rows[0].code,
+          "RESET_REFERENCED_DATA",
+        );
+        assert.equal(
+          (await pool.query("SELECT count(*) FROM library_bookmarks")).rows[0]
+            .count,
+          "1",
+        );
+        assert.notEqual(
+          (await pool.query("SELECT count(*) FROM archive_objects")).rows[0]
+            .count,
+          "0",
+        );
+        await pool.query("DELETE FROM library_bookmarks WHERE user_id=$1", [
+          userId,
+        ]);
         await transaction((db) =>
           archiveOperation(db, "archiveDevReset", resetInput),
         );

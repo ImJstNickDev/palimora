@@ -1,23 +1,33 @@
+import { ActionMenu } from "./action-menu";
 import { IconButton } from "./library-ui";
 import { Icon } from "./icons";
 import { states } from "./reading";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Modal, Notice } from "@palimora/ui";
 import { transport, settleWrites } from "./api";
-import { client, useAction, useText, Feedback } from "./shared";
+import {
+  Auth,
+  client,
+  useAction,
+  useText,
+  Feedback,
+  errorText,
+  Loading,
+  QueryError,
+} from "./shared";
 import { LibraryHeading } from "./social";
 import {
   listOffline,
   pendingOperations,
   downloadWork,
-  removeOffline,
   clearCopies,
   checkUpdates,
   syncOffline,
   resolvePending,
   isDisconnected,
+  isSyncingOffline,
   type Pending,
   type OfflineCopy as OfflineWork,
 } from "./offline";
@@ -39,6 +49,7 @@ const update = () => {
 };
 window.addEventListener("offline-change", update);
 window.addEventListener("pwa-change", update);
+window.addEventListener("offline-sync", update);
 export function useOffline() {
   const version = useSyncExternalStore(
     (callback) => {
@@ -53,11 +64,18 @@ export function useOffline() {
 }
 
 function size(bytes: number) {
-  const mib = bytes >= 1024 * 1024;
+  const value = Math.max(0, Number.isFinite(bytes) ? bytes : 0);
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  const unit =
+    value > 0
+      ? Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)))
+      : 0;
   return (
     new Intl.NumberFormat(document.documentElement.lang, {
       maximumFractionDigits: 1,
-    }).format(bytes / (mib ? 1024 * 1024 : 1024)) + (mib ? " MiB" : " KiB")
+    }).format(value / 1024 ** unit) +
+    " " +
+    units[unit]
   );
 }
 export function OfflineRuntime() {
@@ -141,10 +159,12 @@ export function OfflineSave({
     queryKey: ["offline-list"],
     queryFn: listOffline,
   });
+  const impersonating = useContext(Auth)?.impersonating;
   const saved = copies.data?.find(
     (w) => w.id === id && w.snapshot === snapshot,
   );
   useEffect(() => () => controller?.abort(), [controller]);
+  if (impersonating) return null;
   return (
     <div className="library-controls offline-controls">
       {saved ? (
@@ -211,7 +231,16 @@ export function OfflineSave({
     </div>
   );
 }
-function Conflict({ item }: { item: Pending }) {
+function Conflict({
+  item,
+  title,
+  local,
+}: {
+  item: Pending;
+  title?: string;
+  local: boolean;
+}) {
+  const { offline } = useOffline();
   const stateLabel = (value: string) => {
     const state = states.find((s) => s[0] === value);
     return state ? t(state[1], state[2]) : value;
@@ -222,7 +251,7 @@ function Conflict({ item }: { item: Pending }) {
     [privateCopy, setPrivateCopy] = useState(false);
   const remote = useQuery({
     queryKey: ["offline-conflict", item.key],
-    enabled: open,
+    enabled: open && !offline,
     queryFn: async () => {
       if (item.operation === "readingSave") {
         const p = await transport("readingProgress", { id: item.input.id });
@@ -244,6 +273,22 @@ function Conflict({ item }: { item: Pending }) {
       );
     },
   });
+  const work = useQuery({
+    queryKey: ["offline-conflict-title", item.input.id],
+    enabled: !title && !offline,
+    queryFn: () => transport("readerWork", { id: item.input.id }),
+  });
+  const workTitle =
+    title ??
+    (work.data
+      ? Array.isArray(work.data.metadata.title)
+        ? work.data.metadata.title.join(" · ")
+        : String(work.data.metadata.title ?? work.data.work.external_id ?? "")
+      : undefined) ??
+    t(
+      "Opera non disponibile sul dispositivo",
+      "Work unavailable on this device",
+    );
   return (
     <li>
       <strong>
@@ -253,9 +298,17 @@ function Conflict({ item }: { item: Pending }) {
       </strong>
       {" · "}
       <Link
-        to={`/works/${item.input.id}?local=1&snapshot=${item.input.anchor.snapshot}`}
+        to={
+          local
+            ? `/works/${item.input.id}?local=1&snapshot=${item.input.anchor.snapshot}`
+            : `/works/${item.input.id}`
+        }
+        aria-disabled={(!local && offline) || undefined}
+        onClick={(e) => {
+          if (!local && offline) e.preventDefault();
+        }}
       >
-        {t("Apri opera", "Open work")}
+        {workTitle}
       </Link>
       <p>
         {item.error === "CONFLICT"
@@ -265,11 +318,13 @@ function Conflict({ item }: { item: Pending }) {
               "Permissions or content changed",
             )}
       </p>
-      <Button onClick={() => setOpen(true)}>{t("Risolvi", "Resolve")}</Button>
+      <Button disabled={offline} onClick={() => setOpen(true)}>
+        {t("Risolvi", "Resolve")}
+      </Button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={t("Confronta modifiche", "Compare changes")}
+        title={t("Confronta modifiche", "Compare changes") + " · " + workTitle}
         closeLabel={t("Chiudi", "Close")}
       >
         <h3>{t("Su questo dispositivo", "On this device")}</h3>
@@ -330,7 +385,12 @@ function Conflict({ item }: { item: Pending }) {
 export function OfflineLibrary() {
   const t = useText(),
     { offline } = useOffline(),
-    action = useAction(t);
+    action = useAction(t),
+    deviceAction = useAction(t);
+  const supported =
+    import.meta.env.PROD &&
+    window.isSecureContext &&
+    "serviceWorker" in navigator;
   const copies = useQuery({
     queryKey: ["offline-list"],
     queryFn: listOffline,
@@ -346,208 +406,304 @@ export function OfflineLibrary() {
       persistent: await navigator.storage?.persisted?.(),
     }),
   });
-  const [remove, setRemove] = useState<OfflineWork | "all" | null>(null),
-    [updating, setUpdating] = useState<OfflineWork | null>(null),
-    [progress, setProgress] = useState<[number, number] | null>(null),
-    [controller, setController] = useState<AbortController | null>(null);
-  useEffect(() => () => controller?.abort(), [controller]);
+  const [remove, setRemove] = useState<OfflineWork | "all" | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const refresh = async () => {
-    await syncOffline(transport);
-    await checkUpdates(transport);
+    setChecking(true);
+    setSyncError(null);
+    try {
+      await syncOffline(transport);
+      if (!isDisconnected()) await checkUpdates(transport);
+    } catch (e) {
+      setSyncError(errorText(e, t));
+    } finally {
+      setChecking(false);
+    }
   };
   useEffect(() => {
-    if (!offline) void refresh().catch(() => {});
+    if (!offline) void refresh();
   }, [offline]);
+  const conflicts = new Map<string, Pending>();
+  for (const q of queue.data ?? []) {
+    const key = q.operation + ":" + (q.input.annotation_id ?? q.input.id);
+    const previous = conflicts.get(key);
+    if (q.error || previous)
+      conflicts.set(key, { ...q, error: q.error ?? previous?.error });
+  }
+  const syncing = isSyncingOffline();
+  const groups = new Map<string, OfflineWork[]>();
+  for (const copy of copies.data ?? [])
+    groups.set(copy.id, [...(groups.get(copy.id) ?? []), copy]);
   return (
     <section className="personal-library">
       <LibraryHeading
         title={<>{t("Lettura offline", "Offline reading")}</>}
         actions={
           <div className="library-controls">
-            {availableInstall() && (
-              <Button onClick={() => void action.run(installApp)}>
-                {t("Installa Palimora", "Install Palimora")}
-              </Button>
-            )}
             <IconButton
               icon="refresh"
               label={t("Sincronizza", "Sync")}
-              disabled={offline || action.busy}
-              onClick={() => void action.run(refresh)}
+              disabled={offline || action.busy || syncing || checking}
+              onClick={() => void refresh()}
             />
-            {!!copies.data?.length && (
-              <IconButton
-                icon="trash"
-                label={t("Rimuovi tutte le copie", "Remove all copies")}
-                onClick={() => setRemove("all")}
-              />
-            )}
+            <ActionMenu
+              compact
+              icon="settings"
+              label={t("Gestisci dispositivo", "Manage device")}
+            >
+              {(close) => (
+                <div className="offline-device-settings">
+                  {supported && availableInstall() && (
+                    <Button onClick={() => void deviceAction.run(installApp)}>
+                      {t("Installa Palimora", "Install Palimora")}
+                    </Button>
+                  )}
+                  {supported &&
+                    !availableInstall() &&
+                    !matchMedia("(display-mode: standalone)").matches && (
+                      <details>
+                        <summary>
+                          {t("Installa sul dispositivo", "Install on device")}
+                        </summary>
+                        <p>
+                          {t(
+                            "Se il browser lo supporta, dal suo menu puoi installare Palimora o aggiungerla alla schermata Home. Le copie salvate si leggono anche dal browser.",
+                            "If your browser supports it, install Palimora or add it to your Home Screen from its menu. Saved copies also work in the browser.",
+                          )}
+                        </p>
+                      </details>
+                    )}
+                  <dl className="offline-storage-details">
+                    <dt>{t("Copie salvate", "Saved copies")}</dt>
+                    <dd>
+                      {copies.isSuccess
+                        ? size(copies.data.reduce((n, w) => n + w.bytes, 0))
+                        : "—"}
+                    </dd>
+                    <dt>
+                      {t(
+                        "Spazio usato dal sito · stima",
+                        "Site storage used · estimate",
+                      )}
+                    </dt>
+                    <dd>
+                      {space.data?.estimate?.usage !== undefined
+                        ? size(space.data.estimate.usage)
+                        : t("Non disponibile", "Unavailable")}
+                    </dd>
+                    <dt>
+                      {t(
+                        "Quota assegnata dal browser · stima",
+                        "Browser storage quota · estimate",
+                      )}
+                    </dt>
+                    <dd>
+                      {space.data?.estimate?.quota !== undefined
+                        ? size(space.data.estimate.quota)
+                        : t("Non disponibile", "Unavailable")}
+                    </dd>
+                  </dl>
+                  <p className="action-menu-hint">
+                    {t(
+                      "La quota del browser può cambiare e non indica lo spazio libero del dispositivo.",
+                      "The browser quota can change and does not indicate free device storage.",
+                    )}
+                  </p>
+                  {space.isPending && <Loading />}
+                  {space.isError && (
+                    <QueryError retry={() => void space.refetch()} />
+                  )}
+                  {space.data?.persistent === true && (
+                    <p>
+                      {t(
+                        "Conservazione persistente attiva",
+                        "Persistent storage enabled",
+                      )}
+                    </p>
+                  )}
+                  {space.data?.persistent === undefined && space.isSuccess && (
+                    <p className="action-menu-hint">
+                      {t(
+                        "Questo browser non comunica lo stato di conservazione delle copie.",
+                        "This browser does not report copy persistence status.",
+                      )}
+                    </p>
+                  )}
+                  {space.data &&
+                    !space.data.persistent &&
+                    navigator.storage?.persist && (
+                      <Button
+                        disabled={deviceAction.busy}
+                        onClick={() =>
+                          void deviceAction.run(async () => {
+                            const yes = await navigator.storage.persist();
+                            await space.refetch();
+                            deviceAction.setDone(
+                              yes
+                                ? t(
+                                    "Spazio persistente attivato.",
+                                    "Persistent storage enabled.",
+                                  )
+                                : t(
+                                    "Il browser può liberare le copie locali quando lo spazio scarseggia.",
+                                    "The browser may remove local copies when storage is low.",
+                                  ),
+                            );
+                          })
+                        }
+                      >
+                        {t(
+                          "Richiedi conservazione delle copie",
+                          "Request persistent storage",
+                        )}
+                      </Button>
+                    )}
+                  {!!copies.data?.length && (
+                    <button
+                      className="action-menu-item"
+                      disabled={action.busy}
+                      onClick={() => {
+                        close();
+                        setRemove("all");
+                      }}
+                    >
+                      <Icon name="trash" />
+                      <span>
+                        {t("Rimuovi tutte le copie", "Remove all copies")}
+                      </span>
+                    </button>
+                  )}
+                  <Feedback action={deviceAction} />
+                </div>
+              )}
+            </ActionMenu>
           </div>
         }
       />
-      {!availableInstall() &&
-        !matchMedia("(display-mode: standalone)").matches && (
-          <details>
-            <summary>
-              {t("Installa sul dispositivo", "Install on device")}
-            </summary>
-            <p>
-              {t(
-                "Nel menu del browser scegli Installa applicazione oppure Aggiungi alla schermata Home.",
-                "In your browser menu choose Install app or Add to Home Screen.",
-              )}
-            </p>
-          </details>
-        )}
-      <p className="offline-storage">
-        {t("Copie locali", "Local copies")}:{" "}
-        {size(copies.data?.reduce((n, w) => n + w.bytes, 0) ?? 0)}
-        {space.data?.estimate?.quota
-          ? ` · ${t("Disponibile", "Available")}: ${size(Math.max(0, space.data.estimate.quota - (space.data.estimate.usage ?? 0)))}`
-          : ""}
-        {space.data?.persistent
-          ? ` · ${t("Spazio persistente", "Persistent storage")}`
-          : ""}
-      </p>
-      {space.data && !space.data.persistent && navigator.storage?.persist && (
-        <Button
-          onClick={() =>
-            void action.run(async () => {
-              const yes = await navigator.storage.persist();
-              await space.refetch();
-              action.setDone(
-                yes
-                  ? t(
-                      "Spazio persistente attivato.",
-                      "Persistent storage enabled.",
-                    )
-                  : t(
-                      "Il browser può liberare le copie locali quando lo spazio scarseggia.",
-                      "The browser may remove local copies when storage is low.",
-                    ),
-              );
-            })
-          }
+      {(syncing ||
+        checking ||
+        !!queue.data?.length ||
+        queue.isError ||
+        syncError) && (
+        <section
+          className="offline-sync-status"
+          aria-label={t("Sincronizzazione", "Synchronization")}
         >
-          {t("Richiedi spazio persistente", "Request persistent storage")}
-        </Button>
-      )}
-      {!!queue.data?.length && (
-        <section aria-label={t("Sincronizzazione", "Synchronization")}>
           <p role="status">
-            {queue.data.length} {t("modifiche in attesa", "pending changes")}
+            {syncing
+              ? t("Sincronizzazione in corso…", "Synchronizing…")
+              : checking
+                ? t("Controllo aggiornamenti…", "Checking for updates…")
+                : queue.data?.length
+                  ? `${queue.data.length} ${offline ? t("modifiche in attesa di connessione", "changes waiting for connection") : t("modifiche da sincronizzare", "changes waiting to sync")}`
+                  : null}
           </p>
-          <ul className="library-entries">
-            {queue.data
-              .filter((q) => q.error)
-              .map((q) => {
-                const latest = queue
-                  .data!.filter(
-                    (p) =>
-                      p.operation === q.operation &&
-                      (p.input.annotation_id ?? p.input.id) ===
-                        (q.input.annotation_id ?? q.input.id),
-                  )
-                  .at(-1)!;
-                return (
-                  <Conflict key={q.key} item={{ ...latest, error: q.error }} />
-                );
-              })}
-          </ul>
+          {syncError && <Notice error>{syncError}</Notice>}
+          {queue.isError && <QueryError retry={() => void queue.refetch()} />}
+          {conflicts.size > 0 && (
+            <>
+              <p>
+                {conflicts.size}{" "}
+                {t("modifiche da risolvere", "changes to resolve")}
+              </p>
+              <ul className="library-entries">
+                {[...conflicts.values()].map((item) => (
+                  <Conflict
+                    key={item.key}
+                    item={item}
+                    title={groups.get(item.input.id)?.[0].title}
+                    local={
+                      !!groups
+                        .get(item.input.id)
+                        ?.some((w) => w.snapshot === item.input.anchor.snapshot)
+                    }
+                  />
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       )}
       <Feedback action={action} />
-      {updating && (
-        <p role="status">
-          {updating.title}{" "}
-          <progress
-            aria-label={t("Download offline", "Offline download")}
-            value={progress?.[0] ?? 0}
-            max={progress?.[1] ?? 4}
-          />
-          <Button onClick={() => controller?.abort()}>
-            {t("Annulla", "Cancel")}
-          </Button>
+      {!supported && copies.data?.length === 0 && (
+        <p className="offline-availability">
+          {import.meta.env.DEV
+            ? t(
+                "Su questo indirizzo il salvataggio offline non è disponibile.",
+                "Offline saving is not available at this address.",
+              )
+            : t(
+                "Questo browser non supporta il salvataggio offline su questo indirizzo.",
+                "This browser does not support offline saving at this address.",
+              )}
         </p>
       )}
+      {copies.isPending && <Loading />}
       {copies.isError && (
-        <Notice error>
-          {t(
-            "Archivio locale non disponibile in questo browser.",
-            "Local storage is unavailable in this browser.",
-          )}
-        </Notice>
+        <>
+          <Notice error>
+            {t(
+              "Archivio locale non disponibile in questo browser.",
+              "Local storage is unavailable in this browser.",
+            )}
+          </Notice>
+          <Button onClick={() => void copies.refetch()}>
+            {t("Riprova", "Retry")}
+          </Button>
+        </>
       )}
-      {copies.data?.length === 0 && (
-        <p>
-          {t(
-            "Nessuna opera salvata su questo dispositivo.",
-            "No works saved on this device.",
-          )}
-        </p>
-      )}
-      <ul className="library-entries">
-        {copies.data?.map((w) => (
-          <li key={w.key} className="offline-entry">
-            <h2>
-              <Link
-                className="offline-title"
-                to={`/works/${w.id}?local=1&snapshot=${w.snapshot}`}
-              >
-                {w.title}
-              </Link>
-            </h2>
-            <p className="library-entry-meta">
-              {t("Salvata", "Saved")}{" "}
-              {new Date(w.saved).toLocaleString(t("it", "en"))} ·{" "}
-              {size(w.bytes)} · {w.snapshot.slice(0, 8)}
+      {copies.isSuccess && copies.data.length === 0 && (
+        <div className="offline-empty">
+          <p>
+            {t(
+              "Nessuna opera salvata su questo dispositivo.",
+              "No works saved on this device.",
+            )}
+          </p>
+          {supported && (
+            <p className="muted">
+              {offline
+                ? t(
+                    "Connettiti per salvare nuove opere. Le copie sono disponibili solo sul dispositivo e nel browser in cui le hai scaricate.",
+                    "Connect to save new works. Copies are only available on the device and browser where you downloaded them.",
+                  )
+                : t(
+                    "Apri un’opera e scegli Salva offline per leggerla anche senza connessione.",
+                    "Open a work and choose Save offline to read it without a connection.",
+                  )}
             </p>
-            <div className="library-controls">
-              {w.latest &&
-                w.latest !== w.snapshot &&
-                !copies.data?.some(
-                  (copy) => copy.id === w.id && copy.snapshot === w.latest,
-                ) && (
-                  <Button
-                    disabled={offline || !!updating}
-                    onClick={() =>
-                      void action.run(async () => {
-                        const c = new AbortController();
-                        setController(c);
-                        setUpdating(w);
-                        try {
-                          await downloadWork(
-                            w.id,
-                            w.latest!,
-                            transport,
-                            (d, n) => setProgress([d, n]),
-                            c.signal,
-                          );
-                        } finally {
-                          setController(null);
-                          setUpdating(null);
-                          setProgress(null);
-                        }
-                      })
-                    }
-                  >
-                    {t("Scarica nuova versione", "Download new version")}
-                  </Button>
-                )}
+          )}
+          {!offline && (
+            <Link to="/library">
+              {t("Vai alle opere salvate", "Go to saved works")}
+            </Link>
+          )}
+        </div>
+      )}
+      <ul className="library-entries offline-works">
+        {[...groups.values()].map((versions) => {
+          const preferred =
+            versions.find((w) => w.snapshot === w.latest) ?? versions[0];
+          return (
+            <li key={preferred.id} className="offline-entry">
+              <h2>
+                <Link
+                  className="offline-title"
+                  to={`/works/${preferred.id}?local=1&snapshot=${preferred.snapshot}`}
+                >
+                  {preferred.title}
+                </Link>
+              </h2>
               <IconButton
                 icon="trash"
-                label={t("Rimuovi copia", "Remove copy")}
-                disabled={!!updating}
-                onClick={() => setRemove(w)}
+                label={t("Rimuovi dal dispositivo", "Remove from device")}
+                disabled={action.busy}
+                onClick={() => setRemove(preferred)}
               />
-              {!offline && (
-                <Link to={`/works/${w.id}`}>
-                  {t("Versione corrente", "Current version")}
-                </Link>
-              )}
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
       <Modal
         open={!!remove}
@@ -561,7 +717,13 @@ export function OfflineLibrary() {
                 "Rimuovere tutte le opere salvate offline?",
                 "Remove all offline works?",
               )
-            : t("Rimuovere questa copia offline?", "Remove this offline copy?")}
+            : t(
+                "Rimuovere quest’opera dal dispositivo? Tutte le sue copie offline verranno eliminate.",
+                "Remove this work from the device? All its offline copies will be deleted.",
+              )}
+          {remove && remove !== "all" && (
+            <strong className="offline-remove-target">{remove.title}</strong>
+          )}
         </p>
         <Button
           tone="danger"
@@ -569,7 +731,7 @@ export function OfflineLibrary() {
           onClick={() =>
             void action.run(async () => {
               if (remove === "all") await clearCopies();
-              else if (remove) await removeOffline(remove.key);
+              else if (remove) await clearCopies(remove.id);
               setRemove(null);
             })
           }

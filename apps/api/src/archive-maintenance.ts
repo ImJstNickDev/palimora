@@ -1,3 +1,4 @@
+import { integrityTick } from "./integrity";
 import { opendir, stat, unlink, statfs, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pool, transaction } from "./db";
@@ -13,6 +14,7 @@ export async function maintenanceTick(stopped: () => boolean = () => false) {
     )
       return;
     ownsLeader = true;
+    if (await integrityTick(stopped)) return;
     const job = (
       await pool.query(
         "SELECT * FROM archive_jobs WHERE kind IN ('compact','collect') AND state IN ('pending','running') ORDER BY created_at LIMIT 1",

@@ -29,36 +29,38 @@ export async function transaction<T>(fn: (db: DB) => Promise<T>) {
   }
 }
 export async function migrate() {
-  await transaction(async (db) => {
-    await db.query("SET LOCAL statement_timeout=0");
-    await db.query("SELECT pg_advisory_xact_lock(70210401)");
-    await db.query(
-      "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, hash text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+  await transaction((db) => applyMigrations(db));
+}
+export async function applyMigrations(db: DB, through?: string) {
+  await db.query("SET LOCAL statement_timeout=0");
+  await db.query("SELECT pg_advisory_xact_lock(70210401)");
+  await db.query(
+    "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, hash text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+  );
+  const dir = join(__dirname, "../migrations");
+  const files = readdirSync(dir)
+    .filter((x) => x.endsWith(".sql"))
+    .sort();
+  const applied = await db.query("SELECT name FROM schema_migrations");
+  if (applied.rows.some((row) => !files.includes(row.name)))
+    throw Error("Database schema is newer than this API");
+  for (const name of files) {
+    if (through && name > through) break;
+    const sql = readFileSync(join(dir, name), "utf8");
+    const hash = createHash("sha256").update(sql).digest("hex");
+    const existing = await db.query(
+      "SELECT hash FROM schema_migrations WHERE name=$1",
+      [name],
     );
-    const dir = join(__dirname, "../migrations");
-    const files = readdirSync(dir)
-      .filter((x) => x.endsWith(".sql"))
-      .sort();
-    const applied = await db.query("SELECT name FROM schema_migrations");
-    if (applied.rows.some((row) => !files.includes(row.name)))
-      throw Error("Database schema is newer than this API");
-    for (const name of files) {
-      const sql = readFileSync(join(dir, name), "utf8");
-      const hash = createHash("sha256").update(sql).digest("hex");
-      const existing = await db.query(
-        "SELECT hash FROM schema_migrations WHERE name=$1",
-        [name],
-      );
-      if (existing.rowCount) {
-        if (existing.rows[0].hash !== hash)
-          throw Error("Migration checksum mismatch: " + name);
-        continue;
-      }
-      await db.query(sql);
-      await db.query("INSERT INTO schema_migrations(name,hash) VALUES($1,$2)", [
-        name,
-        hash,
-      ]);
+    if (existing.rowCount) {
+      if (existing.rows[0].hash !== hash)
+        throw Error("Migration checksum mismatch: " + name);
+      continue;
     }
-  });
+    await db.query(sql);
+    await db.query("INSERT INTO schema_migrations(name,hash) VALUES($1,$2)", [
+      name,
+      hash,
+    ]);
+  }
 }

@@ -16,4 +16,4 @@ for attempt in {1..90}; do
 done
 curl -fsS "$OPENSEARCH_URL/_cluster/health" >/dev/null
 if [[ "${PALIMORA_VERIFY_BROWSER_ONLY:-0}" != 1 ]]; then npm test; fi
-npm run test:browser
+node scripts/verify-browser.cjs

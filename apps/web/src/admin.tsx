@@ -1,3 +1,4 @@
+import {ImpersonateButton} from "./maintenance";
 import { useContext, useState } from "react";
 import {
   Link,
@@ -151,6 +152,7 @@ export function UserDetail() {
         {t("Utenti", "Users")}
       </Link>
       <Heading>{target.username}</Heading>
+      <ImpersonateButton user={target}/>
       <nav
         className="catalog-tabs"
         aria-label={t("Gestione utente", "User management")}

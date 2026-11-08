@@ -51,6 +51,7 @@ export async function transport<K extends Operation>(
   });
   const json = await response.json();
   if (!response.ok) {
+    if(json.code==='MAINTENANCE')window.dispatchEvent(new Event('maintenance-required'));
     if (
       authenticated &&
       response.status === 401 &&

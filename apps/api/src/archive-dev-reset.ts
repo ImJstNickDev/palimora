@@ -1,6 +1,6 @@
 import { mkdir, readdir, lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { pool, transaction } from "./db";
+import { DB, pool, transaction } from "./db";
 import { store } from "./archive";
 
 export const devArchiveEnabled = () => process.env.PALIMORA_DEV === "1";
@@ -51,6 +51,7 @@ const tables = [
   "archive_metadata_data",
   "archive_object_data",
   "archive_outbox",
+  "personal_event_receipts",
   "archive_pack_leases",
   "archive_reconciliations",
   "archive_record_data",
@@ -65,6 +66,37 @@ const tables = [
   "ingest_progress",
   "ingest_sources",
 ];
+
+export async function devResetTables(db: DB) {
+  // TRUNCATE rejects even empty referencing tables. Include those only
+  // after locking and proving them empty; never cascade into user data.
+  const dependants = (
+    await db.query(
+      `WITH RECURSIVE deps(oid) AS (
+                SELECT unnest($1::regclass[])::oid
+                UNION
+                SELECT c.conrelid FROM pg_constraint c JOIN deps d ON c.confrelid=d.oid WHERE c.contype='f'
+              ) SELECT format('%I.%I',n.nspname,c.relname) AS name FROM deps d
+                JOIN pg_class c ON c.oid=d.oid JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE NOT d.oid=ANY($1::regclass[]::oid[]) ORDER BY d.oid`,
+      [tables],
+    )
+  ).rows as { name: string }[];
+  const resetTables = [
+    ...tables.map((name) => '"' + name + '"'),
+    ...dependants.map((row) => row.name),
+  ].join(",");
+  await db.query("LOCK TABLE " + resetTables + " IN ACCESS EXCLUSIVE MODE");
+  for (const { name } of dependants)
+    if ((await db.query("SELECT 1 FROM " + name + " LIMIT 1")).rowCount)
+      throw Object.assign(
+        Error("Reset blocked by data referencing the archive: " + name),
+        {
+          code: "RESET_REFERENCED_DATA",
+        },
+      );
+  return resetTables;
+}
 
 /** Called with both BullMQ workers paused. A durable job gates archive writes
  * until catalog, queues and files have all been cleared; every step is replayable. */
@@ -103,9 +135,8 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
         await transaction(async (db) => {
           await db.query("SELECT pg_advisory_xact_lock(70210402)");
           await db.query("SET LOCAL lock_timeout='5s'");
-          await db.query(
-            "TRUNCATE " + tables.map((name) => '"' + name + '"').join(","),
-          );
+          const resetTables = await devResetTables(db);
+          await db.query("TRUNCATE " + resetTables);
           await db.query(
             "UPDATE ao3_control SET seed_cursor=NULL,seed_complete=false",
           );
@@ -115,6 +146,12 @@ export async function resetDevArchive(clearQueues: () => Promise<void>) {
           await db.query(
             "INSERT INTO archive_payloads VALUES(sha256(convert_to('{}','UTF8')),0,NULL,2,convert_to('{}','UTF8'))",
           );
+          await db.query("DELETE FROM integrity_packs WHERE job_id<>$1", [
+            job.id,
+          ]);
+          await db.query("DELETE FROM integrity_issues WHERE job_id<>$1", [
+            job.id,
+          ]);
           await db.query("DELETE FROM archive_jobs WHERE id<>$1", [job.id]);
           await db.query(
             "UPDATE catalog_search_state SET epoch=gen_random_uuid() WHERE id=1",

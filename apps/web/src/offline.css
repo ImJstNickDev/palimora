@@ -49,3 +49,56 @@
   min-height: 44px;
   font-size: 14px;
 }
+
+.offline-device-settings {
+  display: grid;
+  gap: 16px;
+  padding: 8px;
+}
+.offline-device-settings p {
+  margin: 0;
+}
+.personal-library .offline-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+.personal-library .offline-entry h2 {
+  margin: 0;
+}
+.offline-remove-target {
+  display: block;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.personal-library .offline-works > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.offline-storage-details {
+  margin: 0;
+  font-size: 14px;
+}
+.offline-storage-details dt {
+  color: var(--muted);
+}
+.offline-storage-details dd {
+  margin: 4px 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+.offline-sync-status {
+  margin-block: 16px;
+  font-size: 14px;
+}
+.offline-sync-status > p:empty {
+  display: none;
+}
+.offline-empty {
+  margin-block: 24px;
+  max-width: 40rem;
+}
+.offline-availability {
+  color: var(--muted);
+  font-size: 14px;
+}

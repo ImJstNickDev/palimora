@@ -1,0 +1,39 @@
+# Explicit external mounts. Provision both directories and the configuration
+# file first; the worker never creates a host mountpoint or identity marker.
+services:
+  api:
+    environment:
+      BACKUP_CONFIG_FILE: /run/secrets/backup-targets.json
+    volumes:
+      - type: bind
+        source: ${BACKUP_CONFIG_FILE:?Set operator configuration file}
+        target: /run/secrets/backup-targets.json
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${BACKUP_DISK1:?Set first backup mount}
+        target: /backup-targets/disk1
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${BACKUP_DISK2:?Set second backup mount}
+        target: /backup-targets/disk2
+        read_only: true
+        bind: { create_host_path: false }
+  ingest:
+    environment:
+      BACKUP_CONFIG_FILE: /run/secrets/backup-targets.json
+    volumes:
+      - type: bind
+        source: ${BACKUP_CONFIG_FILE:?Set operator configuration file}
+        target: /run/secrets/backup-targets.json
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${BACKUP_DISK1:?Set first backup mount}
+        target: /backup-targets/disk1
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${BACKUP_DISK2:?Set second backup mount}
+        target: /backup-targets/disk2
+        bind: { create_host_path: false }

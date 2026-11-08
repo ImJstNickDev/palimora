@@ -1,3 +1,7 @@
+import { auditState } from "./admin-audit";
+import { maintenanceOperation } from "./maintenance-admin";
+import { operationsOperation } from "./operations-admin";
+import { backupOperation } from "./backup-admin";
 import { socialOperation, statistics } from "./social";
 import { readingOperation } from "./reading";
 import { collectionOperation } from "./collections";
@@ -37,6 +41,12 @@ interface Context {
   requestId: string;
   user?: any;
   session?: any;
+  actor?: any;
+  parentSession?: any;
+  auditOp?: string;
+  auditInput?: any;
+  before?: any;
+  audited?: boolean;
 }
 const userColumns =
   "id,username,email,role,disabled,soft_deleted_at,created_at,preferences,(totp_secret IS NOT NULL) AS totp_enabled";
@@ -62,17 +72,35 @@ export class Identity {
     details: object = {},
     outcome = "success",
   ) {
+    c.audited = true;
+    const state =
+      c.before !== undefined
+        ? {
+            before: c.before,
+            after:
+              outcome === "success"
+                ? await auditState(db, c.auditOp!, c.auditInput, c.user?.id)
+                : c.before,
+          }
+        : {};
     await db.query(
-      "INSERT INTO audit(actor_id,effective_user_id,session_id,ip,action,target,details,outcome,request_id) VALUES($1,$1,$2,$3,$4,$5,$6,$7,$8)",
+      "INSERT INTO audit(actor_id,effective_user_id,session_id,ip,action,target,details,outcome,request_id) VALUES($1,$9,$2,$3,$4,$5,$6,$7,$8)",
       [
-        c.user?.id ?? null,
+        c.actor?.id ?? c.user?.id ?? null,
         c.session?.id ?? null,
         c.request.ip ?? "",
         action,
         target ?? null,
-        details,
+        {
+          ...details,
+          ...state,
+          ...(c.parentSession
+            ? { original_session_id: c.parentSession.id }
+            : {}),
+        },
         outcome,
         c.requestId,
+        c.user?.id ?? null,
       ],
     );
   }
@@ -203,21 +231,81 @@ export class Identity {
       const outcome = await transaction(async (db) => {
         // Serialize identity mutations, including authority checks and immediate revocation.
         if (api[op].method !== "get")
-          await db.query("SELECT pg_advisory_xact_lock(70210402)");
+          await db.query(
+            op.startsWith("backup") ||
+              op.startsWith("integrity") ||
+              op === "maintenanceSet" ||
+              (op === "operationsControl" &&
+                ["backup", "admin"].includes(input.family))
+              ? "SELECT pg_advisory_xact_lock_shared(70210402)"
+              : "SELECT pg_advisory_xact_lock(70210402)",
+          );
         if (api[op].access !== "public") {
           const token = c.request.cookies?.palimora_session;
-          if (!token) fail("UNAUTHENTICATED", 401);
+          if (!token) {
+            c.response.clearCookie("palimora_impersonation", { path: "/" });
+            fail("UNAUTHENTICATED", 401);
+          }
           const r = await db.query(
-            `SELECT s.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND NOT u.disabled AND u.soft_deleted_at IS NULL`,
+            `SELECT s.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.parent_session_id IS NULL AND s.revoked_at IS NULL AND s.expires_at>now() AND NOT u.disabled AND u.soft_deleted_at IS NULL`,
             [digest(token)],
           );
           c.session = r.rows[0];
-          if (!c.session) fail("UNAUTHENTICATED", 401);
+          if (!c.session) {
+            c.response.clearCookie("palimora_impersonation", { path: "/" });
+            fail("UNAUTHENTICATED", 401);
+          }
           c.user = (
             await db.query("SELECT * FROM users WHERE id=$1", [
               c.session.user_id,
             ])
           ).rows[0];
+          const childToken = c.request.cookies?.palimora_impersonation;
+          if (childToken) {
+            const child = (
+              await db.query(
+                "SELECT * FROM sessions WHERE token_hash=$1 AND parent_session_id=$2",
+                [digest(childToken), c.session.id],
+              )
+            ).rows[0];
+            const target = child
+              ? (
+                  await db.query("SELECT * FROM users WHERE id=$1", [
+                    child.user_id,
+                  ])
+                ).rows[0]
+              : null;
+            const valid =
+              child &&
+              !child.revoked_at &&
+              new Date(child.expires_at).getTime() > Date.now() &&
+              target?.role === "User" &&
+              !target.disabled &&
+              !target.soft_deleted_at &&
+              c.user.role !== "User";
+            if (valid || (op === "impersonationStop" && child)) {
+              c.actor = c.user;
+              c.parentSession = c.session;
+              c.session = child;
+              c.user = target;
+            } else if (op === "me") {
+              if (child) {
+                await db.query(
+                  "UPDATE sessions SET revoked_at=coalesce(revoked_at,now()) WHERE id=$1",
+                  [child.id],
+                );
+                await this.audit(db, c, "impersonation.expired", child.user_id);
+              }
+              c.response.clearCookie("palimora_impersonation", { path: "/" });
+            } else fail("UNAUTHENTICATED", 401);
+          }
+          if (
+            c.actor &&
+            (op === "impersonationStart" ||
+              /^(password|deleteAccount|totp|recovery|passkey)/.test(op) ||
+              api[op].path.startsWith("/me/sessions"))
+          )
+            fail("IMPERSONATION_RESTRICTED", 403);
           if (
             api[op].method !== "get" &&
             c.request.headers["x-csrf-token"] !== c.session.csrf
@@ -232,9 +320,50 @@ export class Identity {
             [c.session.id],
           );
         }
+        const mode = (await db.query("SELECT maintenance_mode FROM instance"))
+          .rows[0].maintenance_mode;
+        if (
+          mode === "maintenance_full" &&
+          ![
+            "status",
+            "me",
+            "login",
+            "passkeyLoginStart",
+            "passkeyLoginFinish",
+            "logout",
+            "impersonationStop",
+          ].includes(op) &&
+          (!c.user || c.user.role === "User")
+        )
+          fail("MAINTENANCE", 503);
+        if (
+          api[op].access === "public" &&
+          c.request.cookies?.palimora_impersonation &&
+          op !== "status"
+        )
+          fail("IMPERSONATION_RESTRICTED", 403);
         if (op === "login" || op === "passkeyLoginFinish")
           return this.loginAttempt(db, op, input, c);
+        c.auditOp = op;
+        c.auditInput = input;
+        if (
+          api[op].method !== "get" &&
+          (c.actor || c.user?.role === "Owner" || c.user?.role === "Admin")
+        )
+          c.before = await auditState(db, op, input, c.user?.id);
         const result = await this.run(db, op, input, c);
+        if (
+          !c.audited &&
+          (c.actor ||
+            (api[op].method !== "get" && c.user?.role !== "User" && c.user))
+        )
+          await this.audit(
+            db,
+            c,
+            op,
+            input.id ?? input.requestId ?? input.issue,
+            { action: input.action },
+          );
         return { result: op === "readerDownload" ? result : serialize(result) };
       });
       if ("error" in outcome) throw outcome.error;
@@ -242,13 +371,43 @@ export class Identity {
     } catch (e) {
       if (api[op].method !== "get") {
         await transaction((db) =>
-          this.audit(db, c, op, undefined, {}, "failure"),
+          this.audit(
+            db,
+            c,
+            op,
+            input.id ?? input.issue ?? input.requestId,
+            {},
+            "failure",
+          ),
         ).catch(() => {});
       }
       throw e;
     }
   }
+  private authResult(c: Context) {
+    return {
+      user: publicUser(c.user),
+      csrf: c.session.csrf,
+      session: {
+        id: c.session.id,
+        expires_at: new Date(c.session.expires_at).toISOString(),
+      },
+      impersonation: c.actor
+        ? {
+            actor_id: c.actor.id,
+            actor_username: c.actor.username,
+            expires_at: new Date(c.session.expires_at).toISOString(),
+          }
+        : null,
+    };
+  }
   private async newSession(db: DB, c: Context, user: any) {
+    if (
+      user.role === "User" &&
+      (await db.query("SELECT maintenance_mode FROM instance")).rows[0]
+        .maintenance_mode === "maintenance_full"
+    )
+      fail("MAINTENANCE", 503);
     const token = random(),
       csrf = random(),
       id = randomUUID();
@@ -382,6 +541,119 @@ export class Identity {
     c: Context,
   ): Promise<unknown> {
     switch (op) {
+      case "maintenanceSet":
+      case "integrityStatus":
+      case "integrityIssues":
+      case "integrityStart":
+      case "integrityControl":
+      case "integritySchedule":
+      case "integrityRepair":
+      case "auditList": {
+        const r = await maintenanceOperation(db, op, x, c.user);
+        if (op === "auditList") await this.audit(db, c, op, x.target);
+        return r;
+      }
+      case "impersonationStart": {
+        if (c.actor) fail("FORBIDDEN", 403);
+        const target = (
+          await db.query(
+            "SELECT * FROM users WHERE id=$1 AND role='User' AND NOT disabled AND soft_deleted_at IS NULL",
+            [x.id],
+          )
+        ).rows[0];
+        if (!target) fail("FORBIDDEN", 403);
+        const token = random(),
+          csrf = random(),
+          id = randomUUID();
+        await db.query(
+          "UPDATE sessions SET revoked_at=now() WHERE parent_session_id=$1 AND revoked_at IS NULL",
+          [c.session.id],
+        );
+        const child = (
+          await db.query(
+            "INSERT INTO sessions(id,user_id,token_hash,csrf,device,ip,parent_session_id,actor_admin_id,expires_at) VALUES($1,$2,$3,$4,'Impersonation',$5,$6,$7,least($8::timestamptz,now()+interval '15 minutes')) RETURNING *",
+            [
+              id,
+              target.id,
+              digest(token),
+              csrf,
+              c.request.ip ?? "",
+              c.session.id,
+              c.user.id,
+              c.session.expires_at,
+            ],
+          )
+        ).rows[0];
+        c.actor = c.user;
+        c.parentSession = c.session;
+        c.user = target;
+        c.session = child;
+        c.response.cookie("palimora_impersonation", token, {
+          httpOnly: true,
+          secure: config().secure,
+          sameSite: "strict",
+          path: "/",
+          maxAge: 900000,
+        });
+        await this.audit(db, c, "impersonation.start", target.id, {
+          before: { impersonating: false },
+          after: { impersonating: true },
+        });
+        return this.authResult(c);
+      }
+      case "impersonationStop": {
+        if (c.parentSession) {
+          await db.query("UPDATE sessions SET revoked_at=now() WHERE id=$1", [
+            c.session.id,
+          ]);
+          await this.audit(db, c, "impersonation.stop", c.user.id);
+          c.user = c.actor;
+          c.session = c.parentSession;
+          c.actor = undefined;
+          c.parentSession = undefined;
+        }
+        c.response.clearCookie("palimora_impersonation", { path: "/" });
+        return this.authResult(c);
+      }
+
+      case "operationsOverview":
+      case "operationsMetrics":
+      case "operationsJobs":
+      case "operationsHistory":
+      case "operationsLayout":
+      case "operationsControl": {
+        const result = await operationsOperation(db, op, x, c.user);
+        if (api[op].method !== "get")
+          await this.audit(db, c, op, x.id ?? c.user.id, {
+            family: x.family,
+            action: x.action,
+            sections: x.sections,
+          });
+        return result;
+      }
+
+      case "backupStatus":
+      case "backupCreate":
+      case "backupDetail":
+      case "backupControl":
+      case "backupDestination":
+      case "backupSchedule":
+      case "backupRestorePreview":
+      case "backupRestore":
+      case "backupFile": {
+        const result = await backupOperation(db, op, x, c.user);
+        if (
+          api[op].method !== "get" ||
+          op === "backupFile" ||
+          op === "backupRestorePreview"
+        )
+          await this.audit(db, c, op, x.id ?? x.requestId, {
+            action: x.action,
+            target: x.target,
+          });
+        return result;
+      }
+
       case "ao3UploadStart":
       case "ao3UploadChunk":
       case "ao3UploadFinish":
@@ -432,6 +704,7 @@ export class Identity {
       case "subscriptionSave":
       case "subscriptions":
       case "notifications":
+      case "notificationsReadAll":
       case "notificationRead":
       case "pushDevices":
       case "pushRegister":
@@ -446,6 +719,7 @@ export class Identity {
       case "collectionCreate":
       case "collectionDetail":
       case "collectionUpdate":
+      case "collectionCandidates":
       case "collectionMember":
       case "collectionRespond":
       case "collectionWork": {
@@ -500,7 +774,9 @@ export class Identity {
         return result;
       }
       case "status": {
-        const r = (await db.query("SELECT state,name FROM instance")).rows[0];
+        const r = (
+          await db.query("SELECT state,name,maintenance_mode FROM instance")
+        ).rows[0];
         return r;
       }
       case "setup": {
@@ -595,15 +871,13 @@ export class Identity {
         return result;
       }
       case "me":
-        return {
-          user: publicUser(c.user),
-          csrf: c.session.csrf,
-          session: {
-            id: c.session.id,
-            expires_at: c.session.expires_at.toISOString(),
-          },
-        };
+        return this.authResult(c);
       case "logout":
+        if (c.parentSession)
+          await db.query("UPDATE sessions SET revoked_at=now() WHERE id=$1", [
+            c.parentSession.id,
+          ]);
+        c.response.clearCookie("palimora_impersonation", { path: "/" });
         await db.query("UPDATE sessions SET revoked_at=now() WHERE id=$1", [
           c.session.id,
         ]);

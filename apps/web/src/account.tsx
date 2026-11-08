@@ -29,7 +29,7 @@ import {
 } from "./shared";
 export function Account() {
   const t = useText(),
-    { user, refresh, leave } = useContext(Auth),
+    { user, refresh, leave, impersonating } = useContext(Auth),
     action = useAction();
   const [deleting, setDeleting] = useState(false);
   const [prefs, setPrefs] = useState(user.preferences);
@@ -72,7 +72,7 @@ export function Account() {
           </Button>
         </Form>
       </section>
-      {user.role !== "Owner" && (
+      {user.role !== "Owner" && !impersonating && (
         <section>
           <h2>{t("Elimina account", "Delete account")}</h2>
           <Button tone="danger" onClick={() => setDeleting(true)}>

@@ -36,6 +36,7 @@ test("AO3 control panel distinguishes suspended jobs and recovers a selected mis
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
+  await expect(page.getByLabel(/Nome utente/).first()).toBeVisible();
   if (await page.getByLabel("Nome utente Owner").isVisible()) {
     await page.getByLabel("Nome utente Owner").fill("syncowner");
     await page

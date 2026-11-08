@@ -141,10 +141,9 @@ export async function syncAdmin(db: DB, op: string, x: any) {
     return { ok: true };
   }
   if (op === "ao3JobControl") {
-    if (
-      !(await db.query("SELECT 1 FROM ao3_jobs WHERE id=$1", [x.id])).rowCount
-    )
-      fail("NOT_FOUND", 404);
+    const job=(await db.query("SELECT state FROM ao3_jobs WHERE id=$1 FOR UPDATE", [x.id])).rows[0];
+    if(!job)fail("NOT_FOUND",404);
+    if(job.state==='running')fail("CONFLICT",409);
     if (x.action === "pause")
       await db.query(
         "UPDATE ao3_jobs SET state='blocked' WHERE id=$1 AND state<>'running'",

@@ -217,7 +217,9 @@ verificati non vengono presentati come irrecuperabili.
 nell'URL, filtri e paginazione. «Salva in biblioteca» salva immediatamente senza
 richiedere note o tag. Il menu mostra le collezioni disponibili, «Nuova collezione»
 come prima scelta di organizzazione e un segno sulle collezioni che contengono
-l'opera. Le voci sono toggle: un secondo clic rimuove l'opera dalla collezione.
+l'opera. Un divisore separa il salvataggio dalla sezione collezioni;
+«Nuova collezione» e la lista seguente sono contigue, senza divisori intermedi.
+Le voci sono toggle: un secondo clic rimuove l'opera dalla collezione.
 Il menu resta aperto per organizzare più collezioni. Ogni aggiunta salva
 anche l'opera nella biblioteca personale di chi agisce, nella stessa transazione.
 
@@ -241,6 +243,21 @@ per organizzare le opere. Dettagli, opere, inviti e membri condividono i compone
 esistenti; le azioni dipendono dal ruolo restituito dal server. L'eliminazione
 richiede conferma e conserva opere archiviate e salvataggi personali. Rimuovere
 un'opera da una collezione non la rimuove dalla biblioteca personale.
+La lista collezioni usa il solo divisore sotto le tab prima della prima voce;
+i separatori delle righe successive restano visibili. Il ruolo del proprietario
+compare soltanto nel menu Membri e condivisione; nella lista si mostrano solo
+«Puoi modificare» e «Sola lettura» per le collezioni ricevute.
+Membri e condivisione si apre dall’icona utenti accanto alle azioni della collezione.
+Il proprietario cerca e seleziona utenti da una lista paginata, sceglie il permesso
+e invia gli inviti, anche multipli. Membri e inviti già presenti sono esclusi
+dalla ricerca. Nel menu compaiono tutti i membri, con stato dell’invito e, per
+il proprietario, azioni per modificare il permesso o confermare la rimozione.
+Gli altri membri consultano la lista senza comandi di gestione.
+Il dettaglio usa il nome della collezione come titolo, senza la label superiore
+«Biblioteca personale». Mostra direttamente l’elenco delle opere, senza titolo «Opere» né
+pulsante «+» verso la Biblioteca; si aggiungono opere dal loro menu di salvataggio.
+Anche qui il primo elemento non aggiunge un divisore sotto quello delle tab;
+restano i separatori tra le opere.
 
 Il lettore campiona la posizione testuale dopo lo scorrimento e salva dopo una
 breve stabilizzazione. Stato e percentuale sono visibili anche in biblioteca.
@@ -270,7 +287,15 @@ le collezioni esistenti.
 
 Statistiche con etichette che distinguono opere completate, parole di quelle opere
 e tempo attivo misurato; andamento dei completamenti in UTC. Notifiche persistenti
-lette/non lette, filtro non lette e aggiornamento periodico ogni 30 s. Preferenze
+lette/non lette e aggiornamento periodico ogni 30 s. Titolo «Notifiche» senza
+contatore; filtro compatto Tutte/Non lette nell’URL, conteggio solo se positivo.
+Le righe mostrano titolo, motivo e data breve (ora oggi, Ieri, data nei giorni
+precedenti), con data completa accessibile. Un pallino e il peso del titolo
+segnalano le non lette senza spostare il testo. Note storiche espandibili.
+Aprire una notifica la segna letta; un’azione laterale permette di cambiare stato.
+«Segna tutte come lette» nell’intestazione opera su tutte le notifiche dell’utente,
+non solo sulla pagina caricata. Stato vuoto distinto tra «Nessuna notifica» e
+«Hai letto tutte le notifiche». Preferenze
 per consigli, aggiornamenti, push e aggregazione singola/5 minuti/ora. Attivazione
 push soltanto su gesto esplicito, permessi negati gestibili, elenco dispositivi e
 revoca. IT/EN e layout compatti desktop/mobile/tablet.
@@ -296,6 +321,21 @@ Revisione della biblioteca: navigazione personale uniforme anche nelle collezion
 nessun collegamento duplicato alle collezioni, stato locale visibile nel lettore,
 conferma prima di eliminare modifiche non inviate al logout. Installazione e
 aggiornamento applicativo non modificano le copie delle opere.
+
+La pagina Offline mostra una sola riga per opera: titolo che apre il reader e
+cestino. Nessun riepilogo, data, dimensione o dettaglio delle versioni nell’elenco.
+Le versioni restano conservate e accessibili dal reader; il titolo apre quella
+corrente verificata se scaricata, altrimenti l’ultima salvata. Il cestino rimuove
+atomicamente tutte le copie locali dell’opera, dopo conferma, preservando le altre
+opere e rifiutando la rimozione se ci sono modifiche dell’opera ancora da inviare.
+Installazione, conservazione persistente e rimozione di tutte le copie stanno nel
+menu del dispositivo. Quota e utilizzo del sito sono stime del browser, distinte
+dai byte delle copie; non vengono presentati come spazio libero del dispositivo.
+Caricamento, errori con retry e archivio vuoto hanno stati espliciti. L’assenza di
+supporto al salvataggio offline viene segnalata senza impedire la consultazione
+di copie esistenti. La sincronizzazione distingue attività in corso, attesa di
+connessione e conflitti raggruppati per modifica, con titolo dell’opera coinvolta.
+
 
 ### Revisione visiva dopo la milestone 5
 
@@ -415,3 +455,35 @@ preservati, ricerca da tastiera e selezione unica dopo reload e avanti/indietro.
 Controlli a 320/390/820 px e lista opere anche a 1280 px; tab attiva visibile dopo
 ridimensionamento. Build web e test browser biblioteca, collezioni/annotazioni,
 funzioni sociali e ciclo offline con riavvio e isolamento account superati.
+
+
+## Backup Manager — 6A.3
+
+`/admin/backups`, per Owner/Admin: tre sezioni Operazioni, Destinazioni e
+Pianificazioni. Storico paginato, dettaglio collegabile tramite URL, avanzamento
+con fase/contatori reali, azioni coerenti con stato e capacità del motore.
+Creazione distingue completo, piattaforma ed export con base incrementale;
+file e checksum sono nel dettaglio, informazioni tecniche espandibili. Mobile:
+navigazione su una riga, comandi compatti, storico con modalità/stato/dimensione;
+data e destinazione restano nel dettaglio.
+
+Restore solo Owner: verifica del target autorizzato, conseguenze e conferma
+scritta; nessun percorso filesystem inserito dal browser. Destinazioni con spazio,
+disponibilità e messaggi operativi; configurazione solo di etichetta/abilitazione.
+Pianificazioni con attivazione esplicita, frequenza e conservazione. Contratto
+operativo e limiti in [08](08-backup-export.md#administration--integration--6a3).
+
+## Dashboard operativa — 6B.1
+
+Home amministrativa `/admin`: sezioni ordinate Attività, Container, Prestazioni
+API e Spazio, configurabili per account senza framework di widget. Quattro card
+compatte e interamente navigabili mostrano backlog e anomalie; le misure dettagliate
+restano in tabella o nei grafici delle pagine dedicate. Stato del collector,
+valori assenti e timestamp di campionamento sono espliciti.
+
+`/admin/operations/metrics`: sorgente, metrica e intervallo, grafico SVG con
+campioni consultabili e tabella accessibile; i buchi temporali interrompono la
+linea. `/admin/operations/jobs`: filtro per famiglia/stato, dettaglio collegabile,
+cronologia e soli controlli ammessi dal backend. Mobile: card su due colonne,
+comandi compatti, tabelle tecniche scorrevoli; tablet mantiene la gerarchia delle
+sezioni. Navigazione, dialoghi e focus riusano il design system esistente.

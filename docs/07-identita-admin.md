@@ -88,3 +88,91 @@ un obbligo di revoca, eseguito prima del successivo accesso online. Se ci sono
 modifiche non sincronizzate, il logout richiede di gestirle oppure eliminarle
 esplicitamente. È disponibile anche la rimozione delle sole copie locali.
 La cache del service worker contiene esclusivamente asset applicativi pubblici.
+
+### Operations Dashboard & Monitoring — 6B.1
+
+`/admin` è la panoramica operativa Owner/Admin: attività, container, prestazioni
+e spazio. Le sezioni sono selezionabili e ordinabili per account; tutte le card
+aprono le pagine del dominio. `/admin/operations/metrics` offre intervalli ora,
+24 ore, 7 e 30 giorni, grafici e dati tabellari accessibili. API/ricerca espongono
+latenza media, massima, limite p95, richieste ed errori 5xx per intervallo. `/admin/operations/jobs`
+riunisce ingest, sync, media, proiezioni, backup e job storage già esistenti, con
+filtri, paginazione, dettaglio, cronologia e collegamenti alle pagine dedicate.
+La cronologia riusa esecuzioni e audit dei domini: per backup l’inizio indica
+la creazione della richiesta; per vecchi job storage la fine non è registrata.
+L'Utente non può leggere né controllare le operazioni, anche via API diretta.
+
+Le azioni delegate usano gli stessi servizi amministrativi dei domini e lo
+stesso audit. Ingest: pausa/ripresa negli stati ammessi; backup: controlli del
+motore e restore ancora riservato Owner. Sync/media: pausa/retry solo fuori
+esecuzione, con conflitto esplicito in caso di race; priorità per tipo tramite
+la configurazione già esistente, propagate ai job BullMQ in attesa conservando
+l'invecchiamento dello scheduler. I job amministrativi storage sono consultabili:
+non vengono introdotti nuovi controlli di manutenzione.
+
+I due processi di proiezione catalogo/ricerca rimangono i timer e le code SQL
+esistenti. Pausa al termine del blocco corrente, ripresa e retry modificano il
+loro stato persistito, senza una coda alternativa. Lock di sessione distinti
+impediscono doppie esecuzioni tra API replicate. Dopo un crash il successivo tick
+riprende dalla coda SQL; errori e retry a un minuto sono visibili. La cronologia
+conserva blocchi con lavoro effettivo, errori e recuperi, al massimo 5.000 righe
+per 30 giorni, senza registrare tick vuoti.
+
+Le latenze includono richieste API completate, con categoria aggiuntiva per
+catalogo/ricerca. Nessun URL, testo cercato, cookie o utente entra nella telemetria.
+Istogrammi a bucket fissi producono un limite superiore p95; oltre 30 s viene
+mostrato `> 30 s`, senza inventare una precisione inesistente. Buffer in memoria
+limitato a dieci minuti in caso di DB indisponibile, flush ogni 10 s: un arresto
+brusco può perdere le sole richieste non ancora persistite.
+
+Container e trasporto code: campioni ogni 10 s. Totali applicativi ogni minuto;
+misure di database/pack/media ogni cinque minuti, in un'attività separata dalle
+metriche live. Media è la quota degli asset compressi già inclusa nei pack,
+non uno spazio aggiuntivo. OpenSearch riporta il suo indice Palimora; PostgreSQL
+lo spazio del database corrente; pack fisici e byte referenziati restano distinti.
+I conteggi riportano l'ora di campionamento. La UI aggiorna job ogni 5 s e metriche
+ogni 10 s; errori Redis, OpenSearch o collector non bloccano le altre sezioni.
+
+Persistenza aggregata: un minuto per 24 ore, un'ora per 30 giorni; consolidamento
+e retention ogni 15 minuti, con tagli su ore intere per non ricontare/ridurre
+bucket già consolidati. Le serie container sono aggregate per servizio, anche
+con repliche, mentre il campione corrente conserva gli ID separati. Le lacune
+restano lacune nei grafici. Nessuna nuova modalità di manutenzione, scrub,
+impersonazione o modifica delle risorse Docker in 6B.1.
+
+## Manutenzione, integrità e impersonazione — 6B.2
+
+`/admin/maintenance`, `/admin/integrity` e `/admin/audit` riutilizzano navigazione,
+job e autorizzazioni operative. La modalità è in `instance.maintenance_mode` e
+sopravvive ai riavvii. Le mutazioni richiedono Origin, CSRF e Owner/Admin; il
+recupero di oggetti da backup è riservato all'Owner con conferma esplicita.
+
+In modalità leggera il dispatcher passa da 1 s a 100 ms, i job ingest/sync
+ammessi ricevono priorità BullMQ 1 e catalogo/ricerca possono eseguire quattro
+passi per tick; lo scrub passa da 32 a 128 record per checkpoint. Restano invariati
+concorrenza dei worker, pause esplicite, gate/rate limit AO3 e limiti Docker.
+Non vengono modificati cgroup, priorità dei processi host o servizi esterni.
+In modalità totale la stessa politica si applica con accesso alla biblioteca
+riservato agli amministratori. Il controllo API legge la modalità persistita;
+la UI la aggiorna ogni 5 s e mostra la pagina manutenzione anche agli utenti
+con sessione attiva. Restano disponibili stato, identificazione della propria
+sessione, autenticazione amministrativa e uscita. Un dispositivo senza rete
+non può conoscere un cambio di modalità: copie offline già consegnate non sono
+revocabili retroattivamente.
+
+Dal dettaglio utente Owner/Admin possono aprire una sessione impersonata di
+massimo 15 minuti esclusivamente verso un account User attivo. Cookie e CSRF
+separati, vincolo alla sessione originale valida e controllo del ruolo a ogni
+richiesta. La sessione figlia non è utilizzabile come login autonomo. Le ACL
+usano sempre l'utente effettivo; niente funzioni amministrative, impersonazioni
+annidate, modifica delle credenziali, eliminazione account o gestione sessioni.
+La barra permette il ritorno immediato; cache e coda offline non conservano dati
+della sessione impersonata. Logout chiude anche la sessione originale.
+
+L'unica tabella `audit` resta append-only. Azioni amministrative e richieste
+impersonate distinguono operatore, utente effettivo, sessione originale/figlia,
+IP, risorsa, timestamp ed esito. Before/after usano elenchi positivi di campi,
+mai credenziali o contenuti personali. Gli esiti asincroni di backup e integrità
+sono correlati al job e recuperano IP/sessione dalla richiesta iniziale; le
+esecuzioni pianificate non inventano una sessione o un IP interattivi. Il pannello
+ha paginazione per ID bigint e filtri per operatore, azione, risorsa ed esito.

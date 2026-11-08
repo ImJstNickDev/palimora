@@ -5,6 +5,7 @@ test("personal settings, subscriptions, private recommendations and notification
   page,
   browser,
 }, info) => {
+  test.setTimeout(90000);
   const url = process.env.TEST_DATABASE_URL!;
   if (!new URL(url).pathname.includes("test"))
     throw Error("Dedicated test database required");
@@ -43,6 +44,14 @@ test("personal settings, subscriptions, private recommendations and notification
     expect(
       (
         await guestContext.request.get("/api/v1/recommendations/recipients")
+      ).status(),
+    ).toBe(401);
+    expect(
+      (
+        await guestContext.request.post("/api/v1/notifications/read-all", {
+          headers: { origin: "http://localhost:5173" },
+          data: {},
+        })
       ).status(),
     ).toBe(401);
     const guest = await guestContext.newPage();
@@ -243,8 +252,108 @@ test("personal settings, subscriptions, private recommendations and notification
     await expect(
       guest.getByRole("button", { name: "Segna non letta", exact: true }),
     ).toBeVisible();
-    await guest.getByLabel("Solo non lette").check();
-    await expect(guest.getByText("Nessuna notifica.")).toBeVisible();
+    await guest.getByRole("button", { name: /^Non lette/ }).click();
+    await expect(
+      guest.getByText("Hai letto tutte le notifiche."),
+    ).toBeVisible();
+    await expect(
+      guest.getByRole("heading", { name: "Notifiche", exact: true }),
+    ).toBeVisible();
+    await guest.reload();
+    await expect(
+      guest.getByRole("button", { name: /^Non lette/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await guest.getByRole("button", { name: "Tutte", exact: true }).click();
+    await guest
+      .getByRole("button", { name: "Segna non letta", exact: true })
+      .click();
+    await guest.locator(".notification-entry").getByRole("link").click();
+    await expect(guest).toHaveURL(new RegExp("/works/" + work));
+    await guest.goto("/library/notifications");
+    await expect(guest.locator(".notification-entry.unread")).toHaveCount(0);
+    const recipientId = (
+      await db.query("SELECT id FROM users WHERE username='socialreader'")
+    ).rows[0].id;
+    const otherUnread = (
+      await db.query(
+        "SELECT count(*) FROM personal_notifications WHERE user_id<>$1 AND read_at IS NULL",
+        [recipientId],
+      )
+    ).rows[0].count;
+    await db.query(
+      "UPDATE personal_recommendations SET note=$2 WHERE recipient_id=$1",
+      [recipientId, "Una nota storica da conservare. ".repeat(20)],
+    );
+    await db.query(
+      "INSERT INTO personal_notifications(user_id,kind,work_id,bucket,versions,updated_at) VALUES($1,'update',$2,-1,1,now()),($1,'update',$2,-2,3,now()-interval '1 day')",
+      [recipientId, work],
+    );
+    await guest.reload();
+    await expect(
+      guest.getByText("Opera aggiornata", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      guest.getByText("3 aggiornamenti", { exact: true }),
+    ).toBeVisible();
+    await expect(guest.getByText("Ieri", { exact: true })).toBeVisible();
+    await expect(guest.locator(".notification-note p")).toBeHidden();
+    for (const width of [320, 390, 820, 1440]) {
+      await guest.setViewportSize({ width, height: 900 });
+      expect(
+        await guest.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await guest.screenshot({
+        path: info.outputPath(`notifications-${width}.png`),
+        fullPage: true,
+      });
+    }
+    await guest.getByText("Messaggio", { exact: true }).click();
+    await expect(guest.locator(".notification-note p")).toBeVisible();
+    await db.query(
+      "INSERT INTO personal_notifications(user_id,kind,work_id,bucket) SELECT $1,'update',$2,-g FROM generate_series(3,56) g",
+      [recipientId, work],
+    );
+    await guest.reload();
+    await expect(guest.locator(".notification-entry")).toHaveCount(50);
+    await expect(
+      guest.getByRole("button", { name: "Altre notifiche", exact: true }),
+    ).toBeVisible();
+    expect(
+      (
+        await guest.request.post("/api/v1/notifications/read-all", { data: {} })
+      ).status(),
+    ).toBe(403);
+    await guest
+      .getByRole("button", { name: "Segna tutte come lette", exact: true })
+      .click();
+    await expect(
+      guest.getByRole("button", {
+        name: "Segna tutte come lette",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    expect(
+      (
+        await db.query(
+          "SELECT count(*) FROM personal_notifications WHERE user_id=$1 AND read_at IS NULL",
+          [recipientId],
+        )
+      ).rows[0].count,
+    ).toBe("0");
+    expect(
+      (
+        await db.query(
+          "SELECT count(*) FROM personal_notifications WHERE user_id<>$1 AND read_at IS NULL",
+          [recipientId],
+        )
+      ).rows[0].count,
+    ).toBe(otherUnread);
+    await guest.getByRole("button", { name: "Non lette", exact: true }).click();
+    await expect(
+      guest.getByText("Hai letto tutte le notifiche."),
+    ).toBeVisible();
     await page.goto("/subscriptions");
     await expect(
       page.getByRole("link", { name: "A shared recommendation" }),

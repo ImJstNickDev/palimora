@@ -45,6 +45,10 @@
 
 ## Milestone 6 — Operations & Release
 
+**Stato:** Milestone 6 completata (6A, 6B, 6C), 2026-11-08. Prima release
+**1.0.0** preparata e verificata localmente; limiti delle verifiche remote nella
+chiusura 6C. Nessun deployment produttivo effettuato.
+
 **Deliverable:** dashboard cliccabile e metriche dei soli container Palimora, gestione jobs, impostazioni risorse e manutenzione leggera/totale, audit e impersonazione, scrub/ripristino, backup piattaforma e completo, export storico completo/incrementale volumi max 2 GiB, CLI standalone, backup destinazioni esterne, restore. UX delle nuove pagine definitiva, non refactoring cosmetico di quelle già consegnate.
 
 **Verifica critica:** backup/restore verificabili e consistenti, export legge senza Postgres, dischi esterni smontati non ricevono backup nella directory host sottostante, amministratori senza privilegi Owner non possono inviare inviti o ripristinare tutto.
@@ -959,3 +963,290 @@ Push tramite provider esterno già indicata in 5B. Revoche remote non conoscibil
 senza rete, coda ripresa mentre l'app è aperta o alla riapertura, tempo di lettura
 offline non stimato. Nessun benchmark aggiuntivo o SLO dichiarato. **Milestone 6
 non iniziata**, nessuna sincronizzazione di account personali AO3 introdotta.
+
+## Blocco 6A — stato del lavoro al 2026-11-08
+
+**Milestone 6A completata e integrata (6A.1, 6A.2, 6A.3).**
+Formato multi-volume e CLI standalone del primo passaggio riutilizzati dal motore
+piattaforma/completo. Acquisizione MVCC con pack protetti, checksum, recupero da
+interruzioni, restore su target separati, riconciliazione conservativa e report
+persistente; comandi operatore e procedura in [08](08-backup-export.md#motore-backup-e-restore--2026-11-08).
+
+Verifica riproducibile: `./scripts/verify-backups.sh`. PostgreSQL 17 temporaneo in
+tmpfs, nessuna porta pubblicata, ruolo non-superuser proprietario dei database di
+prova; database sorgente e destinazioni distinti, PackStore in directory temporanee.
+Il test confronta righe di opere, snapshot e revisioni storiche, locator, account,
+audit (anche bigint oltre 2^53), bookmark, collezioni, progressi, annotazioni e
+versioni, notifiche. Verifica anche la decifratura TOTP con la chiave recuperata.
+Il restore completo avviene con lo storage sorgente temporaneamente indisponibile.
+
+Il piattaforma viene ripristinato separatamente su un corpus compatibile, con
+ID opera locale differente e ID AO3 uguale: bookmark riconciliato, ancore conservate,
+un riferimento a opera assente segnalato senza alterare il corpus. Conferma errata,
+account già presenti, chiave cifratura errata e mount/device errato sono rifiutati.
+Interruzione durante cattura e restore, rollback SQL e ripetizione idempotente;
+ripresa del packing dal checkpoint con pack sorgenti indisponibili; ENOSPC prima
+della scrittura. Volumi di 4 KiB forzano l'output multi-volume: nessuna misura di
+throughput o prova con volumi fisici da 2 GiB è dichiarata.
+
+Le notifiche pendenti mantengono l'eleggibilità originaria anche nel nuovo cluster;
+il test avvia proiezioni e consumatore reali sul database restaurato e verifica
+la consegna senza duplicati. La regressione mirata `tests/social.test.ts` verifica
+anche il percorso ordinario del consumatore. I quattro test standalone in
+`tests/archive-export.test.ts` restano separati dal ciclo PostgreSQL.
+
+Il blocco finale 6A.3 aggiunge API tipizzate e autorizzate, Backup Manager React
+con storico e avanzamento, destinazioni operative, pianificazioni opt-in e
+conservazione, download autenticati in streaming con Range, restore guidato e
+audit. Le operazioni persistite in PostgreSQL alimentano BullMQ nel worker
+esistente; pause, annullamenti, retry e recupero riusano i checkpoint del motore.
+Export pubblico del catalogo e re-ingest preservano versioni e provenienza,
+riutilizzando formato multi-volume e PackStore; nessuna duplicazione del motore.
+
+Verifica finale 6A.3: `./scripts/verify-backup-manager.sh` dopo `npm run build`.
+Un solo percorso Playwright con React, API NestJS, worker e Redis reali,
+PostgreSQL 17 isolato e volumi da 4 KiB. Verificati:
+
+- creazione e verifica backup completo da UI, restore su DB/PackStore separati;
+- export multi-volume e incrementale, CLI verifica/elenco/importazione e
+  re-ingest ripetuto nel nuovo corpus, con due versioni storiche e senza account;
+- backup piattaforma e restore via UI sul corpus importato, bookmark privato
+  riconciliato e versioni conservate;
+- pianificazione inizialmente disabilitata, abilitazione esplicita, due scadenze
+  accelerate nel DB di test e rimozione della copia eccedente la conservazione;
+- pausa, annullamento, retry e recupero di un job persistito dopo SIGKILL e
+  riavvio effettivo del worker;
+- Owner/Admin/Utente, CSRF, download privati, risposte parziali HTTP Range,
+  blocco dell'eliminazione di una base incrementale e richiesta idempotente;
+- device esterno indisponibile: job fallito con errore operativo e nessuna
+  directory creata sul filesystem sottostante;
+- screenshot e revisione visuale desktop/390 px, assenza di overflow della pagina
+  ed errori JavaScript.
+
+Build monorepo e validazione Compose passate; regressioni mirate:
+`./scripts/verify-backups.sh tests/social.test.ts` (3 test) e
+`npx tsx --test tests/archive-export.test.ts` (4 test). Nessuna suite aggiuntiva
+ridondante. Il test amministrativo non avvia OpenSearch: la ricostruzione delle
+proiezioni è accodata dal motore, la ricerca full-text non è oggetto di questa prova.
+Limiti della prova 6A: volumi fisici da 2 GiB non scritti in quella fase (verificati
+in 6C); indici dei manifest
+in memoria proporzionali al numero di oggetti; ripresa dal checkpoint di cattura,
+non dal byte interrotto del volume; re-ingest SQL su corpus vuoto/schema identico.
+Configurazione, vincoli e comandi in [08](08-backup-export.md#administration--integration--6a3).
+Alla consegna di 6A la Milestone 6 restava aperta per 6B e 6C, documentate sotto.
+Produzione e dump originali invariati.
+
+
+## Blocco 6B.1 — Operations Dashboard & Monitoring, 2026-11-08
+
+Dashboard `/admin` con layout persistente per account, card navigabili, sezioni
+container/prestazioni/spazio, pagine metriche e job responsive. API Admin/Owner,
+audit dei controlli e vista unificata delle code SQL già esistenti; nessun nuovo
+scheduler. Priorità sync propagate al trasporto BullMQ, proiezioni con
+pausa/ripresa/retry persistenti. I controlli delegati rispettano i vincoli dei
+motori, inclusa l'autorità Owner sui restore.
+
+Collector separato e proxy Docker ristretto al progetto/servizi Palimora,
+nessun socket nel backend e nessuna porta host. PostgreSQL conserva aggregati
+minuti/orari con retention limitata; intervalli e campioni mancanti sono espliciti.
+Architettura, frequenze e semantica in [02](02-architettura.md#collector-operativo--6b1),
+[07](07-identita-admin.md#operations-dashboard--monitoring--6b1) e
+[10](10-contratti.md#operations--monitoring-6b1).
+
+Verifiche mirate:
+
+- `npm run build`, contratti/OpenAPI/topologia (`tests/contracts.test.ts`), build
+  Docker del target `monitoring` e risoluzione Compose con progetto predefinito
+  e nome isolato.
+- `./scripts/verify-operations.sh`: un percorso browser sul bundle compilato,
+  PostgreSQL 17, Redis 7.4, OpenSearch 2.19 e collector reali, tutti temporanei.
+  Container estraneo escluso; richieste Docker arbitrarie respinte; metriche
+  CPU/RAM e storage presenti; due revisioni canoniche indicizzate; latenze delle
+  ricerche persistite. Navigazione, layout, pausa/ripresa proiezioni, retry dopo
+  guasto OpenSearch, priorità effettive BullMQ e recupero da riavvio API,
+  Redis e collector. Ruoli Owner/Admin/Utente, CSRF, audit, storico e rollup
+  idempotente verificati; controllo visivo desktop/tablet/mobile.
+- `./scripts/verify-backups.sh tests/ao3-sync.test.ts`: tre test di regressione
+  passati, inclusi backup completo/piattaforma, restore PostgreSQL/PackStore,
+  versioni storiche, dati personali e riconciliazione dei riferimenti.
+
+I p95 sono limiti di bucket, non percentili esatti; il crash può perdere il
+buffer HTTP non ancora persistito. La prova isolata non stabilisce SLO sul
+corpus di produzione. **6B.1 completato.** In questo blocco non sono state aggiunte modalità di
+manutenzione o scrub; sono consegnate nel blocco 6B.2 descritto sotto. Produzione e dump
+originali invariati.
+
+### Blocco 6B.2 — Maintenance, Integrity & Administration
+
+Implementate modalità persistenti `normal`, `maintenance_light` e
+`maintenance_full`, priorità/quantità di lavoro dei worker entro i limiti
+esistenti e interdizione server del contenuto durante manutenzione totale.
+Pagina manutenzione, controlli, integrità, audit e impersonazione sono integrati
+nel pannello React e nei job unificati di Operations.
+
+Scrub con inventario, checkpoint, pausa/ripresa e pianificazione disabilitata
+per default: frame, offset/lunghezze, SHA-256, manifest/media segmentati,
+metadati/dizionari e riferimenti PostgreSQL. Recupero Owner da backup completo
+o catena archivistica incrementale, verifica preventiva, mount protetto e
+pubblicazione atomica di nuovi locator; nessuna sostituzione delle versioni.
+L'audit esistente conserva operatore, utente effettivo, sessione, IP, valori
+ammessi before/after ed esiti asincroni. Impersonazione verso soli User attivi,
+sessione figlia vincolata all'originale, scadenza 15 minuti e uscita immediata;
+ACL e funzioni amministrative non ereditano i privilegi dell'operatore.
+
+Verifiche mirate su servizi temporanei e storage sintetico:
+
+- `OPERATIONS_SPEC=maintenance.spec.ts ./scripts/verify-operations.sh`: UI → API
+  → worker, 170 oggetti con due versioni storiche, dati personali e media
+  segmentati. Corruzione di byte e offset rilevata; recuperi da backup completo
+  e da un export incrementale con dipendenza dalla base, confrontando byte,
+  snapshot e riferimenti. Riavvio API/worker conserva checkpoint e modalità;
+  pausa/ripresa, pianificazione, priorità 1 effettiva in Redis e indisponibilità
+  della destinazione verificati. Owner/Admin/User, ACL di collezione durante
+  impersonazione, cookie figlio non autonomo, revoca della sessione originale,
+  nuovo login e audit attribuito correttamente. Controlli responsive e visuali
+  desktop/tablet/mobile, senza errori JavaScript.
+- `npx tsx --test tests/integrity-stream.test.ts tests/contracts.test.ts`:
+  streaming compresso da 17 MiB e oggetto vuoto, interruzione, spazio
+  insufficiente e checksum errato senza pubblicare pack parziali; contratti,
+  OpenAPI e isolamento Compose.
+- `./scripts/verify-backups.sh tests/archive-export.test.ts`: cinque test
+  passati, incluso restore completo/piattaforma su PostgreSQL e PackStore
+  separati, versioni, dati personali, riferimenti irrisolvibili, export
+  multi-volume, catene incrementali e CLI.
+
+`./scripts/verify-backup-manager.sh`: passato anche il percorso reale UI/API/coda
+del Backup Manager, con restore isolati, permessi e mount indisponibile dopo
+l’integrazione dell’audit condiviso. Build API e React e controlli TypeScript
+completati.
+
+Limiti: scansione progressiva, non snapshot globale; le verifiche dei volumi
+ripartono alla ripresa. Corruzioni relazionali o identità incompatibili non
+vengono corrette per ipotesi. La destinazione indisponibile è verificata con
+identità/mount di test, senza scollegare NAS reali. Nessuna misura sul corpus
+produttivo né garanzia di throughput. Copie già offline non sono revocabili da
+un server irraggiungibile. Produzione e dump originali invariati.
+
+**6B.2 completato.** Alla sua consegna la Milestone 6 restava aperta per 6C,
+verificata nella sezione seguente.
+
+## Blocco 6C — Final Integration, Optimization & Release, 2026-11-08
+
+Release **1.0.0**, build API/React/collector e configurazione Compose verificate.
+Il report [10-performance-report](10-performance-report.md) contiene hardware,
+versioni, corpus, metodologia, campioni, piani SQL, risorse per container,
+confronti prima/dopo e stime separate dalle misure. Benchmark senza quote Docker
+CPU/RAM; heap e concorrenza dichiarati. Nessun avvio dell'ingest dei 923,7 GiB.
+
+### Integrazione e dati reali
+
+- ZIP originale completo in sola lettura: **11.032 opere, 22.928 capitoli,
+  107.054 oggetti**, zero lacune. Reingest idempotente, checkpoint dopo SIGTERM,
+  ripresa e rilettura di tutti gli oggetti dopo riavvio PostgreSQL/OpenSearch/
+  worker senza sorgenti disponibili. SHA-256 dello ZIP originale invariato.
+- SQLite: 64 righe reali copiate da accesso read-only in una fixture privata;
+  opere metadata-only e quattro ZIP assenti gestiti senza arrestare il batch.
+  Parser, input corrotto, dedup e preservazione storica coperti anche dai test
+  mirati del dominio.
+- Percorsi browser su servizi reali: wizard Owner, autenticazione/inviti/ruoli,
+  account e sessioni, ingest amministrativo, catalogo e filtri, bibliografia,
+  lettore/download/sanitizzazione, biblioteca, collezioni/ACL, annotazioni,
+  statistiche/notifiche e sincronizzazione AO3 locale. PWA verificata dopo
+  riavvio del browser offline, riconciliazione online e cambio account.
+- UI sul corpus reale tramite HTTPS: catalogo e capitoli consultabili a
+  **1440/820/390 px**, senza errori JavaScript o overflow. Corretta la
+  navigazione Operations mobile; pagine amministrative caricate on demand,
+  senza cambiare il design system.
+
+### Operazioni, integrità e sicurezza
+
+`verify-backup-manager.sh`, `verify-operations.sh` e la variante
+`OPERATIONS_SPEC=maintenance.spec.ts` passati su fixture isolate: UI → API → job
+→ storage, permessi Owner/Admin/User, CSRF, download privati/Range, destinazione
+non disponibile senza scritture sottostanti, pianificazioni disattivate per
+default, retention, pause/retry/checkpoint e riavvii. Collector limitato ai soli
+container del progetto; metriche, storico e priorità persistenti.
+
+Manutenzione leggera/totale, accessi amministrativi, impersonazione con ACL e
+audit, corruzione controllata di byte/offset e recupero da backup completo e
+incrementale verificati con **170 oggetti e due versioni**. Guasti di streaming,
+spazio insufficiente e interruzioni non pubblicano pack parziali. Le incoerenze
+relazionali sono segnalate; non vengono riparate con merge speculativi.
+
+Sul corpus reale, restore in database e PackStore distinti: **11.032 opere,
+11.033 snapshot e 107.057 oggetti** dopo una revisione controllata della sola
+fixture. Confrontati riferimenti, versioni e dati personali; riletti tutti gli
+oggetti con verifica SHA-256. Restore piattaforma sul corpus compatibile senza
+account: dati personali identici e **zero riferimenti irrisolvibili**. Cattura e
+restore interrotti prima del commit, poi ripresi senza esporre righe parziali.
+La destinazione è un database distinto sul PostgreSQL di test, non un secondo
+server fisico. Export base di 17 volumi più un incremento; dipendenza mancante
+rifiutata. Prova fisica separata del confine **2 GiB + 8 byte** superata.
+
+CLI standalone verificata con tutti i servizi Palimora spenti e senza variabili
+database: `verify`, `import`, `list` e `read` sulla catena reale. **107.187 oggetti
+estratti**, **11.032 opere elencate**; lettura identica al file estratto, checksum
+validi. File e risultati restano nella directory privata di test, fuori dal repo.
+
+Correzioni guidate dalle misure: lookup acquisizioni e oggetti sugli indici
+esistenti, selezione dei documenti pendenti con statistiche obsolete, cattura e
+caricamento SQL a blocchi, controlli filesystem prima delle scritture effettive
+dell'export. Formati e versioni preservati. Reset di sviluppo bloccato in presenza
+di dati personali, anche se inseriti fra richiesta e worker; corretto il caso di
+dipendenze FK vuote e ricevute operative. Test di backup dopo l'ultima modifica
+del loader passato, inclusi bigint oltre 2^53 e restore non-superuser.
+
+Verifiche dominio eseguite una volta, poi rieseguiti soltanto i percorsi falliti
+o modificati. Contratti/OpenAPI/topologia e build finali passati; `npm audit`
+senza vulnerabilità segnalate. Nessuna porta host, bind mount persistenti,
+dump read-only, sola rete gateway su `prod-frontend`, socket Docker assente dal
+backend. Nessun dump, backup, chiave privata o `.env` tracciato nel repository.
+CI e `verify-release.sh` raccolgono i percorsi esistenti; ogni flusso browser
+generico usa database e PackStore propri.
+
+### Limiti della verifica
+
+Le richieste ai riferimenti ufficiali AO3 non sono riuscite nell'ambiente di
+verifica; non è stato osservato uno status HTTP che permetta di attribuirne la
+causa alla manutenzione del sito. Acquisizione remota ufficiale **non attestata**;
+nessun aggiramento delle protezioni. Scheduler, indisponibilità e protocollo
+sono verificati localmente, come documentato in [05](05-sincronizzazione.md).
+
+Responsive e offline verificati in Chromium, non su dispositivi fisici iOS/
+Android o Safari. Indisponibilità esterna simulata tramite identità/device del
+mount di test, senza scollegare NAS reali. Latenza a milioni di opere, cold cache
+fisica e capacità sostenuta dell'intero host non misurate. Gli indici dei manifest
+crescono con il numero di oggetti; il report esplicita spazio temporaneo e costo
+dell'indicizzazione. Nessuna garanzia prestazionale deriva dalle estrapolazioni.
+
+Alla chiusura di 6C: produzione, dump originali e modifiche concorrenti
+preservati; immagini costruite localmente, senza deployment, pubblicazione o
+importazione massiva. Il consolidamento per GitHub è descritto sotto.
+
+**6C completata. Milestone 6 e prima release 1.0.0 completate**, con i limiti di
+verifica sopra esplicitati. Installazione e aggiornamento seguono [02](02-architettura.md);
+backup e restore seguono [08](08-backup-export.md).
+
+### Consolidamento GitHub v1.0.0 — 2026-11-08
+
+Distribuzione dei sorgenti: [repository](https://github.com/ImJstNickDev/palimora),
+branch `main`, tag annotato `v1.0.0` e
+[release](https://github.com/ImJstNickDev/palimora/releases/tag/v1.0.0).
+Versioni dei sette package allineate; licenza MIT, changelog, guida contributori
+e policy di sicurezza. Attribuzioni delle dipendenze in
+[THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md); i servizi separati mantengono
+le proprie licenze, inclusa Redis 7.4.6 RSALv2/SSPLv1.
+
+Controllati file candidati e cronologia raggiungibile con Gitleaks 8.30.1,
+inventario dei blob e revisione dei materiali dimostrativi: nessun segreto o
+dato applicativo privato rilevato. Conservate attribuzioni Git e cronologia,
+senza force push o riscritture. Fixture e chiavi di test sono sintetiche;
+risultati privati e SDK locali rimangono esclusi.
+
+Verifiche finali essenziali su copia pulita senza `.local`, `.env` o dati:
+`npm ci`, attribuzioni riproducibili, tre test contratti/OpenAPI/topologia,
+Compose e build Docker API/web/collector passati; `npm audit` con zero
+vulnerabilità segnalate. La build nativa sull'host richiede gli header Zstd
+documentati; il Dockerfile li installa. Nessuna ripetizione dei benchmark o
+intervento sui servizi in esecuzione. AO3 remoto, ingest massivo e scalabilità
+misurata a milioni di opere restano esclusi dalle verifiche attestate.

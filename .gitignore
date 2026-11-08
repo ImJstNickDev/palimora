@@ -15,3 +15,25 @@ __pycache__/
 apps/api/native/build/
 
 apps/ingest-adapters/native/build/
+
+# Corpus, packfiles and backup volumes belong on external private storage.
+*.sqlite3
+*.pmpack
+*.pmarc
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.dump
+*.sql.gz
+*.zip
+*.epub
+*.pem
+*.key
+secrets/
+backups/
+dumps/

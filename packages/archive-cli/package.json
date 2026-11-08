@@ -1,0 +1,21 @@
+{
+  "name": "@palimora/archive-cli",
+  "version": "1.0.0",
+  "bin": {
+    "palimora-archive": "cli.cjs"
+  },
+  "dependencies": {
+    "@palimora/archive-format": "1.0.0"
+  },
+  "license": "MIT",
+  "description": "Standalone inspection, verification and extraction of Palimora archives.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ImJstNickDev/palimora.git",
+    "directory": "packages/archive-cli"
+  },
+  "homepage": "https://github.com/ImJstNickDev/palimora#readme",
+  "bugs": {
+    "url": "https://github.com/ImJstNickDev/palimora/issues"
+  }
+}

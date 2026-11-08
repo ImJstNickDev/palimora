@@ -45,6 +45,12 @@ exports.start = async function ({ archive, pool }) {
   }
   wrap(archive, "objectBytes", "staging");
   wrap(
+    require("../apps/api/dist/ingest-progress"),
+    "commitProgress",
+    "checkpoint",
+  );
+  wrap(archive, "preserve", "dedup_write");
+  wrap(
     require("../apps/api/dist/archive-staging"),
     "prepareStaging",
     "staging.prepare",

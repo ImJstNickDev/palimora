@@ -63,7 +63,7 @@ Contratto canonico e oggetti/layout sono definiti in 03.
 | Availability AO3 | `available`, `deleted`, `hidden_or_restricted`, `temporarily_unavailable`, `unknown` |
 | Sync runtime | `running`, `backoff`, `offline_auto`, `offline_forced`, `paused_admin` |
 | Maintenance | `normal`, `maintenance_light`, `maintenance_full` |
-| Export/backup | `queued`, `running`, `verifying`, `completed`, `failed`, `interrupted_resumable` |
+| Backup/export/restore | `pending`, `running`, `pause_requested`, `paused`, `cancel_requested`, `cancelled`, `completed`, `failed`, `deleted` |
 
 Non mescolare «assenza da dump», «assenza da AO3», «mancanza di dati su kudos» ed «errore temporaneo»: sono fatti differenti.
 
@@ -282,6 +282,12 @@ visibile usano `readingPercent`; la UI aggiorna la posizione durante lo scorrime
 e distingue sempre questa indicazione dal salvataggio confermato. Nessun offset
 viene convertito in una diversa unità o salvato senza validazione server.
 
+`collectionCandidates` (`GET /collections/:id/candidates`) richiede la proprietà
+della collezione e restituisce solo username attivi, esclusi proprietario, membri
+e inviti pendenti; ricerca letterale senza distinzione di maiuscole, 50 risultati
+per pagina e cursore per username. La revoca permette di rimuovere anche account
+disabilitati o eliminati logicamente.
+
 Inviti alla condivisione rivolti a username locali: solo l'Owner invita/revoca o
 cambia ruolo, il destinatario accetta/rifiuta e può lasciare la collezione.
 Editor modifica metadati e opere; Viewer legge. Le annotazioni sono modificabili
@@ -294,7 +300,7 @@ conservate nella cache server. Le operazioni sulle collezioni sono auditate.
 
 Registro condiviso: `socialPreferences/Save`, `personalStatistics/Activity`,
 `readingHeartbeat`, `recommendationRecipients`, `recommendWork`, `subscriptionStatus/Save`, `subscriptions`,
-`notifications`, `notificationRead`, `pushDevices/Register/Revoke`.
+`notifications`, `notificationRead`, `notificationsReadAll`, `pushDevices/Register/Revoke`.
 Preferenze protette da revisione; gli ID utente effettivi provengono dalla sessione.
 La condivisione per utenti selezionati/istanza si applica soltanto all'attività.
 `GET /library/statistics` non accetta parametri e calcola soltanto le statistiche
@@ -316,6 +322,12 @@ richiedente, gli account disattivati/eliminati e chi ha disabilitato i consigli.
 vale stringa vuota, le note storiche restano leggibili. La UI multipla riusa
 l'operazione singola con un `requestId` per destinatario, conservato nei retry;
 il vincolo mittente/destinatario/opera impedisce consigli e notifiche duplicati.
+
+`notificationsReadAll` (`POST /notifications/read-all`) aggiorna atomicamente
+solo le notifiche non lette dell’utente autenticato, incluse quelle fuori dalla
+pagina caricata. Le letture già registrate mantengono il proprio timestamp; i
+nuovi arrivi successivi allo snapshot della richiesta restano non letti. La
+richiesta usa autenticazione e CSRF come le altre mutazioni personali.
 
 Le sottoscrizioni partono dallo snapshot transazionale PostgreSQL, usando
 `pg_visible_in_snapshot` sul top-level XID del produttore outbox; nessuna
@@ -341,3 +353,82 @@ Download e scritture IndexedDB verificano la partizione attiva nella transazione
 la coda è serializzata tra schede e ogni mutazione conserva la revisione attesa.
 Le Blob URL dei media esistono solo nel documento del lettore autenticato; nessuna
 risposta privata viene inserita in Cache Storage o servita dal service worker.
+
+### Motore backup/restore 6A
+
+`createBackup`, `inspectBackup`, `restoreBackup` in `backup-engine.ts` sono
+operazioni condivise dal worker amministrativo e dalla CLI operatore. `palimora-backup-v1`
+riusa i volumi portabili ma include dati personali e configurazione sensibile;
+non va confuso con `palimora-archive-v1`. Migrazione 033: ricevuta transazionale
+`backup_restores`, più eleggibilità dei sottoscrittori per gli eventi personali
+pendenti al cambio di cluster. Il consumatore ordinario usa ancora XID/snapshot;
+gli eventi restaurati usano la visibilità catturata e la data della sottoscrizione,
+senza cambiare deduplica, ACL o logica delle notifiche.
+
+Lock 70210460 per restore target; backup serializzato per ID con
+`hashtextextended(id,70210460)`. Lock condivisi 70210401/70210402 precedono lo
+snapshot e proteggono migrazioni e pack fino al completamento della cattura.
+Il restore richiede `RESTORE <digest>`, target vuoto (completo) o privo di utenti
+(piattaforma); FK e integrità pack devono passare prima del commit. Dettagli,
+checkpoint e procedura operativa sono in [08](08-backup-export.md).
+
+
+### Administration & Integration 6A.3
+
+Contratti Zod/OpenAPI `backupStatus/Create/Detail/Control/Destination/Schedule`,
+`backupRestorePreview/Restore/File` sotto `/api/v1/admin/backups`. Accesso Admin
+(o Owner); preview/restore solo Owner, download privati ulteriormente Owner.
+Input con UUID idempotente e nomi logici, nessun percorso web. Il download è una
+risposta binaria in streaming. Stati della tabella sopra; `kind` distingue
+`full`, `platform`, `export`, `verify`, `restore`, `delete`. Progressi e risultati
+non contengono credenziali né righe personali del report di riconciliazione.
+
+Migrazione 034: destinazioni, pianificazioni disabilitate per default, outbox
+`backup_runs` e ricevute d'import archivistico. Lock 70210462 per il worker;
+le mutazioni backup usano il lock identità condiviso per consentire pausa durante
+la cattura, restando coordinate con revoche e mutazioni identità esclusive.
+Riconsegna BullMQ per ID/generazione, nessuna dipendenza dalla persistenza Redis
+per ricostruire i job. Restore disabilita pianificazioni catturate e sospende
+operazioni attive prima del commit. Retention non elimina una base referenziata.
+
+`palimora-corpus-catalog-v1`: migrazioni, segmenti di tabelle pubbliche e indici
+opere referenziati per hash; nessun locator fisico esportato. Re-ingest su catalogo
+vuoto con schema identico; ricevuta per digest e FK verificate. Compatibilità del
+contenitore e comandi standalone restano quelli di [08](08-backup-export.md).
+
+### Operations & Monitoring 6B.1
+
+Migrazione 035: layout per account, campioni correnti, aggregati gauge/istogrammi,
+stato e cronologia delle proiezioni. `operations_jobs` è una vista UNION delle
+code esistenti, non un secondo registro di esecuzione. Contratti tipizzati
+`operationsOverview/Layout/Metrics/Jobs/History/Control`, tutti Admin/Owner;
+`operationsControl` rivalida ruolo e azione effettivamente disponibile prima di
+delegare. History accetta solo ID esistenti della famiglia richiesta, non query
+arbitrarie dell'audit. Layout incluso nel backup piattaforma; telemetria e stato
+operativo nel completo.
+
+Lock 70210470 per campionamento, 70210471 per storage, 70210472/73 per i due
+processi di proiezione. Questi ultimi mantengono i lock/transazioni interni dei
+motori. Le latenze vengono aggregate senza identificatori di richiesta; p95
+è il limite superiore del bucket, mai il percentile di medie o percentili.
+I rollup si ricavano dai campioni minuti ancora completi e sono idempotenti.
+Le preferenze e i bucket persistiti sopravvivono ai riavvii; un campione mancante
+non viene interpretato come utilizzo nullo.
+
+## Amministrazione e integrità — 6B.2
+
+API v1 tipizzate in `packages/contracts`: `maintenanceSet`; `integrityStatus`,
+`integrityIssues`, `integrityStart`, `integrityControl`, `integritySchedule`,
+`integrityRepair`; `auditList`; `impersonationStart` e `impersonationStop`.
+Owner/Admin leggono e controllano manutenzione e scrub; solo Owner accoda o
+controlla recuperi. UUID richiesta rende idempotenti gli avvii; il riuso con
+sorgenti diverse è un conflitto. Stati dei job: `pending`, `running`,
+`pause_requested`, `paused`, `completed`, `failed`; problemi: `open`, `repaired`,
+`unrecoverable`. I controlli unificati di Operations delegano allo stesso motore.
+
+`status` espone `maintenance_mode`; `me` e le risposte di impersonazione includono
+l'operatore originale e la scadenza, senza token. `MAINTENANCE` (503) blocca il
+contenuto agli utenti ordinari; `IMPERSONATION_RESTRICTED` (403) blocca sicurezza
+account e sessioni annidate. Audit e problemi hanno paginazione a cursore; il
+pannello aggiorna integrità ogni 3 s, audit ogni 10 s. Nessun risultato o pack
+viene caricato integralmente nel browser.

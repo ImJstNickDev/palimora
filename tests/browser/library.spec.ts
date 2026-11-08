@@ -305,9 +305,13 @@ test("personal library: reader bookmark, later, history and mobile editing", asy
     }
     await page.goto("/notifications?unread=true");
     await expect(page).toHaveURL(/\/library\/notifications\?unread=true$/);
-    await expect(page.getByLabel("Solo non lette")).toBeChecked();
+    await expect(
+      page.getByRole("button", { name: /^Non lette/ }),
+    ).toHaveAttribute("aria-pressed", "true");
     await page.reload();
-    await expect(page.getByLabel("Solo non lette")).toBeChecked();
+    await expect(
+      page.getByRole("button", { name: /^Non lette/ }),
+    ).toHaveAttribute("aria-pressed", "true");
   } finally {
     await db.end();
   }

@@ -1,10 +1,11 @@
+import { CollectionMembers } from "./collection-members";
 import { IconButton } from "./library-ui";
 import { Icon } from "./icons";
 import { LibraryHeading } from "./social";
 import { useState, useRef, useLayoutEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Button, Field, Modal, Notice, Select } from "@palimora/ui";
+import { Button, Field, Modal, Notice } from "@palimora/ui";
 import { call } from "./api";
 import { client, useAction, useText, Loading, QueryError } from "./shared";
 const refresh = () => client.invalidateQueries({ queryKey: ["collections"] });
@@ -41,7 +42,7 @@ export function Collections() {
         <QueryError retry={() => void data.refetch()} />
       ) : (
         <>
-          <ul className="library-entries">
+          <ul className="library-entries collection-list">
             {data.data.pages
               .flatMap((p) => p.items)
               .map((c) => (
@@ -56,13 +57,13 @@ export function Collections() {
                   {c.description && (
                     <p className="collection-description">{c.description}</p>
                   )}
-                  <span className="library-entry-meta">
-                    {c.role === "Owner"
-                      ? t("Proprietario", "Owner")
-                      : c.role === "Editor"
+                  {c.role !== "Owner" && (
+                    <span className="library-entry-meta">
+                      {c.role === "Editor"
                         ? t("Puoi modificare", "Can edit")
                         : t("Sola lettura", "Read only")}
-                  </span>
+                    </span>
+                  )}
                   {!c.accepted && (
                     <div className="library-controls">
                       {[true, false].map((accept) => (
@@ -159,11 +160,6 @@ export function CollectionDetail() {
   if (data.isError) return <QueryError retry={() => void data.refetch()} />;
   const { collection: c, members } = data.data.pages[0],
     write = c.role !== "Viewer";
-  const member = (username: string, role: "Editor" | "Viewer" | null) =>
-    void action.run(async () => {
-      await call("collectionMember", { id, username, role });
-      await refresh();
-    });
   return (
     <section className="personal-library">
       <Link className="library-back" to="/library/collections">
@@ -171,9 +167,16 @@ export function CollectionDetail() {
         {t("Collezioni personali", "Personal collections")}
       </Link>
       <LibraryHeading
+        showContext={false}
         title={<>{c.name}</>}
         actions={
           <div className="library-controls">
+            <CollectionMembers
+              id={id}
+              members={members}
+              owner={c.role === "Owner"}
+              onUpdated={refresh}
+            />
             {write && (
               <IconButton
                 icon="edit"
@@ -207,20 +210,10 @@ export function CollectionDetail() {
         <p className="collection-description">{c.description}</p>
       )}
       {action.error && <Notice error>{action.error}</Notice>}
-      <div className="library-section-heading">
-        <h2>{t("Opere", "Works")}</h2>
-        {write && (
-          <Link
-            className="button icon-button"
-            to="/library"
-            aria-label={t("Aggiungi opere", "Add works")}
-            title={t("Aggiungi opere", "Add works")}
-          >
-            <Icon name="plus" />
-          </Link>
-        )}
-      </div>
-      <ul className="library-entries">
+      <ul
+        className="library-entries collection-works"
+        aria-label={t("Opere della collezione", "Collection works")}
+      >
         {data.data.pages
           .flatMap((p) => p.works)
           .map((w) => (
@@ -259,66 +252,6 @@ export function CollectionDetail() {
           {t("Altre opere", "More works")}
         </Button>
       )}
-      <details className="library-options">
-        <summary>{t("Membri e condivisione", "Members and sharing")}</summary>
-        <ul className="library-entries">
-          {members.map((m) => (
-            <li key={m.user_id}>
-              <strong>{m.username}</strong> · {m.role}{" "}
-              {!m.accepted && t("· Invito in attesa", "· Invitation pending")}
-              {c.role === "Owner" && m.role !== "Owner" && (
-                <div className="library-controls">
-                  <Select
-                    label={t("Permessi di ", "Permissions for ") + m.username}
-                    value={m.role}
-                    disabled={action.busy}
-                    onChange={(e) =>
-                      member(m.username, e.target.value as "Editor" | "Viewer")
-                    }
-                  >
-                    <option value="Viewer">
-                      {t("Sola lettura", "Read only")}
-                    </option>
-                    <option value="Editor">
-                      {t("Può modificare", "Can edit")}
-                    </option>
-                  </Select>
-                  <Button
-                    disabled={action.busy}
-                    onClick={() => member(m.username, null)}
-                  >
-                    {t("Revoca accesso", "Revoke access")}
-                  </Button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-        {c.role === "Owner" && (
-          <form
-            className="library-filter"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const f = new FormData(e.currentTarget);
-              member(
-                String(f.get("username")),
-                f.get("role") as "Editor" | "Viewer",
-              );
-            }}
-          >
-            <Field
-              label={t("Nome utente", "Username")}
-              name="username"
-              required
-            />
-            <Select label={t("Permesso", "Permission")} name="role">
-              <option value="Viewer">{t("Sola lettura", "Read only")}</option>
-              <option value="Editor">{t("Può modificare", "Can edit")}</option>
-            </Select>
-            <Button disabled={action.busy}>{t("Invita", "Invite")}</Button>
-          </form>
-        )}
-      </details>
       <Modal
         open={edit || remove}
         onClose={() => {

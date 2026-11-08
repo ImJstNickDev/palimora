@@ -61,9 +61,9 @@ export function seal(text: string) {
     cipher.getAuthTag(),
   ]).toString("base64");
 }
-export function unseal(text: string) {
+export function unseal(text: string, encryptionKey: Buffer = key()) {
   const b = Buffer.from(text, "base64"),
-    cipher = createDecipheriv("aes-256-gcm", key(), b.subarray(0, 12));
+    cipher = createDecipheriv("aes-256-gcm", encryptionKey, b.subarray(0, 12));
   cipher.setAuthTag(b.subarray(-16));
   return Buffer.concat([
     cipher.update(b.subarray(12, -16)),

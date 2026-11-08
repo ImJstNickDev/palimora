@@ -1,3 +1,5 @@
+import { processingPolicy } from "./maintenance";
+import { runBackups } from "./backup-worker";
 import { runSyncQueue } from "./ao3-scheduler";
 import { executeSync } from "./ao3-worker";
 import { monitorAO3 } from "./ao3-monitor";
@@ -107,6 +109,7 @@ export async function runQueue(
     console.error(JSON.stringify({ event: "ingest_queue_unavailable" })),
   );
   queue.on("error", () => {});
+  const backupLoop = runBackups(stopped);
   const syncLoop = runSyncQueue((id) => executeSync(id, stopped), stopped);
   let probing: Promise<void> | undefined;
   try {
@@ -151,11 +154,18 @@ export async function runQueue(
           const job = await queue.getJob(jobId);
           if (job && ["completed", "failed"].includes(await job.getState()))
             await job.remove();
+          const priority = (await processingPolicy()).priority;
+          if (
+            job &&
+            ["waiting", "prioritized", "delayed"].includes(await job.getState())
+          )
+            await job.changePriority({ priority });
           await queue.add(
             "ingest",
             { id: b.id },
             {
               jobId,
+              priority,
               attempts: 5,
               backoff: { type: "exponential", delay: 2000 },
               removeOnComplete: true,
@@ -204,11 +214,17 @@ export async function runQueue(
       } catch {
         console.error(JSON.stringify({ event: "ingest_dispatch_retry" }));
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => {
+        void processingPolicy().then(
+          (p) => setTimeout(r, p.dispatchMs),
+          () => setTimeout(r, 1000),
+        );
+      });
     }
   } finally {
     await probing;
     await syncLoop;
+    await backupLoop;
     await worker.close();
     await eventWorker.close();
     await queue.close();

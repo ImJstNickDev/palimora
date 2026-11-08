@@ -224,7 +224,11 @@ export async function projectText() {
     const done = await transaction(async (db) => {
       const row = (
         await db.query(
-          `SELECT d.* FROM catalog_text_pending p JOIN catalog_documents d USING(work_id) ORDER BY p.work_id LIMIT 1 FOR UPDATE OF p SKIP LOCKED`,
+          // A merge join re-walks all already indexed documents on each dequeue.
+          // Keep the pending-row lock and use the document primary key directly.
+          `SELECT d.* FROM catalog_text_pending p
+           JOIN LATERAL (SELECT d.* FROM catalog_documents d WHERE d.work_id=p.work_id OFFSET 0) d ON true
+           ORDER BY p.work_id LIMIT 1 FOR UPDATE OF p SKIP LOCKED`,
         )
       ).rows[0];
       if (!row) return false;

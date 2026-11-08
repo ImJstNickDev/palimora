@@ -451,6 +451,55 @@ test(
         1,
         "An in-flight publication is delivered after commit even if its transaction timestamp predates the subscription",
       );
+      const originalRead = (
+        await pool.query(
+          "SELECT read_at FROM personal_notifications WHERE id=$1",
+          [notice.id],
+        )
+      ).rows[0].read_at.toISOString();
+      await pool.query(
+        "INSERT INTO personal_notifications(user_id,kind,work_id,bucket) SELECT $1,'update',$2,-1000000-g FROM generate_series(1,55) g",
+        [alice, id],
+      );
+      const beforeAll = await op("notifications", { unread: "true" });
+      assert.equal(beforeAll.items.length, 50);
+      assert(beforeAll.next);
+      await op("notificationsReadAll", {});
+      assert.equal((await op("notifications", { unread: "true" })).unread, 0);
+      assert.equal(
+        (await op("notifications", { unread: "true" }, bob)).unread,
+        1,
+      );
+      const timestamps = (
+        await pool.query(
+          "SELECT id,read_at FROM personal_notifications WHERE user_id=$1 ORDER BY id",
+          [alice],
+        )
+      ).rows;
+      await op("notificationsReadAll", {});
+      assert.deepEqual(
+        (
+          await pool.query(
+            "SELECT id,read_at FROM personal_notifications WHERE user_id=$1 ORDER BY id",
+            [alice],
+          )
+        ).rows,
+        timestamps,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT read_at FROM personal_notifications WHERE id=$1",
+            [notice.id],
+          )
+        ).rows[0].read_at.toISOString(),
+        originalRead,
+      );
+      await pool.query(
+        "INSERT INTO personal_notifications(user_id,kind,work_id,bucket) VALUES($1,'update',$2,-2000000)",
+        [alice, id],
+      );
+      assert.equal((await op("notifications", { unread: "true" })).unread, 1);
     } finally {
       await pool.end();
       await setup.query(`DROP SCHEMA ${schema} CASCADE`);

@@ -8,7 +8,7 @@ import { statfs } from "node:fs/promises";
 import { DB } from "./db";
 import { readObject, store } from "./archive";
 import { fail } from "./security";
-import { devArchiveEnabled } from "./archive-dev-reset";
+import { devArchiveEnabled, devResetTables } from "./archive-dev-reset";
 export async function archiveOperation(
   db: DB,
   op: string,
@@ -56,6 +56,14 @@ export async function archiveOperation(
     case "archiveDevReset": {
       if (!devArchiveEnabled()) fail("NOT_FOUND", 404);
       if (x.confirmation !== "RESET") fail("INVALID_INPUT", 400);
+      try {
+        await db.query("SET LOCAL lock_timeout='5s'");
+        await devResetTables(db);
+      } catch (error: any) {
+        if (error.code === "RESET_REFERENCED_DATA")
+          fail("RESET_REFERENCED_DATA", 409);
+        throw error;
+      }
       const previous = (
         await db.query("SELECT kind,state FROM archive_jobs WHERE id=$1", [
           x.requestId,

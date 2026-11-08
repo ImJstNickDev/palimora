@@ -1,8 +1,29 @@
-# Palimora — documentazione autorevole
+# Palimora
 
-**Stato:** Milestone 1–5 implementate e integrate; verifiche AO3 locali, acquisizioni ufficiali non attestate · **Data:** 2026-11-07 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
+**Stato:** Milestone 1–6 completate, prima release **1.0.0** completata e verificata localmente; acquisizioni ufficiali AO3 non attestate. La pubblicazione del codice non espone l'istanza o i suoi dati · **Data:** 2026-11-08 · **Prodotto:** archivio personale self-hosted di opere Archive of Our Own (AO3), con account locali e preservazione storica.
 
 Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moderna e privata. Importa i dump disponibili, normalizza e conserva contenuti, media e versioni in un formato proprio, e si sincronizza responsabilmente con AO3 quando la fonte è disponibile e consente l’acquisizione. Non è un fork Rails, non è un servizio ufficiale AO3 e non pubblica opere per conto degli utenti.
+
+## Installazione
+
+```sh
+git clone https://github.com/ImJstNickDev/palimora.git
+cd palimora
+git checkout v1.0.0
+```
+
+Servono Linux, Docker Engine con Compose v2, spazio persistente e un reverse
+proxy HTTPS Nginx Proxy Manager sulla rete esterna `prod-frontend`. Non servono
+Node o PostgreSQL installati sull'host per la build Docker. Configurazione,
+preparazione delle directory e primo avvio sono nella
+[procedura d'installazione](docs/02-architettura.md#avvio-della-produzione).
+La libreria può partire vuota: creare la directory sorgenti anche senza dump.
+Completare il wizard Owner attraverso DNS/accesso locale prima di esporre la route.
+
+Codice Palimora sotto [licenza MIT](LICENSE); dipendenze e materiali dimostrativi
+mantengono le [licenze e attribuzioni proprie](THIRD_PARTY_NOTICES.md).
+[Changelog](CHANGELOG.md) · [Sviluppo](CONTRIBUTING.md) · [Sicurezza](SECURITY.md).
+[Release v1.0.0](https://github.com/ImJstNickDev/palimora/releases/tag/v1.0.0).
 
 ## Lettura dei documenti
 
@@ -19,8 +40,9 @@ Palimora replica l'esperienza funzionale di AO3 in una nuova applicazione, moder
 | [`docs/08-backup-export.md`](docs/08-backup-export.md) | Backup, export da 2 GiB, destinazioni esterne, restore |
 | [`docs/09-milestone.md`](docs/09-milestone.md) | Sequenza di consegna, qualità mirata, lavoro con Codex |
 | [`docs/10-contratti.md`](docs/10-contratti.md) | Contratti tra moduli, stati e invarianti cross-cutting |
+| [`docs/10-performance-report.md`](docs/10-performance-report.md) | Benchmark 6C sul corpus reale, risorse e configurazione ingest |
 
-**Precedenza in caso di discrepanze:** le decisioni esplicite di prodotto in `01-prodotto.md` prevalgono; `03–08` specializzano ciascun dominio; `02` definisce la topologia; `10` impone gli invarianti tecnici; `09` organizza il lavoro. Non duplicare logiche per lo stesso concetto.
+**Precedenza in caso di discrepanze:** le decisioni esplicite di prodotto in `01-prodotto.md` prevalgono; `03–08` specializzano ciascun dominio; `02` definisce la topologia; `10-contratti` impone gli invarianti tecnici; `09` organizza il lavoro. Non duplicare logiche per lo stesso concetto.
 
 ## Decisioni già prese
 
@@ -55,7 +77,14 @@ Account, sicurezza (password/passkey/TOTP/recovery), dispositivi, amministrazion
 - **Regole di sicurezza e recupero:** [contratto operativo in 07](docs/07-identita-admin.md#contratto-operativo-foundation).
 - **Build:** `npm ci && npm run build`; Node ≥22.12; su Linux servono g++, header Node, libzstd-dev e libssl-dev per codec e preparazione nativa N-API. Il Dockerfile installa le dipendenze di build.
 - **PDF fuori Docker:** `./scripts/install-typesetter.sh "$PWD/.local/bin"` e `export TYPST_PATH="$PWD/.local/bin/typst"`; servono anche Chromium e i font Noto. Docker include entrambe le dipendenze di rendering.
-- **Verifica completa:** `npx playwright install --with-deps chromium` e `./scripts/verify.sh` su Linux con Docker. Crea PostgreSQL e Redis di test temporanei, esegue contratti/integrazione/browser/audit e rimuove i container.
+- **Verifica completa:** `node node_modules/@playwright/test/cli.js install --with-deps chromium` e `./scripts/verify-release.sh` su Linux con Docker. Crea PostgreSQL e Redis di test temporanei, esegue contratti/integrazione/browser/audit e rimuove i container.
+- **Backup ed export:** pannello `/admin/backups`, configurazione e restore in [08](docs/08-backup-export.md#administration--integration--6a3); verifica isolata `./scripts/verify-backup-manager.sh` dopo la build. Nessuna pianificazione attiva per default.
+- **Operations:** dashboard `/admin`, metriche e job unificati; collector Docker isolato descritto in [02](docs/02-architettura.md#collector-operativo--6b1). Verifica con servizi temporanei `./scripts/verify-operations.sh` dopo la build.
+- **Manutenzione e integrità:** modalità persistenti, scrub/recupero, audit e impersonazione in [07](docs/07-identita-admin.md#manutenzione-integrità-e-impersonazione--6b2). Verifica isolata: `OPERATIONS_SPEC=maintenance.spec.ts ./scripts/verify-operations.sh`; streaming e guasti: `npx tsx --test tests/integrity-stream.test.ts`. Per lo scrub di record grandi fuori Docker serve anche `zstd`.
 - **API:** OpenAPI generato su `/api/v1/openapi.json`; tipi condivisi in `packages/contracts`.
 
-Risultati e limiti delle misure sono in [09](docs/09-milestone.md#verifica-foundation--2026-11-05). La pipeline GitHub Actions esegue gli stessi controlli e costruisce entrambe le immagini.
+Risultati e limiti delle misure sono in [09](docs/09-milestone.md#verifica-foundation--2026-11-05). La pipeline GitHub Actions esegue gli stessi controlli e costruisce le immagini API, web e collector.
+
+Le misure della release, i comandi riproducibili e le stime separate dai risultati
+osservati sono in [10-performance-report](docs/10-performance-report.md). Il test
+usa uno ZIP completo; l'importazione dei 923,7 GiB rimane un'operazione successiva.

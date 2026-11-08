@@ -1,12 +1,13 @@
 {
   "name": "@palimora/api",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "build": "bash ../../scripts/build-codec.sh && tsc",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "tsx src/migrate.ts",
+    "backup": "tsx src/backup-command.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.8",
@@ -31,7 +32,8 @@
     "rxjs": "7.8.2",
     "sanitize-html": "2.18.1",
     "web-push": "^3.6.7",
-    "yazl": "3.3.1"
+    "yazl": "3.3.1",
+    "@palimora/archive-format": "1.0.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "1.4.9",
@@ -41,5 +43,16 @@
     "@types/sanitize-html": "2.16.2",
     "@types/web-push": "^3.6.4",
     "@types/yazl": "3.3.1"
+  },
+  "license": "MIT",
+  "description": "Palimora API and background workers.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ImJstNickDev/palimora.git",
+    "directory": "apps/api"
+  },
+  "homepage": "https://github.com/ImJstNickDev/palimora#readme",
+  "bugs": {
+    "url": "https://github.com/ImJstNickDev/palimora/issues"
   }
 }

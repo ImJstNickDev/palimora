@@ -58,7 +58,7 @@ export async function projectCatalog() {
           [item.snapshot_id],
         );
       }
-      return;
+      return pending.length;
     }
     const works = await hydrateWorks(
       db,
@@ -114,6 +114,7 @@ export async function projectCatalog() {
       "DELETE FROM catalog_pending WHERE work_id=ANY($1::uuid[])",
       [rows.map((r) => r.work_id)],
     );
+    return rows.length;
   });
 }
 export async function loadSnapshot(db: DB, id: string, snapshot?: string) {

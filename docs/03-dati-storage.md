@@ -352,3 +352,38 @@ sono rifiutati. La coda locale conserva una sequenza monotona, revisione e rifer
 non usa l'orologio del dispositivo per decidere il vincitore di un conflitto.
 Il tempo di lettura offline non viene stimato; completamenti e cronologia diventano
 visibili nelle statistiche quando il server conferma il salvataggio.
+
+### Scrub e recupero verificato — 6B.2
+
+Migrazione 036: `archive_jobs` ospita anche `scrub` e `repair`, con checkpoint,
+progresso ed esiti persistenti; `integrity_packs` conserva l'inventario e
+`integrity_issues` i problemi deduplicati per esecuzione/oggetto/codice. Lo stesso
+leader della manutenzione esegue i job; nessuna coda parallela. La pianificazione
+`integrity_schedule` è disabilitata per default, evita scrub sovrapposti e
+ricontrolla l'autorità dell'operatore.
+
+Lo scrub controlla struttura/header, offset e lunghezze, checksum dei frame,
+SHA-256 dei byte decompressi, manifest e ricomposizione dei media segmentati,
+metadati/dizionari del catalogo, FK del corpus e associazione delle head.
+Legge gli oggetti grandi in streaming; ogni gruppo usa il lock dei locator
+contro pubblicazioni/GC concorrenti. È una scansione progressiva con checkpoint,
+non uno snapshot immutabile dell'intera biblioteca: nuovi commit possono essere
+inclusi nella scansione o nella successiva. Pausa e arresto interrompono ai punti
+sicuri; un riavvio riparte dal gruppo confermato. Le verifiche non eliminano dati.
+
+Il recupero cerca lo stesso hash in un backup completo o in una catena di export
+verificata, controllando mount e checksum. Produce un nuovo pack raw temporaneo,
+verifica byte/dimensione/SHA-256, esegue fsync/seal e pubblica il locator con
+confronto del precedente valore sotto lock. Versioni e file precedenti restano
+intatti; il nuovo locator e l'esito sono nella stessa transazione. Un arresto
+prima del commit può lasciare un pack sigillato orfano, gestito dal GC esistente.
+Le copie sorgente sono protette dalla retention mentre il recupero è attivo o
+in pausa. La verifica dei volumi riparte alla ripresa; pack di staging già
+completi sono riutilizzati solo dopo verifica del checksum.
+
+Oggetti assenti dalla copia sono registrati come non recuperabili da quella
+copia. Incoerenze semantiche/relazionali e identità dimensione/tipo discordanti
+richiedono analisi o restore su target isolato: non vengono ricostruite per
+ipotesi. I record corrotti rimasti in pack non più referenziati sono segnalati
+separatamente (`UNREFERENCED_CORRUPT`), senza proporre un altro recupero del
+locator già sano. Compattazione/GC conservano le protezioni esistenti.

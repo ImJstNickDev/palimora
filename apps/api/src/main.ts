@@ -1,3 +1,7 @@
+import { processingPolicy } from "./maintenance";
+import { recordRequest, startOperations } from "./operations-metrics";
+import { runProjection } from "./operations-index";
+import { backupDownload } from "./backup-download";
 import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { closePdf } from "./reader-pdf";
 import { posix } from "node:path";
@@ -40,6 +44,7 @@ for (const op of Object.keys(api) as Operation[]) {
   const e = api[op];
   Object.defineProperty(ApiController.prototype, op, {
     value: async function (this: ApiController, req: Request, res: Response) {
+      res.locals.operation = op;
       const parsed = e.input.safeParse({
         ...req.query,
         ...req.body,
@@ -102,6 +107,39 @@ for (const op of Object.keys(api) as Operation[]) {
             `attachment; filename="palimora.${(parsed.data as any).format}"`,
           );
         await pipeline(media.stream, res);
+        return;
+      }
+      if (op === "backupFile") {
+        const input = parsed.data as { id: string; file: string };
+        const file = await backupDownload(input.id, input.file);
+        try {
+          const range = byteRange(req.headers.range, file.size);
+          res.setHeader("Cache-Control", "no-store");
+          res.setHeader("Accept-Ranges", "bytes");
+          if (!range) {
+            res.status(416).setHeader("Content-Range", `bytes */${file.size}`);
+            res.end();
+            return;
+          }
+          res.setHeader("Content-Type", "application/octet-stream");
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${input.file}"`,
+          );
+          res.setHeader("Content-Length", range.end - range.start + 1);
+          if (range.partial) {
+            res
+              .status(206)
+              .setHeader(
+                "Content-Range",
+                `bytes ${range.start}-${range.end}/${file.size}`,
+              );
+          }
+          if (req.method === "HEAD") res.end();
+          else await pipeline(file.stream(range.start, range.end), res);
+        } finally {
+          await file.close();
+        }
         return;
       }
       if (op === "archiveDownload") {
@@ -205,6 +243,17 @@ export async function start() {
         }),
       ),
     );
+    res.on("finish", () => {
+      if (
+        res.locals.operation &&
+        !res.locals.operation.startsWith("operations")
+      )
+        recordRequest(
+          performance.now() - started,
+          res.statusCode,
+          res.locals.operation === "catalogWorks",
+        );
+    });
     next();
   });
   app.use(
@@ -239,13 +288,15 @@ export async function start() {
   );
   await app.get(Identity).initialize();
   startPersonalWorker();
+  const stopOperations = startOperations();
   app.enableShutdownHooks();
   let projecting = false;
   const catalogTimer = setInterval(async () => {
     if (projecting) return;
     projecting = true;
     try {
-      await projectCatalog();
+      for (let i = 0; i < (await processingPolicy()).projectionPasses; i++)
+        await runProjection("catalog", projectCatalog);
     } catch {
       console.error(JSON.stringify({ event: "catalog_projection_failed" }));
     } finally {
@@ -254,14 +305,13 @@ export async function start() {
   }, 1000);
   catalogTimer.unref();
   let indexing = false;
-  let searchRetryAt = 0;
   const searchTimer = setInterval(async () => {
-    if (indexing || Date.now() < searchRetryAt) return;
+    if (indexing) return;
     indexing = true;
     try {
-      await projectText();
+      for (let i = 0; i < (await processingPolicy()).projectionPasses; i++)
+        await runProjection("search", projectText);
     } catch {
-      searchRetryAt = Date.now() + 60000;
       console.error(JSON.stringify({ event: "catalog_fulltext_failed" }));
     } finally {
       indexing = false;
@@ -281,6 +331,7 @@ export async function start() {
     clearInterval(cleanup);
     clearInterval(catalogTimer);
     clearInterval(searchTimer);
+    await stopOperations();
     await stopPersonalWorker();
     await app.close();
     await pool.end();

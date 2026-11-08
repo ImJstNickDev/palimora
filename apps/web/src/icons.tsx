@@ -4,6 +4,9 @@ export function Icon({
 }: {
   filled?: boolean;
   name:
+    | "settings"
+    | "more"
+    | "users"
     | "search"
     | "filter"
     | "download"
@@ -27,6 +30,10 @@ export function Icon({
     | "mail";
 }) {
   const paths = {
+    more: "M5 11h.01v2H5v-2Zm7 0h.01v2H12v-2Zm7 0h.01v2H19v-2Z",
+    settings: "M4 7h16M4 17h16M8 4v6m8 4v6",
+    users:
+      "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 7m5 10v-2a4 4 0 0 0-3-4",
     trash: "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7",
     edit: "m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6Z",
     refresh:

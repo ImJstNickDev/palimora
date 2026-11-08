@@ -21,11 +21,20 @@ test("Compose isolates every service except gateway; persistence is exclusively 
       );
     for (const mount of value.volumes ?? []) {
       assert.equal(mount.type, "bind");
-      assert(mount.source.startsWith(".") || mount.source.startsWith("$"));
-      assert(!mount.target.includes("docker.sock"));
+      if (name === "metrics-proxy" && mount.target === "/var/run/docker.sock") {
+        assert.equal(mount.source, "/var/run/docker.sock");
+        assert.equal(mount.read_only, true);
+        assert.deepEqual(value.networks, ["metrics"]);
+      } else {
+        assert(mount.source.startsWith(".") || mount.source.startsWith("$"));
+        assert(!mount.target.includes("docker.sock"));
+      }
       if (mount.target.includes("/dumps")) assert.equal(mount.read_only, true);
     }
   }
+  assert.equal(compose.networks.metrics.internal, true);
+  assert.deepEqual(compose.services.collector.networks, ["metrics", "app"]);
+  assert(!compose.services.api.networks.includes("metrics"));
 });
 test("OpenAPI is generated for every runtime operation with success and error schemas", () => {
   const schema = openapi();

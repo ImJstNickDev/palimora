@@ -66,7 +66,16 @@ const login = z.object({
   password: z.string().min(1).max(128),
   code: z.string().max(100).optional(),
 });
+const impersonation = z
+  .object({
+    actor_id: z.uuid(),
+    actor_username: z.string(),
+    expires_at: z.string(),
+  })
+  .nullable()
+  .optional();
 const auth = z.object({
+  impersonation,
   user: User,
   csrf: z.string(),
   session: z.object({ id: z.uuid(), expires_at: z.string() }),
@@ -231,7 +240,421 @@ const statisticsResult = z.object({
   fandoms: z.array(z.object({ name: z.string(), works: z.number() })),
   timeline: z.array(z.object({ day: z.string(), completed: z.number() })),
 });
+const backupKind = z.enum(["full", "platform", "export"]);
+const backupRun = z.object({
+  id: z.uuid(),
+  kind: z.enum(["full", "platform", "export", "verify", "restore", "delete"]),
+  destination: z.string(),
+  state: z.enum([
+    "pending",
+    "running",
+    "pause_requested",
+    "paused",
+    "cancel_requested",
+    "cancelled",
+    "completed",
+    "failed",
+    "deleted",
+  ]),
+  source_id: z.uuid().nullable(),
+  base_id: z.uuid().nullable(),
+  restore_target: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  verified_at: z.string().nullable(),
+  progress: json,
+  result: json,
+  error: z.string().nullable(),
+});
+const operationsFamily = z.enum([
+  "ingest",
+  "sync",
+  "media",
+  "index",
+  "backup",
+  "admin",
+]);
+const operationIdentity = z.object({
+  family: operationsFamily,
+  id: z.string().min(1).max(64),
+});
+const operationsJob = z.object({
+  family: operationsFamily,
+  id: z.string(),
+  kind: z.string(),
+  state: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  priority: z.number().nullable(),
+  error: z.string().nullable(),
+  progress: json,
+  actions: z.array(z.enum(["pause", "resume", "retry"])),
+  url: z.string(),
+});
+export const IntegrityJob = z.object({
+  id: z.uuid(),
+  kind: z.enum(["scrub", "repair"]),
+  state: z.enum([
+    "pending",
+    "running",
+    "pause_requested",
+    "paused",
+    "completed",
+    "failed",
+  ]),
+  progress: json,
+  result: json.nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+});
+const integrityIssueState = z.enum(["open", "repaired", "unrecoverable"]);
+export const IntegrityIssue = z.object({
+  id: z.uuid(),
+  job_id: z.uuid(),
+  identity: z.string(),
+  object_hash: z.string().nullable(),
+  pack: z.string().nullable(),
+  code: z.string(),
+  state: integrityIssueState,
+  detail: json,
+  repair_job_id: z.uuid().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  repairable: z.boolean(),
+});
+export const AuditEvent = z.object({
+  id: z.string(),
+  actor_id: z.uuid().nullable(),
+  actor: z.string().nullable(),
+  effective_user_id: z.uuid().nullable(),
+  effective_user: z.string().nullable(),
+  session_id: z.uuid().nullable(),
+  ip: z.string(),
+  action: z.string(),
+  target: z.string().nullable(),
+  details: json,
+  outcome: z.enum(["success", "failure"]),
+  created_at: z.string(),
+  request_id: z.uuid(),
+});
 export const api = {
+  maintenanceSet: endpoint(
+    "post",
+    "/admin/maintenance",
+    z.object({
+      mode: z.enum(["normal", "maintenance_light", "maintenance_full"]),
+      confirmation: z.literal(true),
+    }),
+    ok,
+    "admin",
+  ),
+  integrityStatus: endpoint(
+    "get",
+    "/admin/integrity",
+    z.object({ job: z.uuid().optional() }),
+    z.object({
+      jobs: z.array(IntegrityJob),
+      schedule: z.object({
+        enabled: z.boolean(),
+        every_days: z.number().int(),
+        next_at: z.string(),
+      }),
+    }),
+    "admin",
+  ),
+  integrityIssues: endpoint(
+    "get",
+    "/admin/integrity/issues",
+    z.object({ job: z.uuid(), cursor: z.uuid().optional() }),
+    z.object({ items: z.array(IntegrityIssue), next: z.uuid().nullable() }),
+    "admin",
+  ),
+  integrityStart: endpoint(
+    "post",
+    "/admin/integrity/scrub",
+    z.object({ requestId: z.uuid() }),
+    id,
+    "admin",
+  ),
+  integrityControl: endpoint(
+    "post",
+    "/admin/integrity/control",
+    id.extend({ action: z.enum(["pause", "resume"]) }),
+    ok,
+    "admin",
+  ),
+  integritySchedule: endpoint(
+    "post",
+    "/admin/integrity/schedule",
+    z.object({
+      enabled: z.boolean(),
+      every_days: z.number().int().min(1).max(365),
+    }),
+    ok,
+    "admin",
+  ),
+  integrityRepair: endpoint(
+    "post",
+    "/admin/integrity/repair",
+    z.object({
+      requestId: z.uuid(),
+      issue: z.uuid(),
+      backup: z.uuid(),
+      confirmation: z.literal(true),
+    }),
+    id,
+    "owner",
+  ),
+  auditList: endpoint(
+    "get",
+    "/admin/audit",
+    z.object({
+      cursor: z
+        .string()
+        .regex(/^[0-9]+$/)
+        .optional(),
+      actor: z.uuid().optional(),
+      target: z.string().max(200).optional(),
+      action: z.string().max(100).optional(),
+      outcome: z.enum(["success", "failure"]).optional(),
+    }),
+    z.object({ items: z.array(AuditEvent), next: z.string().nullable() }),
+    "admin",
+  ),
+  impersonationStart: endpoint(
+    "post",
+    "/admin/impersonation",
+    id.extend({ confirmation: z.literal(true) }),
+    auth,
+    "admin",
+  ),
+  impersonationStop: endpoint(
+    "post",
+    "/me/impersonation/stop",
+    empty,
+    auth,
+    "user",
+  ),
+
+  operationsOverview: endpoint(
+    "get",
+    "/admin/operations",
+    empty,
+    z.object({
+      layout: z.array(z.string()),
+      status: z.array(
+        z.object({ name: z.string(), checked_at: z.string(), value: json }),
+      ),
+    }),
+    "admin",
+  ),
+  operationsLayout: endpoint(
+    "post",
+    "/admin/operations/layout",
+    z.object({
+      sections: z
+        .array(z.enum(["activity", "containers", "performance", "storage"]))
+        .min(1)
+        .max(4),
+    }),
+    ok,
+    "admin",
+  ),
+  operationsMetrics: endpoint(
+    "get",
+    "/admin/operations/metrics",
+    z.object({
+      range: z.enum(["hour", "day", "week", "month"]).default("hour"),
+      series: z.string().max(100).optional(),
+    }),
+    z.object({
+      step: z.number(),
+      points: z.array(
+        z.object({
+          bucket: z.string(),
+          series: z.string(),
+          metric: z.string(),
+          average: z.number(),
+          peak: z.number(),
+          last: z.number(),
+        }),
+      ),
+      http: z.array(
+        z.object({
+          bucket: z.string(),
+          kind: z.string(),
+          requests: z.number(),
+          errors: z.number(),
+          mean_ms: z.number().nullable(),
+          p95_ms: z.number().nullable(),
+          p95_overflow: z.boolean(),
+          max_ms: z.number(),
+        }),
+      ),
+    }),
+    "admin",
+  ),
+  operationsJobs: endpoint(
+    "get",
+    "/admin/operations/jobs",
+    z.object({
+      family: operationsFamily.or(z.literal("all")).default("all"),
+      state: z.enum(["all", "active", "attention"]).default("all"),
+      cursor: z.string().max(512).optional(),
+      id: z.string().max(64).optional(),
+    }),
+    z.object({ items: z.array(operationsJob), next: z.string().nullable() }),
+    "admin",
+  ),
+  operationsHistory: endpoint(
+    "get",
+    "/admin/operations/jobs/history",
+    operationIdentity,
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          started_at: z.string(),
+          finished_at: z.string().nullable(),
+          state: z.string(),
+          detail: json,
+        }),
+      ),
+    }),
+    "admin",
+  ),
+  operationsControl: endpoint(
+    "post",
+    "/admin/operations/jobs/control",
+    operationIdentity.extend({
+      action: z.enum(["pause", "resume", "retry"]),
+      requestId: z.uuid(),
+    }),
+    ok,
+    "admin",
+  ),
+  backupStatus: endpoint(
+    "get",
+    "/admin/backups",
+    z.object({ cursor: z.uuid().optional() }),
+    z.object({
+      runs: z.array(backupRun),
+      next: z.uuid().nullable(),
+      destinations: z.array(
+        z.object({
+          name: z.string(),
+          label: z.string(),
+          enabled: z.boolean(),
+          health: json,
+          checked_at: z.string().nullable(),
+        }),
+      ),
+      schedules: z.array(
+        z.object({
+          id: z.uuid(),
+          kind: backupKind,
+          destination: z.string(),
+          enabled: z.boolean(),
+          every_hours: z.number(),
+          keep: z.number(),
+          next_at: z.string(),
+        }),
+      ),
+    }),
+    "admin",
+  ),
+  backupCreate: endpoint(
+    "post",
+    "/admin/backups",
+    z.object({
+      requestId: z.uuid(),
+      kind: backupKind,
+      destination: z.string().min(1).max(64),
+      base: z.uuid().optional(),
+    }),
+    ok,
+    "admin",
+  ),
+  backupDetail: endpoint("get", "/admin/backups/:id", id, backupRun, "admin"),
+  backupControl: endpoint(
+    "post",
+    "/admin/backups/:id/control",
+    id.extend({
+      action: z.enum(["pause", "resume", "cancel", "verify", "delete"]),
+      requestId: z.uuid(),
+      confirmation: z.string().max(100).optional(),
+    }),
+    ok,
+    "admin",
+  ),
+  backupDestination: endpoint(
+    "post",
+    "/admin/backups/destinations/settings",
+    z.object({
+      name: z.string().max(64),
+      label: z.string().trim().min(1).max(100),
+      enabled: z.boolean(),
+    }),
+    ok,
+    "admin",
+  ),
+  backupSchedule: endpoint(
+    "post",
+    "/admin/backups/schedules/settings",
+    z.object({
+      id: z.uuid(),
+      kind: backupKind,
+      destination: z.string().max(64),
+      enabled: z.boolean(),
+      every_hours: z.number().int().min(1).max(8760),
+      keep: z.number().int().min(1).max(1000),
+    }),
+    ok,
+    "admin",
+  ),
+  backupRestorePreview: endpoint(
+    "get",
+    "/admin/backups/:id/restore",
+    id,
+    z.object({
+      hash: z.string(),
+      kind: z.string(),
+      targets: z.array(
+        z.object({
+          name: z.string(),
+          label: z.string(),
+          ready: z.boolean(),
+          error: z.string().nullable(),
+        }),
+      ),
+    }),
+    "owner",
+  ),
+  backupRestore: endpoint(
+    "post",
+    "/admin/backups/:id/restore",
+    id.extend({
+      requestId: z.uuid(),
+      target: z.string().max(64),
+      confirmation: z.string().max(100),
+    }),
+    ok,
+    "owner",
+  ),
+  backupFile: endpoint(
+    "get",
+    "/admin/backups/:id/files/:file",
+    id.extend({
+      file: z
+        .string()
+        .regex(/^(manifest\.json|manifest\.sha256|volume-[0-9]{6,}\.pmarc)$/),
+    }),
+    z.object({ id: z.uuid(), file: z.string() }),
+    "admin",
+  ),
+
   socialPreferences: endpoint("get", "/me/social", empty, SocialPreferences),
   socialPreferencesSave: endpoint(
     "post",
@@ -346,6 +769,7 @@ export const api = {
       unread: z.number(),
     }),
   ),
+  notificationsReadAll: endpoint("post", "/notifications/read-all", empty, ok),
   notificationRead: endpoint(
     "post",
     "/notifications/:id",
@@ -460,6 +884,18 @@ export const api = {
       deleted: z.boolean(),
     }),
     ok,
+  ),
+  collectionCandidates: endpoint(
+    "get",
+    "/collections/:id/candidates",
+    id.extend({
+      q: z.string().max(100).optional(),
+      cursor: z.string().max(100).optional(),
+    }),
+    z.object({
+      items: z.array(z.object({ username: z.string() })),
+      next: z.string().nullable(),
+    }),
   ),
   collectionMember: endpoint(
     "post",
@@ -1209,6 +1645,9 @@ export const api = {
     empty,
     z.object({
       state: z.enum(["uninitialized", "active"]),
+      maintenance_mode: z
+        .enum(["normal", "maintenance_light", "maintenance_full"])
+        .default("normal"),
       name: z.string().nullable(),
     }),
     "public",
@@ -1385,10 +1824,13 @@ export type Input<K extends Operation> = z.input<(typeof api)[K]["input"]>;
 export type Output<K extends Operation> = z.output<(typeof api)[K]["output"]>;
 export const ErrorCode = z.enum([
   "INVALID_INPUT",
+  "MAINTENANCE",
+  "IMPERSONATION_RESTRICTED",
   "UNAUTHENTICATED",
   "FORBIDDEN",
   "CSRF",
   "CONFLICT",
+  "RESET_REFERENCED_DATA",
   "SETUP_CLOSED",
   "INVITE_INVALID",
   "CREDENTIALS_INVALID",
@@ -1496,7 +1938,7 @@ export function openapi() {
                     { schema: { type: "string", format: "binary" } },
                   ]),
                 )
-              : name === "archiveDownload"
+              : name === "archiveDownload" || name === "backupFile"
                 ? {
                     "application/octet-stream": {
                       schema: { type: "string", format: "binary" },

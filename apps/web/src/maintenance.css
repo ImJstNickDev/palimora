@@ -1,0 +1,219 @@
+.maintenance-admin {
+  max-width: 1240px;
+  margin-inline: auto;
+  min-width: 0;
+}
+.maintenance-screen {
+  max-width: 520px;
+  margin: 8vh auto;
+  padding: 2rem;
+}
+.maintenance-rule {
+  width: 64px;
+  height: 3px;
+  background: var(--accent);
+  margin-bottom: 2rem;
+}
+.maintenance-kicker {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.maintenance-screen h1 {
+  line-height: 1.25;
+  font-size: 2rem;
+}
+.maintenance-screen > p:not(.maintenance-kicker) {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+.maintenance-modes > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--line);
+  padding: 1.3rem 0;
+}
+.maintenance-modes h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+.maintenance-modes p {
+  color: var(--muted);
+  margin: 0;
+  font-size: 0.9rem;
+}
+.maintenance-modes .selected h2 {
+  color: var(--accent);
+}
+.impersonation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 0.6rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+  font-size: 0.9rem;
+}
+.impersonation-bar small {
+  color: var(--muted);
+}
+.integrity-toolbar,
+.integrity-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.integrity-actions {
+  justify-content: flex-start;
+}
+.integrity-schedule {
+  border-bottom: 1px solid var(--line);
+  padding: 1rem 0;
+  margin-bottom: 1.5rem;
+}
+.integrity-schedule summary {
+  cursor: pointer;
+}
+.integrity-schedule form {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 1rem;
+}
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 44px;
+}
+.inline-check input {
+  width: 18px;
+  height: 18px;
+}
+.integrity-detail {
+  max-width: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.integrity-detail h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.4rem;
+}
+.integrity-detail .integrity-toolbar > div > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.integrity-id {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0.75rem 0;
+}
+.integrity-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  margin: 1rem 0;
+}
+.integrity-progress progress {
+  height: 8px;
+  accent-color: var(--accent);
+}
+.integrity-progress code {
+  overflow-wrap: anywhere;
+}
+.maintenance-admin table {
+  width: 100%;
+  font-size: 0.88rem;
+}
+.maintenance-admin table small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.maintenance-admin .table-scroll {
+  margin-inline: 0;
+}
+.maintenance-admin details pre {
+  max-width: 480px;
+  max-height: 300px;
+  overflow: auto;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.integrity-issues code {
+  display: block;
+  max-width: 32ch;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+.audit-filters {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.audit-filters > label {
+  flex: 1;
+  min-width: 150px;
+}
+.audit-table td {
+  vertical-align: top;
+}
+.audit-table dl {
+  font-size: 0.8rem;
+  max-width: 260px;
+}
+.audit-table dd {
+  margin: 0 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+.audit-table td:nth-child(3) {
+  max-width: 34ch;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .maintenance-screen {
+    margin: 3vh auto;
+    padding: 1.4rem;
+  }
+  .maintenance-modes > div {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .impersonation-bar {
+    padding: 0.6rem 0.8rem;
+  }
+  .integrity-detail {
+    padding: 0.9rem;
+  }
+  .integrity-issues {
+    min-width: 640px;
+  }
+  .audit-table {
+    min-width: 740px;
+  }
+  .integrity-schedule form > label {
+    width: 100%;
+  }
+  .integrity-toolbar {
+    align-items: start;
+  }
+}

@@ -7,14 +7,19 @@ FROM node:22.21.1-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends g++ libzstd-dev libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json tsconfig.base.json ./
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
+COPY licenses licenses
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY packages/archive-format/package.json packages/archive-format/package.json
+COPY packages/archive-cli/package.json packages/archive-cli/package.json
 RUN npm ci
 COPY apps apps
 COPY packages packages
 COPY scripts/build-codec.sh scripts/build-codec.sh
+COPY scripts/npm-notices.cjs scripts/npm-notices.cjs
 RUN npm run build
 
 FROM node:22.21.1-bookworm-slim AS api
@@ -30,3 +35,10 @@ CMD ["node","apps/api/dist/main.js"]
 FROM nginx:1.28-alpine AS web
 COPY infra/nginx/web.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+
+FROM node:22.21.1-bookworm-slim AS monitoring
+WORKDIR /app
+COPY LICENSE ./
+COPY apps/ops-collector/*.cjs ./
+USER node
+CMD ["node","collector.cjs"]

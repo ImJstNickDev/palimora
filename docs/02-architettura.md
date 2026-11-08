@@ -100,7 +100,7 @@ sync/media worker — palimora-egress (bridge non internal) → AO3/media estern
 
 ## Foundation implementata
 
-Workspace npm con lockfile: `apps/api` (NestJS/Express), `apps/web` (React/Vite), `packages/contracts` (Zod, tipi e OpenAPI derivati dallo stesso contratto), `packages/ui` (token, controlli nativi e dialoghi Radix). I pacchetti dei domini successivi vengono aggiunti quando hanno un'implementazione reale. Node 22 per immagini e CI; Node ≥20.19 per sviluppo locale.
+Workspace npm con lockfile: `apps/api` (NestJS/Express), `apps/web` (React/Vite), `packages/contracts` (Zod, tipi e OpenAPI derivati dallo stesso contratto), `packages/ui` (token, controlli nativi e dialoghi Radix). I pacchetti dei domini successivi vengono aggiunti quando hanno un'implementazione reale. Node 22 per immagini e CI; Node ≥22.12 per sviluppo locale (runtime, header e codec nativo della stessa major).
 
 `infra/compose.yaml` avvia gateway, web, API, PostgreSQL, Redis AOF e OpenSearch single-node. L'API Foundation dipende soltanto da PostgreSQL: indisponibilità di Redis/OpenSearch non impedisce login o amministrazione. Nessun worker/job viene simulato. Il mount dump appartiene esclusivamente al servizio ingest, in sola lettura; API e frontend non ricevono i dump.
 
@@ -108,23 +108,37 @@ Le migrazioni SQL sono ordinate, transazionali e protette da advisory lock; il r
 
 ### Avvio della produzione
 
-Dalla radice del repository:
+Prerequisiti: Linux x86_64 o aarch64, Git, Docker Engine e Compose v2 (per
+l'override di sviluppo con `!reset` serve Compose ≥2.24.4), OpenSSL e accesso ai
+registri npm/Docker/GitHub durante la build. La build Docker installa Node,
+compilatori e dipendenze native; non usa `.local`, database o dump dello
+sviluppatore. Su questo host è stata verificata x86_64; aarch64 è previsto
+dall'installer Typst ma non è stato provato nella campagna 1.0.0.
+
+Nginx Proxy Manager e la rete Docker esterna `prod-frontend` devono già essere
+configurati dall'operatore. Verificare con `docker network inspect prod-frontend`:
+Palimora non installa o modifica altri reverse proxy. Le directory sorgenti e
+dati possono trovarsi su percorsi diversi dall'ambiente originale.
+
+Dalla radice del clone, con i percorsi dell'esempio `.env.example`:
 
 ```sh
 cp .env.example .env
-# Impostare APP_ORIGIN e NPM_TRUSTED_PROXY in .env.
-sudo ./scripts/prepare-host.sh
+# Impostare APP_ORIGIN, NPM_TRUSTED_PROXY e i percorsi in .env.
+# Se si cambiano i percorsi, adattare anche i due comandi seguenti.
+sudo env APP_DATA_ROOT=/srv/palimora ./scripts/prepare-host.sh
+sudo install -d -m 755 /srv/palimora-sources
 docker compose --env-file .env -f infra/compose.yaml config --quiet
 docker compose --env-file .env -f infra/compose.yaml up -d --build
 ```
 
-`prepare-host.sh` crea solo le directory Palimora e tre segreti casuali, senza sovrascrivere quelli esistenti. Se si cambia `APP_DATA_ROOT`, passare lo stesso valore allo script. Conservare `secrets/auth`: cifra i segreti TOTP con AES-256-GCM. Le directory host dei segreti sono private; i singoli file sono montati in sola lettura nei container che ne hanno bisogno. OpenSearch richiede una directory scrivibile da UID 1000; usa NIO con `node.store.allow_mmap=false`, senza richiedere modifiche globali di `vm.max_map_count`. La scelta verrà profilata sul corpus quando entra in funzione il full-text.
+`prepare-host.sh` crea solo le directory Palimora e tre segreti casuali, senza sovrascrivere quelli esistenti. Non legge `.env`: passare esplicitamente lo stesso `APP_DATA_ROOT`. La directory `AO3_DUMP_ROOT` deve esistere, ma può essere vuota; i dump non vengono scaricati o importati automaticamente. Conservare `secrets/auth`: cifra i segreti TOTP con AES-256-GCM. Le directory host dei segreti sono private; i singoli file sono montati in sola lettura nei container che ne hanno bisogno. OpenSearch richiede una directory scrivibile da UID 1000; usa NIO con `node.store.allow_mmap=false`, senza richiedere modifiche globali di `vm.max_map_count`. Le misure del corpus di prova sono nel [report della release](10-performance-report.md).
 
 La rete `prod-frontend` deve già esistere. In NPM configurare il proxy a `http://palimora-gateway:80`, con HTTPS sul dominio di `APP_ORIGIN`. Usare inizialmente risoluzione/accesso **solo locali**, completare il wizard e solo dopo rendere pubblica la route. Il medesimo hostname HTTPS permette cookie Secure e WebAuthn anche nel bootstrap locale. NPM rimane l'unico terminatore TLS.
 
 `NPM_TRUSTED_PROXY` identifica l'indirizzo Docker esatto di NPM (o una rete amministrata esclusivamente per proxy fidati): il gateway accetta gli IP inoltrati solo da quella sorgente. Il valore iniziale `127.0.0.1` non concede fiducia agli altri container; finché non configurato, audit e rate limit vedono l'indirizzo di NPM. Non cambiare `APP_ORIGIN` senza considerare che le passkey sono legate al dominio originale.
 
-`GET /api/v1/health` verifica PostgreSQL; Compose attende la salute dell'API prima del gateway. Log JSON su stdout con request ID, metodo, stato e durata, senza body, query string o credenziali; rotazione Docker 3 × 10 MiB. Limiti di memoria/CPU sono dichiarati per servizio. `API_MEMORY` (default `1536m`) include il processo di composizione PDF; la prova da 316.000 parole ha raggiunto circa 1,1 GiB di RSS aggregato. Arresto con SIGTERM e periodo di grazia di 30 secondi. Nessun accesso al socket Docker.
+`GET /api/v1/health` verifica PostgreSQL; Compose attende la salute dell'API prima del gateway. Log JSON su stdout con request ID, metodo, stato e durata, senza body, query string o credenziali; rotazione Docker 3 × 10 MiB. Limiti di memoria/CPU sono dichiarati per servizio. `API_MEMORY` (default `1536m`) include il processo di composizione PDF; la prova da 316.000 parole ha raggiunto circa 1,1 GiB di RSS aggregato. Arresto con SIGTERM e periodo di grazia di 30 secondi. API e worker applicativi non accedono al socket Docker; il monitoraggio 6B.1 usa il proxy ristretto descritto sotto.
 
 Aggiornamenti: ricostruire con `docker compose ... up -d --build`, poi eseguire `docker compose ... restart gateway` per rigenerare e caricare l'eventuale template Nginx modificato. Il gateway risolve API/web via DNS Docker con cache di cinque secondi, anche dopo sostituzione dei container. L'API applica le migrazioni prima di ascoltare. Non modificare una migrazione già distribuita: aggiungerne una nuova. Per lo sviluppo usare un database separato e `DATABASE_URL`, `AUTH_KEY` (64 cifre hex), `APP_ORIGIN=http://localhost:5173`, `PORT=3000`; `npm ci`, `npm run build`, `npm run dev -w @palimora/api` e `npm run dev`. Solo lo sviluppo localhost ammette cookie senza Secure.
 
@@ -166,6 +180,8 @@ senza backup. Account, credenziali, sessioni, preferenze, inviti, audit, inventa
 dei sorgenti e dump rimangono conservati. Non impostare questo flag in produzione:
 senza flag l’endpoint rifiuta il reset e il pulsante non compare. Non richiede
 Docker socket, accesso scrivibile dell’API ai pack o cancellazione del database.
+Il reset è rifiutato se il corpus è referenziato da dati personali; il controllo
+è ripetuto dal worker sotto lock, senza cancellazioni in cascata dei dati utente.
 
 ### Worker Archive Engine
 
@@ -273,3 +289,62 @@ bookmark, progresso o annotazione; nessun client nativo distribuito in questa fa
 
 Fonti piattaforma: [ciclo di vita service worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers),
 [installabilità](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+
+### Collector operativo — 6B.1
+
+Compose include `metrics-proxy` e `collector`, senza porte host. Solo il proxy
+possiede il socket Docker e aderisce alla rete interna `metrics`; il collector
+aderisce a `metrics` e `app`, senza socket, segreti o credenziali PostgreSQL.
+API e worker non aderiscono a `metrics`. Entrambi i processi hanno filesystem
+read-only, capability rimosse e limiti CPU/RAM; il collector esegue come `node`.
+Il piccolo proxy esegue come UID 0 per aprire il socket dell'host: è il confine
+privilegiato, non un proxy Docker generico.
+
+Il suo unico endpoint è `GET /snapshot`. Costruisce internamente richieste GET
+alla lista filtrata per `com.docker.compose.project` e alle statistiche degli ID
+risultanti, con ulteriore allowlist dei servizi definiti in Compose. `PALIMORA_PROJECT`
+segue `COMPOSE_PROJECT_NAME`; ID, path, query Docker e comandi non sono accettati
+dai chiamanti. Le risposte escludono ambiente, comandi, mount, log e reti host.
+Il mount `:ro` non è la restrizione dei metodi: questa è applicata dal proxy e
+la separazione di rete impedisce al backend di interrogarlo direttamente.
+
+Il collector calcola delta e rate ogni 10 s, mantenendo in memoria soltanto il
+campione precedente per container. Docker CPU segue la formula documentata
+(delta container / delta sistema × CPU online); 100% equivale a un core e può
+essere superato. La RAM sottrae la cache inattiva cgroup v1/v2, come
+[`docker stats`](https://docs.docker.com/reference/api/engine/version/v1.44/).
+Per i rate, primo campione, restart/reset dei contatori e statistiche assenti
+producono valori non disponibili, non zeri. ID cambiati non vengono confrontati con gli
+ID precedenti. La UI distingue campioni correnti da collector indisponibile.
+
+Il backend campiona solo `collector:9100/snapshot` e le proprie code/servizi;
+lo storico è PostgreSQL, indipendente dalla durata dei processi di monitoraggio.
+`OPERATIONS_COLLECTOR_URL` permette di collegare il collector dell'ambiente isolato;
+non è configurabile da un browser. Nessuna interrogazione di container estranei
+al progetto e nessun comando Docker operativo nell'API.
+
+### Worker di integrità — 6B.2
+
+Lo scrub e il recupero usano `archive_jobs` e il leader della manutenzione già
+eseguito dal worker ingest. Nessun nuovo servizio o accesso Docker. Migrazione
+036 prima dell'avvio dei processi aggiornati; nessuna pianificazione viene
+attivata dalla migrazione. Il runtime Docker include `zstd`, usato dal verificatore
+streaming per record grandi; per esecuzioni locali va installato sul PATH.
+La modalità manutenzione modifica soltanto scheduling e quantità di lavoro per
+passo, entro i limiti dei container. Protocollo di integrità e recupero in [03](03-dati-storage.md#scrub-e-recupero-verificato--6b2), accessi e impersonazione in
+[07](07-identita-admin.md#manutenzione-integrità-e-impersonazione--6b2).
+
+### Configurazione e verifica della release 1.0.0
+
+`API_CPUS`, `API_MEMORY`, `POSTGRES_CPUS`, `POSTGRES_MEMORY`, `SEARCH_CPUS`,
+`SEARCH_MEMORY` e `SEARCH_HEAP` rendono esplicito il budget dei servizi; i default
+Compose restano conservativi. Il benchmark 6C usa container separati senza quote
+CPU/RAM e non modifica i limiti della produzione. Misure, profili ingest e limiti
+delle estrapolazioni in [10-performance-report](10-performance-report.md).
+
+Verifica integrata: `./scripts/verify-release.sh`, dopo aver installato dipendenze
+native e Chromium. `TMPDIR` e `PALIMORA_TEST_ROOT` possono indirizzare i temporanei
+su un disco con spazio sufficiente; OpenSearch deve poter rispettare le proprie
+soglie di capacità. Ogni flusso browser di bootstrap usa database e storage nuovi.
+La pipeline costruisce i target Docker `api`, `web`, `monitoring` dal lockfile;
+nessuna migrazione viene applicata alla produzione durante le prove.

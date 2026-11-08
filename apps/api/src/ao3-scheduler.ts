@@ -1,3 +1,4 @@
+import { processingPolicy } from "./maintenance";
 import { syncGate } from "./ao3-policy";
 import { DB, pool, transaction } from "./db";
 export type SyncKind = "discovery" | "backfill" | "work" | "entity" | "media";
@@ -117,14 +118,16 @@ export async function runSyncQueue(
         const permitted = await syncAllowed(pool);
         const jobs = (
           await pool.query(
-            `SELECT id,generation FROM ao3_jobs WHERE due_at<=now() AND NOT (SELECT paused FROM ao3_control) AND ($1::boolean OR (kind='media' AND checkpoint?'upload'))
+            `SELECT id,generation,greatest(1,ceil(priority-least(100,extract(epoch FROM (now()-due_at))/3600)+100))::int AS dispatch_priority FROM ao3_jobs WHERE due_at<=now() AND NOT (SELECT paused FROM ao3_control) AND ($1::boolean OR (kind='media' AND checkpoint?'upload'))
           AND state IN ('pending','retry','idle','running') AND availability<>'deleted'
           AND (kind<>'work' OR started_at IS NULL OR started_at<=now()-interval '1 hour')
           ORDER BY priority-least(100,extract(epoch FROM (now()-due_at))/3600),due_at LIMIT 32`,
             [!!permitted],
           )
         ).rows;
+        const policy = await processingPolicy();
         for (const j of jobs) {
+          if (policy.accelerated) j.dispatch_priority = 1;
           const jobId = j.id + "-" + j.generation;
           const existing = await q.getJob(jobId);
           if (
@@ -132,16 +135,34 @@ export async function runSyncQueue(
             ["completed", "failed"].includes(await existing.getState())
           )
             await existing.remove();
+          if (
+            existing &&
+            ["waiting", "prioritized", "delayed"].includes(
+              await existing.getState(),
+            ) &&
+            existing.opts.priority !== j.dispatch_priority
+          )
+            await existing.changePriority({ priority: j.dispatch_priority });
           await q.add(
             "sync",
             { id: j.id },
-            { jobId, removeOnComplete: true, removeOnFail: 100 },
+            {
+              jobId,
+              priority: j.dispatch_priority,
+              removeOnComplete: true,
+              removeOnFail: 100,
+            },
           );
         }
       } catch {
         console.error(JSON.stringify({ event: "ao3_dispatch_retry" }));
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => {
+        void processingPolicy().then(
+          (p) => setTimeout(r, p.dispatchMs),
+          () => setTimeout(r, 1000),
+        );
+      });
     }
   } finally {
     await worker.close();

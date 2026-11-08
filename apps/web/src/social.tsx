@@ -11,7 +11,12 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { Link, useSearchParams, useLocation } from "react-router-dom";
+import {
+  Link,
+  useSearchParams,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Button, Notice, Select } from "@palimora/ui";
 import type { Input, Output } from "@palimora/contracts";
@@ -30,18 +35,22 @@ import { LibrarySearchField } from "./library-search";
 export function LibraryHeading({
   title,
   actions,
+  showContext = true,
 }: {
   title: ReactNode;
   actions?: ReactNode;
+  showContext?: boolean;
 }) {
   const t = useText();
   return (
     <>
       <div className="catalog-heading">
         <div>
-          <p className="eyebrow">
-            {t("Biblioteca personale", "Personal library")}
-          </p>
+          {showContext && (
+            <p className="eyebrow">
+              {t("Biblioteca personale", "Personal library")}
+            </p>
+          )}
           <h1 tabIndex={-1}>{title}</h1>
         </div>
         {actions && <div className="library-heading-actions">{actions}</div>}
@@ -682,12 +691,36 @@ export function Subscriptions() {
     </section>
   );
 }
+function notificationTime(
+  value: string,
+  locale: string,
+  yesterdayLabel: string,
+) {
+  const date = new Date(value),
+    now = new Date(),
+    yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === now.toDateString())
+    return date.toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  if (date.toDateString() === yesterday.toDateString()) return yesterdayLabel;
+  return date.toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    ...(date.getFullYear() !== now.getFullYear()
+      ? { year: "numeric" as const }
+      : {}),
+  });
+}
+
 export function Notifications() {
   const t = useText(),
+    navigate = useNavigate(),
     a = useAction(t),
     [params, setParams] = useSearchParams();
-  const [unread, setUnread] = useState(params.get("unread") === "true");
-  useEffect(() => setUnread(params.get("unread") === "true"), [params]);
+  const unread = params.get("unread") === "true";
   const q = useInfiniteQuery({
     queryKey: ["notifications", unread],
     initialPageParam: undefined as string | undefined,
@@ -699,28 +732,58 @@ export function Notifications() {
     getNextPageParam: (p) => p.next ?? undefined,
     refetchInterval: 30000,
   });
+  const markRead = async (id: string, read: boolean) => {
+    await call("notificationRead", { id, read });
+    await client.invalidateQueries({ queryKey: ["notifications"] });
+  };
   return (
     <section className="personal-library">
       <LibraryHeading
-        title={
-          <>
-            {t("Notifiche", "Notifications")}
-            {q.data ? " · " + q.data.pages[0].unread : ""}
-          </>
+        title={t("Notifiche", "Notifications")}
+        actions={
+          (q.data?.pages[0].unread ?? 0) > 0 && (
+            <IconButton
+              icon="check"
+              label={t("Segna tutte come lette", "Mark all as read")}
+              disabled={a.busy}
+              onClick={() =>
+                void a.run(async () => {
+                  await call("notificationsReadAll", {});
+                  await client.invalidateQueries({
+                    queryKey: ["notifications"],
+                  });
+                })
+              }
+            />
+          )
         }
       />
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={unread}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            setUnread(checked);
-            setParams(checked ? { unread: "true" } : {});
-          }}
-        />
-        {t("Solo non lette", "Unread only")}
-      </label>
+      <div
+        className="notification-filters"
+        role="group"
+        aria-label={t("Filtra notifiche", "Filter notifications")}
+      >
+        {[false, true].map((value) => (
+          <button
+            key={String(value)}
+            type="button"
+            aria-pressed={unread === value}
+            onClick={() => {
+              const next = new URLSearchParams(params);
+              if (value) next.set("unread", "true");
+              else next.delete("unread");
+              setParams(next);
+            }}
+          >
+            {value ? t("Non lette", "Unread") : t("Tutte", "All")}
+            {value && (q.data?.pages[0].unread ?? 0) > 0 && (
+              <span className="notification-count">
+                {q.data!.pages[0].unread}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
       {a.error && <Notice error>{a.error}</Notice>}
       {q.isPending ? (
         <Loading />
@@ -728,7 +791,7 @@ export function Notifications() {
         <QueryError retry={() => void q.refetch()} />
       ) : (
         <>
-          <ul className="library-entries">
+          <ul className="library-entries notification-list">
             {q.data.pages
               .flatMap((p) => p.items)
               .map((n) => (
@@ -741,19 +804,73 @@ export function Notifications() {
                   }
                 >
                   <h2>
-                    <Link to={"/works/" + n.work_id}>{n.title}</Link>
+                    {!n.read_at && (
+                      <span className="sr-only">
+                        {t("Non letta: ", "Unread: ")}
+                      </span>
+                    )}
+                    <Link
+                      to={"/works/" + n.work_id}
+                      onClick={(event) => {
+                        if (n.read_at) return;
+                        if (
+                          event.ctrlKey ||
+                          event.metaKey ||
+                          event.shiftKey ||
+                          event.altKey
+                        ) {
+                          void a.run(() => markRead(n.id, true));
+                          return;
+                        }
+                        event.preventDefault();
+                        if (a.busy) return;
+                        void a.run(async () => {
+                          await markRead(n.id, true);
+                          navigate("/works/" + n.work_id);
+                        });
+                      }}
+                      onAuxClick={(event) => {
+                        if (event.button === 1 && !n.read_at)
+                          void a.run(() => markRead(n.id, true));
+                      }}
+                    >
+                      {n.title}
+                    </Link>
                   </h2>
-                  <p>
-                    {n.kind === "recommendation"
-                      ? t("Consigliata da ", "Recommended by ") + n.sender
-                      : n.versions +
-                        " " +
-                        t("aggiornamenti archiviati", "archived updates")}
-                  </p>
-                  {n.note && <p className="bookmark-notes">{n.note}</p>}
-                  <time dateTime={n.updated_at}>
-                    {new Date(n.updated_at).toLocaleString(t("it", "en"))}
-                  </time>
+                  <div className="notification-meta">
+                    <span>
+                      {n.kind === "recommendation"
+                        ? n.sender
+                          ? t("Consigliata da ", "Recommended by ") + n.sender
+                          : t("Consiglio ricevuto", "Recommendation received")
+                        : n.versions <= 1
+                          ? t("Opera aggiornata", "Work updated")
+                          : `${n.versions} ${t("aggiornamenti", "updates")}`}
+                    </span>
+                    <time
+                      dateTime={n.updated_at}
+                      title={new Date(n.updated_at).toLocaleString(
+                        t("it", "en"),
+                        { dateStyle: "long", timeStyle: "short" },
+                      )}
+                      aria-label={new Date(n.updated_at).toLocaleString(
+                        t("it", "en"),
+                        { dateStyle: "long", timeStyle: "short" },
+                      )}
+                    >
+                      {notificationTime(
+                        n.updated_at,
+                        t("it", "en"),
+                        t("Ieri", "Yesterday"),
+                      )}
+                    </time>
+                  </div>
+                  {n.note && (
+                    <details className="notification-note">
+                      <summary>{t("Messaggio", "Message")}</summary>
+                      <p className="bookmark-notes">{n.note}</p>
+                    </details>
+                  )}
                   <div className="library-controls">
                     <IconButton
                       icon={n.read_at ? "mail" : "check"}
@@ -764,15 +881,7 @@ export function Notifications() {
                       }
                       disabled={a.busy}
                       onClick={() =>
-                        void a.run(async () => {
-                          await call("notificationRead", {
-                            id: n.id,
-                            read: !n.read_at,
-                          });
-                          await client.invalidateQueries({
-                            queryKey: ["notifications"],
-                          });
-                        })
+                        void a.run(() => markRead(n.id, !n.read_at))
                       }
                     />
                   </div>
@@ -780,10 +889,20 @@ export function Notifications() {
               ))}
           </ul>
           {!q.data.pages[0].items.length && (
-            <p>{t("Nessuna notifica.", "No notifications.")}</p>
+            <p role="status">
+              {unread
+                ? t(
+                    "Hai letto tutte le notifiche.",
+                    "You’ve read all notifications.",
+                  )
+                : t("Nessuna notifica.", "No notifications.")}
+            </p>
           )}
           {q.hasNextPage && (
-            <Button onClick={() => void q.fetchNextPage()}>
+            <Button
+              disabled={q.isFetchingNextPage}
+              onClick={() => void q.fetchNextPage()}
+            >
               {t("Altre notifiche", "More notifications")}
             </Button>
           )}

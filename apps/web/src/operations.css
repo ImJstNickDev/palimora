@@ -1,0 +1,456 @@
+.ops-page {
+  max-width: 1240px;
+  margin-inline: auto;
+  min-width: 0;
+}
+.ops-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.ops-heading p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 0.4rem;
+}
+.ops-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1.4rem 0;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.65rem;
+}
+.ops-nav {
+  display: flex;
+  gap: 1.4rem;
+}
+.ops-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.6rem 0;
+}
+.ops-nav a[aria-current] {
+  color: var(--text);
+  box-shadow: 0 2px currentColor;
+}
+.ops-section {
+  max-width: none;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 1.5rem;
+  margin: 1.75rem 0;
+}
+.ops-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.ops-section-heading h2 {
+  font-size: 1.15rem;
+  margin: 0;
+  font-weight: 550;
+}
+.ops-section-heading > a {
+  font-size: 0.85rem;
+}
+.ops-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+.ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: var(--surface);
+}
+.ops-card:hover {
+  border-color: var(--accent);
+  color: inherit;
+}
+.ops-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.6rem;
+  font-weight: 550;
+}
+.ops-card-title span {
+  color: var(--muted);
+}
+.ops-card strong {
+  font-size: 2rem;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  margin: 0.4rem 0 0.1rem;
+}
+.ops-card > span:not(.ops-card-title),
+.ops-card small {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.ops-card small {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.ops-inline-links {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+.ops-readings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+.ops-readings > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.ops-readings span,
+.ops-readings small {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.ops-readings strong {
+  font-size: 1.4rem;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.ops-page table {
+  width: 100%;
+  font-size: 0.88rem;
+}
+.ops-page th {
+  font-weight: 500;
+}
+.ops-page td {
+  font-variant-numeric: tabular-nums;
+}
+.ops-page td small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  max-width: 26ch;
+  overflow-wrap: anywhere;
+}
+.ops-good {
+  color: var(--accent);
+}
+.ops-warning {
+  color: var(--danger);
+}
+.ops-empty,
+.ops-caption {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.ops-empty {
+  padding: 1rem 0;
+}
+.ops-notice {
+  border-left: 3px solid var(--accent);
+  padding: 0.65rem 1rem;
+  background: var(--surface);
+  font-size: 0.88rem;
+}
+.ops-storage-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+.ops-chart {
+  margin: 1.5rem 0 0;
+}
+.ops-chart figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+.ops-chart figcaption strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.ops-chart time {
+  color: var(--muted);
+  margin-left: 0.6rem;
+  font-weight: 400;
+}
+.ops-error-code {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+}
+.ops-plot {
+  position: relative;
+  padding-left: 65px;
+}
+.ops-axis-max,
+.ops-axis-zero {
+  position: absolute;
+  left: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+}
+.ops-axis-max {
+  top: 12.82%;
+}
+.ops-axis-zero {
+  top: 87.18%;
+}
+.ops-chart svg {
+  height: 180px;
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  overflow: visible;
+}
+.ops-chart line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.ops-chart-grid {
+  stroke-dasharray: 3 5;
+}
+.ops-chart path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.ops-chart circle {
+  fill: var(--accent);
+}
+.ops-chart-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.ops-chart-data {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+}
+.ops-chart-data summary,
+.ops-history summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+}
+.ops-chart-data .table-scroll {
+  max-height: 250px;
+  overflow: auto;
+}
+.ops-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+  margin: 1.25rem 0;
+}
+.ops-filters > label {
+  flex: 1;
+  min-width: 160px;
+  max-width: 320px;
+}
+.ops-layout > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.ops-layout label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+}
+.ops-layout input {
+  width: 18px;
+  height: 18px;
+}
+.ops-job-detail {
+  max-width: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.ops-job-facts {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.ops-job-facts code {
+  overflow-wrap: anywhere;
+}
+.ops-job-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.9rem;
+  margin: 1rem 0;
+}
+.ops-job-progress progress {
+  width: 200px;
+  height: 7px;
+  accent-color: var(--accent);
+}
+.ops-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.ops-history {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+.ops-job-link {
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  min-height: 44px;
+  padding: 0.4rem 0;
+  cursor: pointer;
+}
+.ops-pagination {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.ops-priority {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.6rem 0;
+}
+.ops-priority input {
+  width: 90px;
+}
+.ops-page .table-scroll {
+  margin-inline: 0;
+}
+@media (max-width: 1000px) {
+  .ops-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ops-readings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ops-containers {
+    min-width: 700px;
+  }
+}
+@media (max-width: 600px) {
+  .ops-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+  .ops-heading > button {
+    align-self: stretch;
+  }
+  .ops-nav {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.25rem;
+  }
+  .ops-toolbar {
+    gap: 0.5rem;
+  }
+  .ops-card {
+    padding: 0.8rem;
+  }
+  .ops-card-title {
+    font-size: 0.88rem;
+  }
+  .ops-card strong {
+    font-size: 1.7rem;
+  }
+  .ops-section-heading h2 {
+    font-size: 1.05rem;
+  }
+  .ops-section-heading > a {
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+  .ops-chart figcaption {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .ops-error-code {
+    display: block;
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+  }
+  .ops-plot {
+    position: relative;
+    padding-left: 65px;
+  }
+  .ops-axis-max,
+  .ops-axis-zero {
+    position: absolute;
+    left: 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    transform: translateY(-50%);
+  }
+  .ops-axis-max {
+    top: 12.82%;
+  }
+  .ops-axis-zero {
+    top: 87.18%;
+  }
+  .ops-chart svg {
+    height: 180px;
+    min-height: 130px;
+  }
+  .ops-filters > label {
+    max-width: none;
+    min-width: 135px;
+  }
+  .ops-job-detail {
+    padding: 1rem;
+  }
+  .ops-job-facts code {
+    font-size: 0.75rem;
+  }
+  .ops-jobs :is(th, td):nth-child(2),
+  .ops-jobs :is(th, td):nth-child(4),
+  .ops-jobs :is(th, td):nth-child(5),
+  .ops-jobs :is(th, td):nth-child(6) {
+    display: none;
+  }
+  .ops-job-progress {
+    flex-wrap: wrap;
+  }
+}

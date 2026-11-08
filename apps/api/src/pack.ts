@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { open, mkdir, rename, statfs, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -140,12 +144,167 @@ export class PackStore {
       throw error;
     }
   }
-  async read(r: Locator): Promise<Buffer> {
-    return (await this.readMany([r]))[0];
+  /** Bounded streaming verifier for oversized records; ordinary reads retain the native batch codec. */
+  async *stream(
+    r: Locator,
+    directory = join(this.root, "packs"),
+  ): AsyncGenerator<Buffer> {
+    validateLocator(r);
+    const f = await open(
+      join(directory, r.pack),
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    let decoder: ReturnType<typeof spawn> | undefined;
+    try {
+      if ((await readAll(f, 8, 0)).toString() !== "PMPACK01")
+        throw Error("PACK_VERSION");
+      const n = (await readAll(f, 4, r.offset)).readUInt32LE();
+      if (n < 2 || n > 65536 || 4 + n > r.length) throw Error("PACK_HEADER");
+      const h = JSON.parse((await readAll(f, n, r.offset + 4)).toString());
+      checkHeader(h, r, r.length - 4 - n);
+      const encoded = createHash("sha256"),
+        decoded = createHash("sha256");
+      let size = 0;
+      const input =
+        r.length === 4 + n
+          ? Readable.from([])
+          : f.createReadStream({
+              start: r.offset + 4 + n,
+              end: r.offset + r.length - 1,
+              autoClose: false,
+            });
+      const checksum = new Transform({
+        transform(chunk, _enc, cb) {
+          encoded.update(chunk);
+          cb(null, chunk);
+        },
+      });
+      let output: any = input;
+      let feed: Promise<unknown> | undefined, exit: Promise<void> | undefined;
+      if (h.codec === "zstd") {
+        decoder = spawn("zstd", ["-d", "-q", "-c"], {
+          stdio: ["pipe", "pipe", "ignore"],
+        });
+        exit = new Promise<void>((resolve, reject) => {
+          decoder!.once("error", reject);
+          decoder!.once("exit", (code) =>
+            code === 0 ? resolve() : reject(Error("PACK_CORRUPT")),
+          );
+        });
+        void exit.catch(() => {});
+        feed = pipeline(input, checksum, decoder.stdin!);
+        void feed.catch(() => {});
+        output = decoder.stdout!;
+      }
+      try {
+        for await (const chunk of output) {
+          const b = Buffer.from(chunk);
+          if (h.codec === "raw") encoded.update(b);
+          decoded.update(b);
+          size += b.length;
+          if (size > r.size) throw Error("OBJECT_CORRUPT");
+          yield b;
+        }
+        if (feed) await feed;
+        if (exit) await exit;
+        if (
+          size !== r.size ||
+          decoded.digest("hex") !== r.hash ||
+          encoded.digest("hex") !== h.checksum
+        )
+          throw Error("OBJECT_CORRUPT");
+      } finally {
+        input.destroy();
+        decoder?.kill();
+        await feed?.catch(() => {});
+        await exit?.catch(() => {});
+      }
+    } finally {
+      decoder?.kill();
+      await f.close();
+    }
+  }
+  /** Copy-on-write repair: publish only independently verified, sealed raw records. */
+  async restoreStream(
+    r: Pick<Locator, "kind" | "hash" | "size">,
+    input: AsyncIterable<Buffer>,
+    check: () => Promise<void>,
+  ): Promise<Locator> {
+    if (
+      !/^[a-f0-9]{64}$/.test(r.hash) ||
+      !Number.isSafeInteger(r.size) ||
+      r.size < 0
+    )
+      throw Error("PACK_LOCATOR");
+    await mkdir(join(this.root, "staging"), { recursive: true });
+    await mkdir(join(this.root, "packs"), { recursive: true });
+    const pack = randomUUID() + ".pmpack",
+      path = join(this.root, "staging", pack),
+      f = await open(path, "wx", 0o600);
+    const h = canonical({
+        schema: 1,
+        kind: r.kind,
+        hash: r.hash,
+        size: r.size,
+        codec: "raw",
+        length: r.size,
+        checksum: r.hash,
+      }),
+      n = Buffer.alloc(4);
+    n.writeUInt32LE(h.length);
+    const locator = { ...r, pack, offset: 8, length: 4 + h.length + r.size };
+    let size = 0;
+    const hash = createHash("sha256");
+    let closed = false;
+    try {
+      await writeAll(f, Buffer.concat([Buffer.from("PMPACK01"), n, h]));
+      for await (const b of input) {
+        await check();
+        const disk = await statfs(this.root);
+        if (
+          disk.bavail * disk.bsize <
+          Number(process.env.ARCHIVE_RESERVE_BYTES ?? 268435456) + b.length
+        )
+          throw Object.assign(Error("STORAGE_SPACE_INSUFFICIENT"), {
+            code: "ENOSPC",
+          });
+        size += b.length;
+        if (size > r.size) throw Error("OBJECT_CORRUPT");
+        hash.update(b);
+        await writeAll(f, b);
+      }
+      if (size !== r.size || hash.digest("hex") !== r.hash)
+        throw Error("OBJECT_CORRUPT");
+      await f.sync();
+      await f.close();
+      closed = true;
+      for await (const _ of this.stream(locator, join(this.root, "staging")))
+        await check();
+      await rename(path, join(this.root, "packs", pack));
+      for (const name of ["packs", "staging"]) {
+        const d = await open(join(this.root, name), "r");
+        try {
+          await d.sync();
+        } finally {
+          await d.close();
+        }
+      }
+      return locator;
+    } catch (e) {
+      if (!closed) await f.close();
+      await unlink(path).catch(() => {});
+      throw e;
+    }
+  }
+  async read(r: Locator, directory?: string): Promise<Buffer> {
+    return (await this.readMany([r], directory))[0];
   }
   /** Bounded caller batches; reuse handles and adjacent ranges during scrub and
    * compaction. Results retain the requested order and verify each object. */
-  async readMany(records: Locator[]): Promise<Buffer[]> {
+  async readMany(
+    records: Locator[],
+    directory = join(this.root, "packs"),
+  ): Promise<Buffer[]> {
     const groups = new Map<string, { r: Locator; index: number }[]>();
     records.forEach((r, index) => {
       validateLocator(r);
@@ -155,7 +314,7 @@ export class PackStore {
     });
     const result: Buffer[] = new Array(records.length);
     for (const [pack, all] of groups) {
-      const f = await open(join(this.root, "packs", pack), "r");
+      const f = await open(join(directory, pack), "r");
       try {
         if ((await readAll(f, 8, 0)).toString() !== "PMPACK01")
           throw Error("PACK_VERSION");
@@ -212,6 +371,11 @@ function recordFrame(b: Buffer, r: Locator) {
   if (n > 65536 || n < 2 || n + 4 > b.length) throw Error("PACK_HEADER");
   const h = JSON.parse(b.subarray(4, 4 + n).toString()),
     payload = b.subarray(4 + n);
+  checkHeader(h, r, payload.length);
+  if (sha(payload) !== h.checksum) throw Error("PACK_CORRUPT");
+  return { h, payload };
+}
+function checkHeader(h: any, r: Locator, length: number) {
   if (
     h.schema !== 1 ||
     !["zstd", "raw"].includes(h.codec) ||
@@ -220,11 +384,10 @@ function recordFrame(b: Buffer, r: Locator) {
     h.size !== r.size ||
     !Number.isSafeInteger(h.size) ||
     h.size < 0 ||
-    h.length !== payload.length ||
-    sha(payload) !== h.checksum
+    h.length !== length ||
+    !/^[a-f0-9]{64}$/.test(h.checksum)
   )
     throw Error("PACK_CORRUPT");
-  return { h, payload };
 }
 async function decodeFrames(frames: { h: any; payload: Buffer }[]) {
   const result: Buffer[] = [];
@@ -437,14 +600,24 @@ export class PackWriter {
 }
 // Rebuild locators without PostgreSQL. A sealed file ends exactly at a record boundary.
 export async function scanPack(root: string, pack: string): Promise<Locator[]> {
+  const records: Locator[] = [];
+  for await (const r of scanPackRecords(root, pack)) records.push(r);
+  return records;
+}
+export async function* scanPackRecords(
+  root: string,
+  pack: string,
+  from = 8,
+): AsyncGenerator<Locator> {
   if (!/^[a-f0-9-]+\.pmpack$/.test(pack)) throw Error("PACK_PATH");
   const f = await open(join(root, "packs", pack), "r");
   try {
     const size = (await f.stat()).size,
       magic = await readAll(f, 8, 0);
     if (magic.toString() !== "PMPACK01") throw Error("PACK_VERSION");
-    const records: Locator[] = [];
-    let offset = 8;
+    if (!Number.isSafeInteger(from) || from < 8 || from > size)
+      throw Error("PACK_LOCATOR");
+    let offset = from;
     while (offset < size) {
       const b = Buffer.alloc(4);
       if ((await f.read(b, 0, 4, offset)).bytesRead !== 4)
@@ -467,17 +640,16 @@ export async function scanPack(root: string, pack: string): Promise<Locator[]> {
         offset + 4 + n + h.length > size
       )
         throw Error("PACK_TRUNCATED");
-      records.push({
+      yield {
         hash: h.hash,
         kind: h.kind,
         size: h.size,
         pack,
         offset,
         length: 4 + n + h.length,
-      });
+      };
       offset += 4 + n + h.length;
     }
-    return records;
   } finally {
     await f.close();
   }

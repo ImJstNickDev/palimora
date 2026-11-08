@@ -1,6 +1,6 @@
 {
   "name": "@palimora/contracts",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,5 +16,16 @@
       "browser": "./src/index.ts",
       "default": "./dist/index.js"
     }
+  },
+  "license": "MIT",
+  "description": "Versioned Palimora API and storage contracts.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ImJstNickDev/palimora.git",
+    "directory": "packages/contracts"
+  },
+  "homepage": "https://github.com/ImJstNickDev/palimora#readme",
+  "bugs": {
+    "url": "https://github.com/ImJstNickDev/palimora/issues"
   }
 }

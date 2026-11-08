@@ -587,13 +587,10 @@
 }
 .new-collection {
   color: var(--accent);
-  margin-bottom: 8px;
 }
 .collection-choices {
   max-height: 320px;
   overflow: auto;
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
 }
 .collection-quick-create {
   display: grid;

@@ -25,6 +25,7 @@ export const Locale = createContext({
 });
 export const Auth = createContext<{
   user: User;
+  impersonating?: boolean;
   refresh: () => Promise<unknown>;
   leave: () => void;
 }>(null!);
@@ -121,6 +122,10 @@ export function errorText(error: unknown, t: ReturnType<typeof useText>) {
     CONFLICT: t(
       "Il nome utente è già utilizzato o lo stato è cambiato.",
       "The username is taken or the state has changed.",
+    ),
+    RESET_REFERENCED_DATA: t(
+      "Il corpus è collegato a dati personali. Usa un ambiente dev vuoto per il reset.",
+      "Personal data references this corpus. Use an empty development environment for reset.",
     ),
     SETUP_CLOSED: t(
       "La configurazione è già completata. Accedi.",

@@ -1,3 +1,10 @@
+import {
+  Maintenance,
+  MaintenancePage,
+  Integrity,
+  Audit,
+  ImpersonationBar,
+} from "./maintenance";
 import { canonicalLibraryLocation } from "./library-routes";
 import { pendingOperations } from "./offline";
 import { OfflineLibrary, OfflineRuntime, useOffline } from "./offline-ui";
@@ -10,17 +17,8 @@ import {
 } from "./social";
 import { Collections, CollectionDetail } from "./collections";
 import { Library } from "./library";
-import { AO3Monitor } from "./ao3";
 import { Catalog, Browse, Reader, BibliographyPage } from "./catalog";
-import { ArchiveStorage } from "./archive-operations";
-import {
-  Ingest,
-  IngestDetail,
-  ArchiveWorks,
-  ArchiveWork,
-  ArchiveObject,
-} from "./archive";
-import { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect, lazy, Suspense } from "react";
 import {
   Routes,
   Route,
@@ -43,7 +41,46 @@ import {
 } from "./shared";
 import { Setup, Login, Register } from "./access";
 import { Account, Security, Sessions } from "./account";
-import { Users, UserDetail, Invites } from "./admin";
+const Operations = lazy(() =>
+  import("./operations").then((m) => ({ default: m.Operations })),
+);
+const OperationsMetrics = lazy(() =>
+  import("./operations").then((m) => ({ default: m.OperationsMetrics })),
+);
+const OperationsJobs = lazy(() =>
+  import("./operations").then((m) => ({ default: m.OperationsJobs })),
+);
+const Backups = lazy(() =>
+  import("./backups").then((m) => ({ default: m.Backups })),
+);
+const AO3Monitor = lazy(() =>
+  import("./ao3").then((m) => ({ default: m.AO3Monitor })),
+);
+const ArchiveStorage = lazy(() =>
+  import("./archive-operations").then((m) => ({ default: m.ArchiveStorage })),
+);
+const Ingest = lazy(() =>
+  import("./archive").then((m) => ({ default: m.Ingest })),
+);
+const IngestDetail = lazy(() =>
+  import("./archive").then((m) => ({ default: m.IngestDetail })),
+);
+const ArchiveWorks = lazy(() =>
+  import("./archive").then((m) => ({ default: m.ArchiveWorks })),
+);
+const ArchiveWork = lazy(() =>
+  import("./archive").then((m) => ({ default: m.ArchiveWork })),
+);
+const ArchiveObject = lazy(() =>
+  import("./archive").then((m) => ({ default: m.ArchiveObject })),
+);
+const Users = lazy(() => import("./admin").then((m) => ({ default: m.Users })));
+const UserDetail = lazy(() =>
+  import("./admin").then((m) => ({ default: m.UserDetail })),
+);
+const Invites = lazy(() =>
+  import("./admin").then((m) => ({ default: m.Invites })),
+);
 function LibraryRedirect() {
   const location = useLocation();
   const target = canonicalLibraryLocation(location.pathname, location.search);
@@ -62,12 +99,22 @@ export function App() {
   const status = useQuery({
     queryKey: ["status"],
     queryFn: () => call("status", {}),
+    refetchInterval: 5000,
   });
   const me = useQuery({
     queryKey: ["me"],
     queryFn: () => call("me", {}),
+    refetchInterval: 10000,
     enabled: status.data?.state === "active",
   });
+  useEffect(() => {
+    const refresh = () => {
+      void status.refetch();
+      void me.refetch();
+    };
+    window.addEventListener("maintenance-required", refresh);
+    return () => window.removeEventListener("maintenance-required", refresh);
+  }, [status.refetch, me.refetch]);
   const navigate = useNavigate();
   const library =
     /^\/(?:$|works(?:\/|$)|library(?:\/|$)|collections(?:\/|$)|offline$|statistics$|activity$|subscriptions$|notifications$|social-settings$|browse\/|bibliography\/)/.test(
@@ -190,6 +237,7 @@ export function App() {
         </div>
       </Modal>
       {logoutAction.error && <Notice error>{logoutAction.error}</Notice>}
+      {me.data?.impersonation && <ImpersonationBar data={me.data} />}
       {status.isPending ? (
         <main id="main">
           <Loading />
@@ -212,146 +260,208 @@ export function App() {
         <main id="main">
           <Loading />
         </main>
+      ) : status.data.maintenance_mode === "maintenance_full" &&
+        (!me.data || me.data.user.role === "User") ? (
+        <MaintenancePage />
       ) : me.data ? (
         <Auth.Provider
-          value={{ user: me.data.user, refresh: () => me.refetch(), leave }}
+          value={{
+            user: me.data.user,
+            impersonating: !!me.data.impersonation,
+            refresh: () => me.refetch(),
+            leave,
+          }}
         >
-          <OfflineRuntime />
+          {!me.data.impersonation && <OfflineRuntime />}
           <div className={library ? "layout library-layout" : "layout"}>
             <Navigation library={library} />
             <main id="main">
-              <Routes>
-                <Route path="/library/offline" element={<OfflineLibrary />} />
-                <Route
-                  path="/"
-                  element={
-                    offline ? (
-                      <Navigate to="/library/offline" replace />
-                    ) : (
-                      <Catalog />
-                    )
-                  }
-                />
-                <Route
-                  path="/works"
-                  element={
-                    offline ? (
-                      <Navigate to="/library/offline" replace />
-                    ) : (
-                      <Catalog />
-                    )
-                  }
-                />
-                <Route path="/library" element={<LibraryRedirect />} />
-                <Route
-                  path="/library/later"
-                  element={<Library kind="later" />}
-                />
-                <Route
-                  path="/library/history"
-                  element={<Library kind="history" />}
-                />
-                {[
-                  "/collections",
-                  "/collections/:id",
-                  "/offline",
-                  "/statistics",
-                  "/activity",
-                  "/subscriptions",
-                  "/notifications",
-                  "/social-settings",
-                ].map((path) => (
-                  <Route key={path} path={path} element={<LibraryRedirect />} />
-                ))}
-                <Route path="/library/statistics" element={<Statistics />} />
-                <Route path="/library/activity" element={<Activity />} />
-                <Route
-                  path="/library/subscriptions"
-                  element={<Subscriptions />}
-                />
-                <Route
-                  path="/library/notifications"
-                  element={<Notifications />}
-                />
-                <Route path="/library/settings" element={<SocialSettings />} />
-                <Route path="/library/collections" element={<Collections />} />
-                <Route
-                  path="/library/collections/:id"
-                  element={<CollectionDetail />}
-                />
-                <Route
-                  path="/bibliography/:kind/:id"
-                  element={<BibliographyPage />}
-                />
-                <Route path="/works/:id" element={<Reader />} />
-                <Route path="/browse/:kind" element={<Browse />} />
-                {me.data.user.role !== "User" && (
-                  <>
+              <Suspense fallback={<Loading />}>
+                <Routes>
+                  <Route path="/library/offline" element={<OfflineLibrary />} />
+                  <Route
+                    path="/"
+                    element={
+                      offline ? (
+                        <Navigate to="/library/offline" replace />
+                      ) : (
+                        <Catalog />
+                      )
+                    }
+                  />
+                  <Route
+                    path="/works"
+                    element={
+                      offline ? (
+                        <Navigate to="/library/offline" replace />
+                      ) : (
+                        <Catalog />
+                      )
+                    }
+                  />
+                  <Route path="/library" element={<LibraryRedirect />} />
+                  <Route
+                    path="/library/later"
+                    element={<Library kind="later" />}
+                  />
+                  <Route
+                    path="/library/history"
+                    element={<Library kind="history" />}
+                  />
+                  {[
+                    "/collections",
+                    "/collections/:id",
+                    "/offline",
+                    "/statistics",
+                    "/activity",
+                    "/subscriptions",
+                    "/notifications",
+                    "/social-settings",
+                  ].map((path) => (
                     <Route
-                      path="/admin/archive/storage"
-                      element={<ArchiveStorage />}
+                      key={path}
+                      path={path}
+                      element={<LibraryRedirect />}
                     />
-                    <Route path="/admin/ao3" element={<AO3Monitor />} />
-                    <Route path="/admin/ingest" element={<Ingest />} />
-                    <Route
-                      path="/admin/ingest/:id"
-                      element={<IngestDetail />}
-                    />
-                    <Route path="/admin/archive" element={<ArchiveWorks />} />
-                    <Route
-                      path="/admin/archive/objects/:hash"
-                      element={<ArchiveObject />}
-                    />
-                    <Route
-                      path="/admin/archive/:id"
-                      element={<ArchiveWork />}
-                    />
-                  </>
-                )}
-                <Route path="/account" element={<Account />} />
-                <Route path="/security/*" element={<Security />} />
-                <Route path="/sessions" element={<Sessions />} />
-                {me.data.user.role !== "User" && (
-                  <>
-                    <Route path="/admin/users" element={<Users />} />
-                    <Route path="/admin/users/:id/*" element={<UserDetail />} />
-                  </>
-                )}{" "}
-                {me.data.user.role === "Owner" && (
-                  <Route path="/admin/invites" element={<Invites />} />
-                )}
-                <Route path="*" element={<Navigate to="/account" replace />} />
-              </Routes>
+                  ))}
+                  <Route path="/library/statistics" element={<Statistics />} />
+                  <Route path="/library/activity" element={<Activity />} />
+                  <Route
+                    path="/library/subscriptions"
+                    element={<Subscriptions />}
+                  />
+                  <Route
+                    path="/library/notifications"
+                    element={<Notifications />}
+                  />
+                  <Route
+                    path="/library/settings"
+                    element={<SocialSettings />}
+                  />
+                  <Route
+                    path="/library/collections"
+                    element={<Collections />}
+                  />
+                  <Route
+                    path="/library/collections/:id"
+                    element={<CollectionDetail />}
+                  />
+                  <Route
+                    path="/bibliography/:kind/:id"
+                    element={<BibliographyPage />}
+                  />
+                  <Route path="/works/:id" element={<Reader />} />
+                  <Route path="/browse/:kind" element={<Browse />} />
+                  {me.data.user.role !== "User" && (
+                    <>
+                      <Route
+                        path="/admin/archive/storage"
+                        element={<ArchiveStorage />}
+                      />
+                      <Route path="/admin/ao3" element={<AO3Monitor />} />
+                      <Route
+                        path="/admin/maintenance"
+                        element={<Maintenance />}
+                      />
+                      <Route path="/admin/integrity" element={<Integrity />} />
+                      <Route path="/admin/audit" element={<Audit />} />
+                      <Route path="/admin" element={<Operations />} />
+                      <Route
+                        path="/admin/operations/metrics"
+                        element={<OperationsMetrics />}
+                      />
+                      <Route
+                        path="/admin/operations/jobs"
+                        element={<OperationsJobs />}
+                      />
+                      <Route path="/admin/backups" element={<Backups />} />
+                      <Route path="/admin/ingest" element={<Ingest />} />
+                      <Route
+                        path="/admin/ingest/:id"
+                        element={<IngestDetail />}
+                      />
+                      <Route path="/admin/archive" element={<ArchiveWorks />} />
+                      <Route
+                        path="/admin/archive/objects/:hash"
+                        element={<ArchiveObject />}
+                      />
+                      <Route
+                        path="/admin/archive/:id"
+                        element={<ArchiveWork />}
+                      />
+                    </>
+                  )}
+                  <Route path="/account" element={<Account />} />
+                  <Route
+                    path="/security/*"
+                    element={
+                      me.data.impersonation ? (
+                        <Navigate to="/account" replace />
+                      ) : (
+                        <Security />
+                      )
+                    }
+                  />
+                  <Route
+                    path="/sessions"
+                    element={
+                      me.data.impersonation ? (
+                        <Navigate to="/account" replace />
+                      ) : (
+                        <Sessions />
+                      )
+                    }
+                  />
+                  {me.data.user.role !== "User" && (
+                    <>
+                      <Route path="/admin/users" element={<Users />} />
+                      <Route
+                        path="/admin/users/:id/*"
+                        element={<UserDetail />}
+                      />
+                    </>
+                  )}{" "}
+                  {me.data.user.role === "Owner" && (
+                    <Route path="/admin/invites" element={<Invites />} />
+                  )}
+                  <Route
+                    path="*"
+                    element={<Navigate to="/account" replace />}
+                  />
+                </Routes>
+              </Suspense>
             </main>
           </div>
         </Auth.Provider>
       ) : me.error instanceof ApiFailure &&
         me.error.code === "UNAUTHENTICATED" ? (
         <main id="main" className="auth">
-          <Routes>
-            <Route
-              path="/register"
-              element={
-                <Register
-                  onDone={async () => {
-                    await me.refetch();
-                    navigate("/account");
-                  }}
-                />
-              }
-            />
-            <Route
-              path="*"
-              element={
-                <Login
-                  onDone={async () => {
-                    await me.refetch();
-                    navigate("/account");
-                  }}
-                />
-              }
-            />
-          </Routes>
+          <Suspense fallback={<Loading />}>
+            <Routes>
+              <Route
+                path="/register"
+                element={
+                  <Register
+                    onDone={async () => {
+                      await me.refetch();
+                      navigate("/account");
+                    }}
+                  />
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <Login
+                    onDone={async () => {
+                      await me.refetch();
+                      navigate("/account");
+                    }}
+                  />
+                }
+              />
+            </Routes>
+          </Suspense>
         </main>
       ) : (
         <main id="main">
@@ -365,7 +475,7 @@ function Navigation({ library }: { library: boolean }) {
   const location = useLocation();
   const { offline } = useOffline();
   const t = useText(),
-    { user } = useContext(Auth);
+    { user, impersonating } = useContext(Auth);
   if (offline)
     return (
       <nav
@@ -403,7 +513,7 @@ function Navigation({ library }: { library: boolean }) {
           Account
         </NavLink>
         {user.role !== "User" && (
-          <NavLink to="/admin/ingest">
+          <NavLink to="/admin">
             {t("Amministrazione", "Administration")}
           </NavLink>
         )}
@@ -420,15 +530,33 @@ function Navigation({ library }: { library: boolean }) {
         {t("Notifiche", "Notifications")}
       </NavLink>
       <NavLink to="/account">{t("Account", "Account")}</NavLink>
-      <NavLink to="/security">{t("Sicurezza", "Security")}</NavLink>
-      <NavLink to="/sessions">{t("Dispositivi", "Devices")}</NavLink>
+      {!impersonating && (
+        <NavLink to="/security">{t("Sicurezza", "Security")}</NavLink>
+      )}
+      {!impersonating && (
+        <NavLink to="/sessions">{t("Dispositivi", "Devices")}</NavLink>
+      )}
       {user.role !== "User" && (
         <>
           <span className="nav-heading">
             {t("Amministrazione", "Administration")}
           </span>
+          <NavLink
+            to="/admin"
+            end={!location.pathname.startsWith("/admin/operations/")}
+          >
+            {t("Operazioni", "Operations")}
+          </NavLink>
+          <NavLink to="/admin/maintenance">
+            {t("Manutenzione", "Maintenance")}
+          </NavLink>
+          <NavLink to="/admin/integrity">{t("Integrità", "Integrity")}</NavLink>
+          <NavLink to="/admin/audit">Audit</NavLink>
           <NavLink to="/admin/ingest">{t("Importazioni", "Imports")}</NavLink>
           <NavLink to="/admin/ao3">AO3</NavLink>
+          <NavLink to="/admin/backups">
+            {t("Backup ed export", "Backups and exports")}
+          </NavLink>
           <NavLink to="/admin/archive/storage">
             {t("Storage", "Storage")}
           </NavLink>

@@ -50,7 +50,7 @@ export async function processPersonalEvents() {
       return;
     const events = (
       await db.query(
-        `SELECT e.*,v.bibliography FROM archive_outbox e JOIN catalog_snapshot_views v ON v.snapshot_id=(e.payload->>'snapshot_id')::uuid WHERE e.event='work.snapshot.published' AND e.producer_xid IS NOT NULL AND NOT EXISTS(SELECT 1 FROM personal_event_receipts p WHERE p.event_id=e.id) ORDER BY e.id LIMIT 20`,
+        `SELECT e.*,v.bibliography FROM archive_outbox e JOIN catalog_snapshot_views v ON v.snapshot_id=(e.payload->>'snapshot_id')::uuid WHERE e.event='work.snapshot.published' AND (e.producer_xid IS NOT NULL OR EXISTS(SELECT 1 FROM backup_notification_eligibility b WHERE b.event_id=e.id)) AND NOT EXISTS(SELECT 1 FROM personal_event_receipts p WHERE p.event_id=e.id) ORDER BY e.id LIMIT 20`,
       )
     ).rows;
     for (const event of events) {
@@ -71,8 +71,8 @@ export async function processPersonalEvents() {
         .map((e: any) => e.id);
       const users = (
         await db.query(
-          `SELECT s.user_id,bool_or(s.mode='changes') AS changes,coalesce(p.grouping,300) AS grouping FROM personal_subscriptions s JOIN users u ON u.id=s.user_id AND NOT u.disabled AND u.soft_deleted_at IS NULL LEFT JOIN personal_settings p ON p.user_id=s.user_id WHERE NOT pg_visible_in_snapshot($3::xid8,s.start_snapshot) AND coalesce(p.updates,true) AND ((s.kind='work' AND s.target=$1) OR (s.kind IN ('author','series') AND s.target=ANY($2::text[]))) GROUP BY s.user_id,p.grouping`,
-          [work, targets, event.producer_xid],
+          `SELECT s.user_id,bool_or(s.mode='changes') AS changes,coalesce(p.grouping,300) AS grouping FROM personal_subscriptions s JOIN users u ON u.id=s.user_id AND NOT u.disabled AND u.soft_deleted_at IS NULL LEFT JOIN personal_settings p ON p.user_id=s.user_id WHERE (($3::xid8 IS NOT NULL AND NOT pg_visible_in_snapshot($3::xid8,s.start_snapshot)) OR ($3::xid8 IS NULL AND EXISTS(SELECT 1 FROM backup_notification_eligibility b WHERE b.event_id=$4 AND b.user_id=s.user_id AND b.kind=s.kind AND b.target=s.target AND b.subscription_created_at=s.created_at))) AND coalesce(p.updates,true) AND ((s.kind='work' AND s.target=$1) OR (s.kind IN ('author','series') AND s.target=ANY($2::text[]))) GROUP BY s.user_id,p.grouping`,
+          [work, targets, event.producer_xid, event.id],
         )
       ).rows;
       for (const user of users) {
@@ -94,6 +94,10 @@ export async function processPersonalEvents() {
       await db.query("INSERT INTO personal_event_receipts VALUES($1)", [
         event.id,
       ]);
+      await db.query(
+        "DELETE FROM backup_notification_eligibility WHERE event_id=$1",
+        [event.id],
+      );
     }
   });
 }

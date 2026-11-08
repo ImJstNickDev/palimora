@@ -39,6 +39,7 @@ export type Pending = {
   sequence: number;
   error?: string;
 };
+let impersonating = false;
 let partition: string | undefined;
 let stagingCleaned = false;
 let disconnected = !navigator.onLine;
@@ -385,6 +386,11 @@ export async function offlineCall<K extends Operation>(
   send: Transport,
   options: { keepalive?: boolean; signal?: AbortSignal } = {},
 ): Promise<Output<K>> {
+  if (
+    impersonating &&
+    !["me", "status", "impersonationStop", "logout"].includes(name)
+  )
+    return send(name, input, options);
   let x: any = input;
   if (name === "readingSave" || name === "annotationSave")
     x = {
@@ -441,7 +447,9 @@ export async function offlineCall<K extends Operation>(
     if ("csrf" in (result as any)) {
       if (name === "me" && epoch !== (await read("epoch")))
         throw new ApiFailure("UNAUTHENTICATED");
-      await rememberAuth(result as Output<"me">);
+      impersonating = !!(result as Output<"me">).impersonation;
+      if (impersonating) await clearOffline();
+      else await rememberAuth(result as Output<"me">);
     }
     if (["password", "deleteAccount"].includes(name)) await clearOffline();
     if (personal || name === "readingSave")
@@ -653,20 +661,29 @@ export async function removeOffline(key: string) {
     changed();
   });
 }
-export async function clearCopies() {
+export async function clearCopies(workId?: string) {
   await exclusive(async () => {
     const i = await identity();
-    if ((await pendingOperations()).length) throw Error("OFFLINE_PENDING");
+    if (
+      (await pendingOperations()).some((q) => !workId || q.input.id === workId)
+    )
+      throw Error("OFFLINE_PENDING");
     const changes: Array<[string, unknown]> = [];
-    for (const w of await listOffline()) {
+    for (const w of (await listOffline()).filter(
+      (w) => !workId || w.id === workId,
+    )) {
       changes.push(
         [w.key, undefined],
         ["copy:" + w.id + ":" + w.snapshot, undefined],
       );
       for (const key of Object.values(w.assets)) changes.push([key, undefined]);
     }
-    for (const prefix of ["notes:", "progress:"])
-      for (const [key] of await records(prefix)) changes.push([key, undefined]);
+    for (const prefix of ["notes:", "progress:"]) {
+      if (workId) changes.push([prefix + workId, undefined]);
+      else
+        for (const [key] of await records(prefix))
+          changes.push([key, undefined]);
+    }
     await write(changes, i.partition);
     releaseMedia();
     changed();
@@ -674,9 +691,11 @@ export async function clearCopies() {
 }
 
 let syncing = false;
+export const isSyncingOffline = () => syncing;
 export async function syncOffline(send: Transport) {
   if (syncing || !navigator.onLine) return;
   syncing = true;
+  window.dispatchEvent(new Event("offline-sync"));
   try {
     const i = await identity(),
       me = await send("me", {});
@@ -742,6 +761,7 @@ export async function syncOffline(send: Transport) {
     else throw e;
   } finally {
     syncing = false;
+    window.dispatchEvent(new Event("offline-sync"));
   }
 }
 export async function checkUpdates(send: Transport) {

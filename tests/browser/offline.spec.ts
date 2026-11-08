@@ -264,6 +264,25 @@ test("offline reader survives restart, reconciles conflicts and isolates account
     await context.setOffline(false);
     await restart.goto("/offline");
     await expect(restart.getByText("Modifica concorrente")).toBeVisible();
+    await expect(restart.locator(".offline-sync-status")).toContainText(
+      "Offline reading fixture",
+    );
+    await restart
+      .locator(".offline-entry")
+      .getByRole("button", { name: "Rimuovi dal dispositivo", exact: true })
+      .click();
+    await restart
+      .getByRole("dialog")
+      .getByRole("button", { name: "Rimuovi", exact: true })
+      .click();
+    await expect(
+      restart.getByRole("dialog").locator('[role="alert"]'),
+    ).toBeVisible();
+    await restart
+      .getByRole("dialog")
+      .getByRole("button", { name: "Chiudi", exact: true })
+      .click();
+    await expect(restart.locator(".offline-entry")).toHaveCount(1);
     await restart.getByRole("button", { name: "Risolvi", exact: true }).click();
     await restart
       .getByRole("button", { name: "Mantieni modifica locale" })
@@ -337,7 +356,7 @@ test("offline reader survives restart, reconciles conflicts and isolates account
       "UPDATE archive_work_heads SET current_snapshot_id=(SELECT id FROM archive_snapshots WHERE work_id=$1 AND id<>$2 ORDER BY imported_at DESC LIMIT 1) WHERE id=$1",
       [work.id, work.current_snapshot_id],
     );
-    await restart.getByRole("button", { name: "Sincronizza" }).click();
+    await restart.goto("/works/" + work.id);
     const cdp = await context.newCDPSession(restart);
     const manifest = await cdp.send("Page.getAppManifest");
     expect(manifest.errors).toEqual([]);
@@ -346,31 +365,44 @@ test("offline reader survives restart, reconciles conflicts and isolates account
       quotaSize: 1,
     });
     await restart
-      .getByRole("button", { name: "Scarica nuova versione" })
+      .getByRole("button", { name: "Salva offline", exact: true })
       .click();
     await expect(
       restart.getByText(
         "Spazio insufficiente. Rimuovi alcune copie e riprova.",
       ),
     ).toBeVisible();
-    await expect(
-      restart.getByRole("link", {
-        name: "Offline reading fixture",
-        exact: true,
-      }),
-    ).toHaveCount(1);
     await cdp.send("Storage.overrideQuotaForOrigin", {
       origin: "http://localhost:5173",
     });
     await restart
-      .getByRole("button", { name: "Scarica nuova versione" })
+      .getByRole("button", { name: "Salva offline", exact: true })
       .click();
     await expect(
-      restart.getByRole("link", {
-        name: "Offline reading fixture",
-        exact: true,
-      }),
-    ).toHaveCount(2);
+      restart.getByRole("link", { name: /Copia offline/ }),
+    ).toBeVisible();
+    await restart.goto("/library/offline");
+    const copyCount = () =>
+      restart.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve) => {
+          const r = indexedDB.open("palimora-personal-v1");
+          r.onsuccess = () => resolve(r.result);
+        });
+        return new Promise<number>((resolve) => {
+          const r = db
+            .transaction("records")
+            .objectStore("records")
+            .getAllKeys();
+          r.onsuccess = () => {
+            resolve(
+              r.result.filter((k) => String(k).startsWith("copy:")).length,
+            );
+            db.close();
+          };
+        });
+      });
+    expect(await copyCount()).toBe(2);
+    await expect(restart.locator(".offline-entry")).toHaveCount(1);
     {
       await writeFile(
         workerPath,
@@ -395,7 +427,8 @@ test("offline reader survives restart, reconciles conflicts and isolates account
           name: "Offline reading fixture",
           exact: true,
         }),
-      ).toHaveCount(2);
+      ).toHaveCount(1);
+      expect(await copyCount()).toBe(2);
     }
     for (const route of [
       "library",
@@ -427,6 +460,56 @@ test("offline reader survives restart, reconciles conflicts and isolates account
         fullPage: true,
       });
     }
+    await expect(restart.locator(".offline-entry")).toHaveCount(1);
+    await expect(
+      restart.locator(".offline-entry").getByRole("button"),
+    ).toHaveCount(1);
+    await expect(restart.locator(".offline-entry")).toHaveText(
+      "Offline reading fixture",
+    );
+    await restart
+      .getByRole("button", { name: "Gestisci dispositivo", exact: true })
+      .click();
+    const deviceMenu = restart.getByRole("dialog", {
+      name: "Gestisci dispositivo",
+    });
+    await expect(
+      deviceMenu.getByText("Quota assegnata dal browser · stima", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      deviceMenu.getByRole("button", { name: "Rimuovi tutte le copie" }),
+    ).toBeVisible();
+    await restart.setViewportSize({ width: 390, height: 900 });
+    await restart.screenshot({
+      path: info.outputPath("offline-device-menu.png"),
+      fullPage: true,
+    });
+    await restart.keyboard.press("Escape");
+    for (const width of [320, 390, 820, 1440]) {
+      await restart.setViewportSize({ width, height: 900 });
+      expect(
+        await restart.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      const entry = restart.locator(".offline-entry").first();
+      const titleBox = await entry.locator("h2").boundingBox();
+      const buttonBox = await entry.getByRole("button").boundingBox();
+      expect(
+        Math.abs(
+          titleBox!.y +
+            titleBox!.height / 2 -
+            buttonBox!.y -
+            buttonBox!.height / 2,
+        ),
+      ).toBeLessThan(2);
+      await restart.screenshot({
+        path: info.outputPath(`offline-library-${width}.png`),
+        fullPage: true,
+      });
+    }
     const latest = (
       await pool.query(
         "SELECT current_snapshot_id FROM archive_work_heads WHERE id=$1",
@@ -455,6 +538,26 @@ test("offline reader survives restart, reconciles conflicts and isolates account
         fullPage: true,
       });
     }
+    await context.setOffline(false);
+    await restart.goto("/library/offline");
+    await expect(
+      restart.getByRole("button", { name: "Sincronizza", exact: true }),
+    ).toBeEnabled();
+    await restart
+      .locator(".offline-entry")
+      .getByRole("button", { name: "Rimuovi dal dispositivo", exact: true })
+      .click();
+    await expect(restart.getByRole("dialog")).toContainText(
+      "Tutte le sue copie offline verranno eliminate.",
+    );
+    await restart
+      .getByRole("dialog")
+      .getByRole("button", { name: "Rimuovi", exact: true })
+      .click();
+    await expect(
+      restart.getByText("Nessuna opera salvata su questo dispositivo."),
+    ).toBeVisible();
+    expect(await copyCount()).toBe(0);
     await restart.getByRole("button", { name: "Esci", exact: true }).click();
     const discard = restart.getByRole("button", {
       name: "Elimina dati locali ed esci",

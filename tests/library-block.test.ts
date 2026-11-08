@@ -61,9 +61,49 @@ test(
         username: "editor",
         role: "Editor",
       });
+      assert.deepEqual(
+        (await co("collectionCandidates", { id: collection })).items,
+        [{ username: "stranger" }],
+      );
+      assert.deepEqual(
+        (await co("collectionCandidates", { id: collection, q: "STR" })).items,
+        [{ username: "stranger" }],
+      );
+      assert.deepEqual(
+        (await co("collectionCandidates", { id: collection, q: "%" })).items,
+        [],
+      );
+      assert.deepEqual(
+        (
+          await co("collectionCandidates", {
+            id: collection,
+            cursor: "stranger",
+          })
+        ).items,
+        [],
+      );
+      await pool.query("UPDATE users SET disabled=true WHERE id=$1", [
+        stranger,
+      ]);
+      assert.deepEqual(
+        (await co("collectionCandidates", { id: collection })).items,
+        [],
+      );
+      await pool.query("UPDATE users SET disabled=false WHERE id=$1", [
+        stranger,
+      ]);
+      await assert.rejects(
+        co("collectionCandidates", { id: collection }, stranger),
+      );
       await assert.rejects(co("collectionDetail", { id: collection }, viewer));
       await co("collectionRespond", { id: collection, accept: true }, viewer);
       await co("collectionRespond", { id: collection, accept: true }, editor);
+      await assert.rejects(
+        co("collectionCandidates", { id: collection }, editor),
+      );
+      await assert.rejects(
+        co("collectionCandidates", { id: collection }, viewer),
+      );
       await assert.rejects(
         co(
           "collectionUpdate",
@@ -339,6 +379,7 @@ test(
         (await ro("annotationList", { id })).items[0].aligned.anchor,
         null,
       );
+      await pool.query("UPDATE users SET disabled=true WHERE id=$1", [viewer]);
       await co("collectionMember", {
         id: collection,
         username: "viewer",

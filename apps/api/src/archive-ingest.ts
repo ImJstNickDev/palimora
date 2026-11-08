@@ -152,7 +152,13 @@ export async function prepareIngest(
   const observations = new Map(
     (
       await db.query(
-        "SELECT id,work_id,locator,parser,fingerprint FROM archive_observations WHERE source_path=$1 AND work_id=ANY($2::uuid[])",
+        // Bound observation lookup to this group before joining the source dictionaries.
+        // A source-first nested loop scans every observation once per source entry.
+        `SELECT o.id,o.work_id,e.locator,r.name AS parser,encode(o.result_hash,'hex') AS fingerprint
+         FROM unnest($2::uuid[]) ids(work_id)
+         JOIN LATERAL (SELECT * FROM archive_observation_data o WHERE o.work_id=ids.work_id OFFSET 0) o ON true
+         JOIN archive_entries e ON e.id=o.entry_id JOIN archive_paths p ON p.id=e.path_id
+         JOIN archive_parsers r ON r.id=o.parser_id WHERE p.path=$1`,
         [source.path, ids],
       )
     ).rows.map((r) => [

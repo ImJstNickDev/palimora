@@ -75,8 +75,25 @@ export async function collectionOperation(
     x.id,
     user,
     ["collectionWork", "collectionUpdate"].includes(op),
-    op === "collectionMember" || (op === "collectionUpdate" && x.deleted),
+    ["collectionMember", "collectionCandidates"].includes(op) ||
+      (op === "collectionUpdate" && x.deleted),
   );
+  if (op === "collectionCandidates") {
+    const rows = (
+      await db.query(
+        `SELECT u.username FROM users u WHERE u.id<>$1 AND NOT u.disabled AND u.soft_deleted_at IS NULL
+       AND NOT EXISTS(SELECT 1 FROM library_members m WHERE m.collection_id=$2 AND m.user_id=u.id)
+       AND strpos(lower(u.username),lower($3))>0
+       AND ($4::text IS NULL OR lower(u.username)>lower($4))
+       ORDER BY lower(u.username) LIMIT 51`,
+        [c.owner_id, x.id, x.q ?? "", x.cursor ?? null],
+      )
+    ).rows;
+    return {
+      items: rows.slice(0, 50),
+      next: rows.length > 50 ? rows[49].username : null,
+    };
+  }
   if (op === "collectionDetail") {
     const members = (
       await db.query(
@@ -107,8 +124,8 @@ export async function collectionOperation(
   if (op === "collectionMember") {
     const member = (
       await db.query(
-        "SELECT id FROM users WHERE lower(username)=lower($1) AND NOT disabled AND soft_deleted_at IS NULL",
-        [x.username],
+        "SELECT id FROM users WHERE lower(username)=lower($1) AND ($2::boolean OR (NOT disabled AND soft_deleted_at IS NULL))",
+        [x.username, x.role === null],
       )
     ).rows[0];
     if (!member) fail("NOT_FOUND", 404);

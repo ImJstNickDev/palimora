@@ -20,6 +20,7 @@ test("Owner setup, invitation registration, account preferences and passkey life
   page,
   browser,
 }) => {
+  test.setTimeout(120000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");

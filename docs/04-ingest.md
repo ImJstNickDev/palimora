@@ -232,6 +232,10 @@ fino al completamento. Occorre terminare eventuali compattazioni/GC già accodat
 Rimane soltanto l’esito del reset nelle attività di manutenzione; l’inventario
 sorgenti resta consultabile per avviare subito una nuova importazione. Dati
 utente e audit non vengono modificati dal reset; i dump non vengono mai scritti.
+Il reset rifiuta di procedere se esistono dati personali o altre righe esterne
+che referenziano il corpus (`RESET_REFERENCED_DATA`). Le tabelle dipendenti vuote
+sono bloccate e incluse esplicitamente nella transazione, senza `CASCADE`; gli
+esiti di scrub legati al corpus dev vengono eliminati con i relativi job.
 
 Owner/Admin soltanto, autorizzazione e CSRF Foundation. Il runtime API non monta
 i dump. Per ripetere il campionamento read-only usare

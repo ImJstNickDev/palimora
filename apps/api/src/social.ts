@@ -311,6 +311,13 @@ export async function socialOperation(
       ),
     };
   }
+  if (op === "notificationsReadAll") {
+    await db.query(
+      "UPDATE personal_notifications SET read_at=clock_timestamp() WHERE user_id=$1 AND read_at IS NULL",
+      [user],
+    );
+    return { ok: true };
+  }
   if (op === "notificationRead") {
     if (
       !(

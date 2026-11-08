@@ -1250,3 +1250,9 @@ vulnerabilità segnalate. La build nativa sull'host richiede gli header Zstd
 documentati; il Dockerfile li installa. Nessuna ripetizione dei benchmark o
 intervento sui servizi in esecuzione. AO3 remoto, ingest massivo e scalabilità
 misurata a milioni di opere restano esclusi dalle verifiche attestate.
+
+Il primo avvio GitHub Actions ha rilevato che `ubuntu-latest` era passato a
+Ubuntu 26.04, non supportato da Playwright 1.56.1. Runner fissato a Ubuntu 24.04
+su `main`, evitando anche il doppio avvio branch/tag. Correzione della sola CI e
+documentazione successiva alla pubblicazione: il tag annotato `v1.0.0` resta
+immutato e il codice applicativo della release non cambia.

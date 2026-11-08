@@ -30,6 +30,10 @@ indicare directory esistenti con spazio libero. Non usare database o storage
 produttivi. Per una modifica circoscritta eseguire il percorso pertinente,
 senza ripetere benchmark o suite non interessate.
 
+La CI su `main` usa Ubuntu 24.04, compatibile con Playwright 1.56.1 fissato nel
+lockfile. Non usare `ubuntu-latest` senza verificare il supporto della nuova
+immagine: Ubuntu 26.04 non è supportato da questa versione Playwright.
+
 L'avvio locale di API/Vite e la review tramite Compose sono descritti in
 [02](docs/02-architettura.md#ambiente-di-review-ui-con-live-reload). I dump sono
 opzionali per sviluppare e testare: i test ordinari generano fixture sintetiche.

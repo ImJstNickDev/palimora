@@ -1,10 +1,14 @@
 name: Release verification
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 supports this image; ubuntu-latest can advance independently.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4

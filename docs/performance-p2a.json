@@ -1,0 +1,463 @@
+{
+  "schema": "palimora.performance-p2a.v1",
+  "status": "P2A complete; P2B and P2C not started",
+  "scope": "Full-text reindex of unchanged documents; no ingest or P2C end-to-end campaign",
+  "end_to_end_after": null,
+  "durability": {
+    "fsync": true,
+    "synchronous_commit": "on",
+    "full_page_writes": true
+  },
+  "baseline_commit": "16a018bef7a8ec777ac7ab2c66abc5938b141020",
+  "baseline_search_js_sha256": "0f49f6843c709add3969ceb559590b1a0b830694315cca50e17a094b4c562890",
+  "corpus": {
+    "works": 11032,
+    "source": "Retained P1B.1d B cold PostgreSQL copy; unchanged canonical PackStore mounted read-only"
+  },
+  "historical_baseline": {
+    "fulltext_seconds": 411.849,
+    "end_to_end_seconds": 434.043,
+    "end_to_end_documents_per_second": 25.417,
+    "put_requests": 11032,
+    "put_seconds": 163.287,
+    "residual_seconds": 248.562
+  },
+  "first_legacy_control": {
+    "label": "old-16",
+    "count": 11032,
+    "seconds": 378.306805557,
+    "documents_per_second": 29.16151609738301,
+    "sql": 247483,
+    "transactions": 11034,
+    "http": 11723,
+    "bytes": 426204691,
+    "http_ms": 157383.96382499672,
+    "wal_bytes": "2183344",
+    "node_cpu": {
+      "user": 126879652,
+      "system": 28051745
+    },
+    "rss_mean": 228861040.33068362,
+    "rss_max": 271667200,
+    "equivalent": null,
+    "transactions_including_ack_autocommit": 11034,
+    "containers": {}
+  },
+  "runs": [
+    {
+      "started_at": 1794145415519,
+      "ended_at": 1794145761287,
+      "label": "old-16",
+      "count": 11032,
+      "seconds": 345.74432081,
+      "documents_per_second": 31.907971688890054,
+      "sql": 247483,
+      "transactions": 11034,
+      "http": 11723,
+      "document_requests": 11032,
+      "bulk_requests": 0,
+      "bytes": 426204691,
+      "http_ms": 139421.18602200042,
+      "old_queue_sql_ms": 29678.446280002157,
+      "old_prepare_ms": 171197.42489900027,
+      "wal_bytes": "3108744",
+      "node_cpu": {
+        "user": 123584791,
+        "system": 26553304
+      },
+      "rss_mean": 196977427.14434782,
+      "rss_max": 222244864,
+      "equivalent": null,
+      "opensearch_cpu_seconds": 128.9000000000001,
+      "server_sql_calls": 258525.0,
+      "server_sql_ms": 9908.01916899957,
+      "node_io": {
+        "rchar": 376345847,
+        "wchar": 497379015,
+        "syscr": 720962,
+        "syscw": 614021,
+        "read_bytes": 2105344,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "transactions_including_ack_autocommit": 11034,
+      "containers": {
+        "old": {
+          "sampled_seconds": 345.03944396972656,
+          "cpu_seconds": 149.517348,
+          "ram_mean": 183455069.22543353,
+          "ram_max": 207728640,
+          "working_mean": 181501312.7398844,
+          "io_bytes": {
+            "read": 2105344,
+            "write": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 345.03934264183044,
+          "cpu_seconds": 85.285986,
+          "ram_mean": 162658801.20231214,
+          "ram_max": 171798528,
+          "working_mean": 151220093.7803468,
+          "io_bytes": {
+            "read": 0,
+            "write": 2768896
+          }
+        },
+        "search": {
+          "sampled_seconds": 345.0397324562073,
+          "cpu_seconds": 128.7715,
+          "ram_mean": 3167634485.271676,
+          "ram_max": 3570483200,
+          "working_mean": 2088088179.4219654,
+          "io_bytes": {
+            "read": 0,
+            "write": 1222041600
+          }
+        },
+        "worker": {
+          "sampled_seconds": 345.03926157951355,
+          "cpu_seconds": 0.0,
+          "ram_mean": 19079511.306358382,
+          "ram_max": 19083264,
+          "working_mean": 18653622.011560693,
+          "io_bytes": {
+            "read": 0,
+            "write": 8192
+          }
+        }
+      }
+    },
+    {
+      "started_at": 1794146227563,
+      "ended_at": 1794146503897,
+      "label": "bulk-16",
+      "count": 11032,
+      "seconds": 276.30454802199995,
+      "documents_per_second": 39.92695769568588,
+      "sql": 250240,
+      "transactions": 11723,
+      "http": 1381,
+      "document_requests": 0,
+      "bulk_requests": 690,
+      "bytes": 428013939,
+      "http_ms": 94347.37422199995,
+      "old_queue_sql_ms": null,
+      "old_prepare_ms": null,
+      "wal_bytes": "5072552",
+      "node_cpu": {
+        "user": 87170438,
+        "system": 23503524
+      },
+      "rss_mean": 204108313.6185642,
+      "rss_max": 266883072,
+      "equivalent": true,
+      "opensearch_cpu_seconds": 98.15999999999997,
+      "server_sql_calls": 261967.0,
+      "server_sql_ms": 10959.54008000018,
+      "node_io": {
+        "rchar": 375881509,
+        "wchar": 500617300,
+        "syscr": 650561,
+        "syscw": 545955,
+        "read_bytes": 1671168,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "transactions_including_ack_autocommit": 12413,
+      "containers": {
+        "old": {
+          "sampled_seconds": 275.03021359443665,
+          "cpu_seconds": 0.0,
+          "ram_mean": 44851200,
+          "ram_max": 44851200,
+          "working_mean": 41683760.231884055,
+          "io_bytes": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 275.0327835083008,
+          "cpu_seconds": 77.971626,
+          "ram_mean": 192962723.2463768,
+          "ram_max": 195715072,
+          "working_mean": 164926671.76811594,
+          "io_bytes": {
+            "read": 0,
+            "write": 25063424
+          }
+        },
+        "search": {
+          "sampled_seconds": 275.0336878299713,
+          "cpu_seconds": 97.905822,
+          "ram_mean": 2957856649.2753625,
+          "ram_max": 3342770176,
+          "working_mean": 1941186381.9130435,
+          "io_bytes": {
+            "read": 4096,
+            "write": 1203208192
+          }
+        },
+        "worker": {
+          "sampled_seconds": 275.03235626220703,
+          "cpu_seconds": 109.761734,
+          "ram_mean": 169358425.04347825,
+          "ram_max": 226140160,
+          "working_mean": 168832875.5942029,
+          "io_bytes": {
+            "read": 1613824,
+            "write": 0
+          }
+        }
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 690,
+        "bytes": 428013939,
+        "http_ms": 93644.7747009997,
+        "prepare_ms": 170064.27895900057,
+        "claim_ms": 3627.4773910000076,
+        "ack_ms": 2185.168296999678,
+        "failures": 0
+      }
+    },
+    {
+      "started_at": 1794144842261,
+      "ended_at": 1794145086461,
+      "label": "bulk-64",
+      "count": 11032,
+      "seconds": 244.18891228299998,
+      "documents_per_second": 45.178136455330076,
+      "sql": 248172,
+      "transactions": 11206,
+      "http": 347,
+      "document_requests": 0,
+      "bulk_requests": 173,
+      "bytes": 428013939,
+      "http_ms": 70612.74545800008,
+      "old_queue_sql_ms": null,
+      "old_prepare_ms": null,
+      "wal_bytes": "6713056",
+      "node_cpu": {
+        "user": 81601582,
+        "system": 22260190
+      },
+      "rss_mean": 212979648.0788501,
+      "rss_max": 282439680,
+      "equivalent": true,
+      "opensearch_cpu_seconds": 93.79000000000002,
+      "server_sql_calls": 259381.0,
+      "server_sql_ms": 9481.8615800002,
+      "node_io": {
+        "rchar": 375289618,
+        "wchar": 499769047,
+        "syscr": 643072,
+        "syscw": 538304,
+        "read_bytes": 2195456,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "transactions_including_ack_autocommit": 11379,
+      "containers": {
+        "old": {
+          "sampled_seconds": 243.03033471107483,
+          "cpu_seconds": 0.0,
+          "ram_mean": 42741760,
+          "ram_max": 42741760,
+          "working_mean": 39538822.295081966,
+          "io_bytes": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 243.02923774719238,
+          "cpu_seconds": 73.422901,
+          "ram_mean": 157400718.6885246,
+          "ram_max": 159965184,
+          "working_mean": 151056870.81967214,
+          "io_bytes": {
+            "read": 0,
+            "write": 12660736
+          }
+        },
+        "search": {
+          "sampled_seconds": 243.02924609184265,
+          "cpu_seconds": 93.618563,
+          "ram_mean": 3102731952.2622952,
+          "ram_max": 3577126912,
+          "working_mean": 2000718226.8852458,
+          "io_bytes": {
+            "read": 12288,
+            "write": 1059336192
+          }
+        },
+        "worker": {
+          "sampled_seconds": 243.0296506881714,
+          "cpu_seconds": 102.916422,
+          "ram_mean": 172624392.39344263,
+          "ram_max": 240386048,
+          "working_mean": 172303108.19672132,
+          "io_bytes": {
+            "read": 2195456,
+            "write": 8192
+          }
+        }
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 173,
+        "bytes": 428013939,
+        "http_ms": 70420.96124899996,
+        "prepare_ms": 165794.57251400096,
+        "claim_ms": 1608.281060999947,
+        "ack_ms": 637.6592860001488,
+        "failures": 0
+      }
+    },
+    {
+      "started_at": 1794145126524,
+      "ended_at": 1794145374439,
+      "label": "bulk-128",
+      "count": 11032,
+      "seconds": 247.893130745,
+      "documents_per_second": 44.50304841786147,
+      "sql": 247828,
+      "transactions": 11120,
+      "http": 175,
+      "document_requests": 0,
+      "bulk_requests": 87,
+      "bytes": 428013939,
+      "http_ms": 70654.19578499992,
+      "old_queue_sql_ms": null,
+      "old_prepare_ms": null,
+      "wal_bytes": "7151728",
+      "node_cpu": {
+        "user": 82598105,
+        "system": 23226977
+      },
+      "rss_mean": 260470975.45609066,
+      "rss_max": 343416832,
+      "equivalent": true,
+      "opensearch_cpu_seconds": 93.54999999999995,
+      "server_sql_calls": 258951.0,
+      "server_sql_ms": 9219.224897999375,
+      "node_io": {
+        "rchar": 375247500,
+        "wchar": 499651652,
+        "syscr": 644527,
+        "syscw": 539635,
+        "read_bytes": 1073152,
+        "write_bytes": 0,
+        "cancelled_write_bytes": 0
+      },
+      "transactions_including_ack_autocommit": 11207,
+      "containers": {
+        "old": {
+          "sampled_seconds": 247.02679562568665,
+          "cpu_seconds": 0.0,
+          "ram_mean": 42741760,
+          "ram_max": 42741760,
+          "working_mean": 40835666.58064516,
+          "io_bytes": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "pg": {
+          "sampled_seconds": 247.0247724056244,
+          "cpu_seconds": 74.859654,
+          "ram_mean": 170106334.96774194,
+          "ram_max": 172265472,
+          "working_mean": 151625480.2580645,
+          "io_bytes": {
+            "read": 0,
+            "write": 10792960
+          }
+        },
+        "search": {
+          "sampled_seconds": 247.02426862716675,
+          "cpu_seconds": 93.424201,
+          "ram_mean": 3221395918.451613,
+          "ram_max": 3651686400,
+          "working_mean": 2056658597.1612904,
+          "io_bytes": {
+            "read": 12288,
+            "write": 1020137472
+          }
+        },
+        "worker": {
+          "sampled_seconds": 247.0255241394043,
+          "cpu_seconds": 105.136634,
+          "ram_mean": 222588250.83870968,
+          "ram_max": 306823168,
+          "working_mean": 222231865.80645162,
+          "io_bytes": {
+            "read": 1073152,
+            "write": 8192
+          }
+        }
+      },
+      "stages": {
+        "claimed": 11032,
+        "acknowledged": 11032,
+        "requests": 87,
+        "bytes": 428013939,
+        "http_ms": 70593.55215599989,
+        "prepare_ms": 170302.6612089996,
+        "claim_ms": 1064.9563240000543,
+        "ack_ms": 404.88949900012994,
+        "failures": 0
+      }
+    }
+  ],
+  "validation": {
+    "partial_failure_and_no_http_transaction": true,
+    "accepted_timeout_idempotent_retry": true,
+    "lease_expiry_and_stale_owner": true,
+    "out_of_order_publication": true,
+    "invalidation_during_preparation": true,
+    "crash_claim-before-commit": true,
+    "crash_before-send": true,
+    "crash_after-send": true,
+    "crash_before-ack": true,
+    "transient_backoff": true,
+    "oversize_utf8_preserved": true,
+    "large_documents_sent_alone": true,
+    "scheduler_pause_resume_replica_and_stop": true,
+    "operational_failure_history_and_retry": true,
+    "maintenance_modes": true,
+    "stop": true,
+    "no_automatic_index_without_mapping": true,
+    "recreation_and_drain": true,
+    "canonical_snapshots_and_history_unchanged": true,
+    "retry_durability": {
+      "failed_flush_preserves_queue": true,
+      "confirmed_flush_before_ack": true,
+      "source_unchanged": true,
+      "all_projection_queues_drained": true
+    },
+    "build": "All workspaces passed; existing Vite chunk-size warning",
+    "ingest_pipeline_tests": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "limits": [
+    "Shared host, uncontrolled caches, sequential subsystem runs; no end-to-end acceleration claim.",
+    "Direct projectText engine timing includes durable claims, preparation, publication and ACK; scheduler operational wrappers are tested separately.",
+    "64/128 runs precede the final conflict-only flush barrier; all timed requests succeeded without conflicts. Final16 was rerun on the final engine.",
+    "RSS is sampled every 100ms and container resources every second. Server SQL aggregates include observer queries; client SQL counts are isolated application calls.",
+    "First legacy run populates the empty index. Subsequent runs replace existing documents; matched legacy repeat and final bulk16 use this same condition.",
+    "Transient overload and lost-response probes inject transport faults around real OpenSearch operations; they do not claim a measured server overload threshold.",
+    "Default remains 16 documents; no default tuning based on these measurements.",
+    "Cgroup CPU and I/O cover first-to-last samples (about one second less than each stage). WAL includes background activity.",
+    "Preparation retains per-document SQL/PackStore reads. New preparation includes its read transaction; legacy timing starts after dequeue and ends before PUT. Neither is pure CPU.",
+    "Transactions include instrumented BEGIN plus one autocommit ACK per confirmed bulk; all timed runs have zero retries.",
+    "Lease crash probes force expiry in SQL after SIGKILL rather than waiting five minutes.",
+    "No P2B, P2C, P3, P4 or P5 work."
+  ]
+}

@@ -38,16 +38,19 @@ export async function runProjection(
           [kind, started, processed],
         );
       return processed;
-    } catch {
+    } catch (cause) {
+      const completed = (cause as { processed?: number })?.processed;
+      const processed =
+        Number.isSafeInteger(completed) && completed! > 0 ? completed! : 0;
       const error =
         kind === "search" ? "SEARCH_INDEX_FAILED" : "CATALOG_PROJECTION_FAILED";
       await db.query(
-        "UPDATE operations_index SET state='failed',error=$2,retry_at=now()+interval '1 minute',updated_at=now() WHERE kind=$1",
-        [kind, error],
+        "UPDATE operations_index SET state='failed',processed=processed+$3,error=$2,retry_at=now()+interval '1 minute',updated_at=now() WHERE kind=$1",
+        [kind, error, processed],
       );
       await db.query(
-        "INSERT INTO operations_index_runs(kind,started_at,processed,error) VALUES($1,$2,0,$3)",
-        [kind, started, error],
+        "INSERT INTO operations_index_runs(kind,started_at,processed,error) VALUES($1,$2,$4,$3)",
+        [kind, started, error, processed],
       );
       return 0;
     }

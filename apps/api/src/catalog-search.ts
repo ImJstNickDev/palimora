@@ -4,6 +4,7 @@ import { fail } from "./security";
 import { plain, values, tagKinds } from "./catalog-bibliography";
 import { chapterBytes, loadSnapshot } from "./catalog";
 export const SEARCH_INDEX = "palimora-works-v2";
+export const SEARCH_WRITE_ALIAS = SEARCH_INDEX + "-write";
 const analyzers: Record<string, string> = {
   en: "english",
   it: "italian",
@@ -89,9 +90,34 @@ export async function searchRequest(
   return result;
 }
 export async function ensureSearchIndex() {
-  const head = await searchRequest("/" + SEARCH_INDEX, undefined, "HEAD", true);
+  const head = await searchRequest(
+    "/" + SEARCH_INDEX + "/_alias/" + SEARCH_WRITE_ALIAS,
+    undefined,
+    "HEAD",
+    true,
+  );
   if (head.ok) return false;
   if (head.status !== 404) fail("SEARCH_UNAVAILABLE", 503);
+  const existing = await searchRequest(
+    "/" + SEARCH_INDEX,
+    undefined,
+    "HEAD",
+    true,
+  );
+  if (existing.ok) {
+    await searchRequest(
+      "/" + SEARCH_INDEX + "/_alias/" + SEARCH_WRITE_ALIAS,
+      {},
+      "PUT",
+    );
+    return false;
+  }
+  if (existing.status !== 404) fail("SEARCH_UNAVAILABLE", 503);
+  await transaction((db) =>
+    db.query(
+      "INSERT INTO catalog_text_pending(work_id) SELECT work_id FROM catalog_documents ON CONFLICT(work_id) DO UPDATE SET work_id=excluded.work_id",
+    ),
+  );
   const text = { type: "text" },
     keyword = { type: "keyword", ignore_above: 4096 },
     number = { type: "long" },
@@ -192,6 +218,7 @@ export async function ensureSearchIndex() {
         },
       },
       mappings: { dynamic: false, properties },
+      aliases: { [SEARCH_WRITE_ALIAS]: {} },
     },
     "PUT",
     true,
@@ -211,253 +238,215 @@ export async function ensureSearchIndex() {
   }
   return true;
 }
-export async function projectText(limit = 16, stopped = () => false) {
-  const recreated = await ensureSearchIndex();
-  if (recreated)
-    await transaction((db) =>
-      db.query(
-        "INSERT INTO catalog_text_pending SELECT work_id FROM catalog_documents ON CONFLICT DO NOTHING",
+export async function prepareTextDocument(db: DB, row: any) {
+  const { manifest: m } = row.snapshot_id
+    ? await loadSnapshot(db, row.work_id, row.snapshot_id)
+    : { manifest: null };
+  const metadata = row.metadata,
+    text: string[] = [];
+  if (m)
+    for (const c of m.chapters)
+      text.push(plain((await chapterBytes(db, m, c)).toString()));
+  const language = values(metadata.language)[0] ?? "und",
+    code = languageCode(language);
+  const epoch = (
+    await db.query("SELECT epoch FROM catalog_search_state WHERE id=1")
+  ).rows[0].epoch;
+  const document: any = {
+    epoch,
+    memberships: (row.bibliography.entities ?? [])
+      .filter((e: any) => e.position !== undefined)
+      .map((e: any) => ({ id: e.id, position: e.position })),
+    id: row.work_id,
+    generation: row.generation,
+    snapshot: row.snapshot_id,
+    title: values(metadata.title).join(" · "),
+    creators: [
+      ...new Set([
+        ...values(metadata.creators),
+        ...(row.bibliography.entities ?? [])
+          .filter((e: any) => ["author", "pseud"].includes(e.kind))
+          .map((e: any) => e.name),
+      ]),
+    ],
+    summary: metadata.summary ?? "",
+    tag: tagKinds.flatMap((k) => values(metadata[k])),
+    filter_ids: row.bibliography.filterTags ?? [],
+    entity_ids: (row.bibliography.entities ?? []).map((e: any) => e.id),
+    language,
+    language_id: code,
+    series: {
+      id: (row.bibliography.entities ?? [])
+        .filter((e: any) => e.kind === "series")
+        .map((e: any) => e.source_id)
+        .filter(Boolean),
+      position: (row.bibliography.entities ?? [])
+        .filter((e: any) => e.kind === "series" && e.position !== undefined)
+        .map((e: any) => e.position),
+      title: (row.bibliography.entities ?? [])
+        .filter((e: any) => e.kind === "series")
+        .map((e: any) => e.name),
+    },
+    availability: metadata.availability ?? "unknown",
+    text: { [code]: text.join("\n") },
+    archived_at: row.indexed_at,
+  };
+  for (const k of tagKinds) document[k] = values(metadata[k]);
+  for (const [from, to] of Object.entries({
+    words: "word_count",
+    hits: "hits",
+    kudos: "kudos_count",
+    comments: "comments_count",
+    bookmarks: "bookmarks_count",
+    chapter_count: "chapter_count",
+    expected_chapters: "expected_number_of_chapters",
+  }))
+    if (typeof metadata[from] === "number") document[to] = metadata[from];
+  for (const [from, to] of [
+    ["published", "created_at"],
+    ["updated", "revised_at"],
+  ])
+    if (/^\d{4}-\d{2}-\d{2}/.test(metadata[from] ?? ""))
+      document[to] = metadata[from].slice(0, 10);
+  for (const field of ["complete", "anonymous", "unrevealed", "restricted"])
+    if (typeof metadata[field] === "boolean") document[field] = metadata[field];
+  for (const field of [
+    "crossover",
+    "otp",
+    "nonfiction",
+    "posted",
+    "hidden_by_admin",
+    "work_types",
+    "work_skin_id",
+    "imported_from_url",
+  ])
+    if (metadata[field] !== undefined) document[field] = metadata[field];
+  const fandomEvidence = (row.bibliography.tags ?? []).filter(
+    (t: any) => t.kind === "fandom",
+  );
+  if (document.fandom.length === 1 && document.crossover === undefined)
+    document.crossover = false;
+  if (
+    document.fandom.length > 1 &&
+    fandomEvidence.every((t: any) => t.source_id) &&
+    document.crossover === undefined
+  ) {
+    const reach = (
+      await db.query(
+        `WITH RECURSIVE reach(root,id) AS(SELECT t.id,t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='fandom' UNION SELECT r.root,e.parent FROM reach r JOIN catalog_tag_edges e ON e.child=r.id WHERE e.kind IN('synonym','meta')) SELECT root,array_agg(id) nodes FROM reach GROUP BY root`,
+        [row.work_id],
+      )
+    ).rows;
+    document.crossover = !reach.some((g) =>
+      reach.every((other) =>
+        g.nodes.some((id: string) => other.nodes.includes(id)),
       ),
     );
-  let processed = 0;
-  for (let i = 0; i < limit && !stopped(); i++) {
-    const done = await transaction(async (db) => {
-      const row = (
-        await db.query(
-          // A merge join re-walks all already indexed documents on each dequeue.
-          // Keep the pending-row lock and use the document primary key directly.
-          `SELECT d.* FROM catalog_text_pending p
-           JOIN LATERAL (SELECT d.* FROM catalog_documents d WHERE d.work_id=p.work_id OFFSET 0) d ON true
-           ORDER BY p.work_id LIMIT 1 FOR UPDATE OF p SKIP LOCKED`,
-        )
-      ).rows[0];
-      if (!row) return false;
-      const { manifest: m } = row.snapshot_id
-        ? await loadSnapshot(db, row.work_id, row.snapshot_id)
-        : { manifest: null };
-      const metadata = row.metadata,
-        text: string[] = [];
-      if (m)
-        for (const c of m.chapters)
-          text.push(plain((await chapterBytes(db, m, c)).toString()));
-      const language = values(metadata.language)[0] ?? "und",
-        code = languageCode(language);
-      const epoch = (
-        await db.query("SELECT epoch FROM catalog_search_state WHERE id=1")
-      ).rows[0].epoch;
-      const document: any = {
-        epoch,
-        memberships: (row.bibliography.entities ?? [])
-          .filter((e: any) => e.position !== undefined)
-          .map((e: any) => ({ id: e.id, position: e.position })),
-        id: row.work_id,
-        generation: row.generation,
-        snapshot: row.snapshot_id,
-        title: values(metadata.title).join(" · "),
-        creators: [
-          ...new Set([
-            ...values(metadata.creators),
-            ...(row.bibliography.entities ?? [])
-              .filter((e: any) => ["author", "pseud"].includes(e.kind))
-              .map((e: any) => e.name),
-          ]),
-        ],
-        summary: metadata.summary ?? "",
-        tag: tagKinds.flatMap((k) => values(metadata[k])),
-        filter_ids: row.bibliography.filterTags ?? [],
-        entity_ids: (row.bibliography.entities ?? []).map((e: any) => e.id),
-        language,
-        language_id: code,
-        series: {
-          id: (row.bibliography.entities ?? [])
-            .filter((e: any) => e.kind === "series")
-            .map((e: any) => e.source_id)
-            .filter(Boolean),
-          position: (row.bibliography.entities ?? [])
-            .filter((e: any) => e.kind === "series" && e.position !== undefined)
-            .map((e: any) => e.position),
-          title: (row.bibliography.entities ?? [])
-            .filter((e: any) => e.kind === "series")
-            .map((e: any) => e.name),
-        },
-        availability: metadata.availability ?? "unknown",
-        text: { [code]: text.join("\n") },
-        archived_at: row.indexed_at,
-      };
-      for (const k of tagKinds) document[k] = values(metadata[k]);
-      for (const [from, to] of Object.entries({
-        words: "word_count",
-        hits: "hits",
-        kudos: "kudos_count",
-        comments: "comments_count",
-        bookmarks: "bookmarks_count",
-        chapter_count: "chapter_count",
-        expected_chapters: "expected_number_of_chapters",
-      }))
-        if (typeof metadata[from] === "number") document[to] = metadata[from];
-      for (const [from, to] of [
-        ["published", "created_at"],
-        ["updated", "revised_at"],
-      ])
-        if (/^\d{4}-\d{2}-\d{2}/.test(metadata[from] ?? ""))
-          document[to] = metadata[from].slice(0, 10);
-      for (const field of ["complete", "anonymous", "unrevealed", "restricted"])
-        if (typeof metadata[field] === "boolean")
-          document[field] = metadata[field];
-      for (const field of [
-        "crossover",
-        "otp",
-        "nonfiction",
-        "posted",
-        "hidden_by_admin",
-        "work_types",
-        "work_skin_id",
-        "imported_from_url",
-      ])
-        if (metadata[field] !== undefined) document[field] = metadata[field];
-      const fandomEvidence = (row.bibliography.tags ?? []).filter(
-        (t: any) => t.kind === "fandom",
-      );
-      if (document.fandom.length === 1 && document.crossover === undefined)
-        document.crossover = false;
-      if (
-        document.fandom.length > 1 &&
-        fandomEvidence.every((t: any) => t.source_id) &&
-        document.crossover === undefined
-      ) {
-        const reach = (
-          await db.query(
-            `WITH RECURSIVE reach(root,id) AS(SELECT t.id,t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='fandom' UNION SELECT r.root,e.parent FROM reach r JOIN catalog_tag_edges e ON e.child=r.id WHERE e.kind IN('synonym','meta')) SELECT root,array_agg(id) nodes FROM reach GROUP BY root`,
-            [row.work_id],
-          )
-        ).rows;
-        document.crossover = !reach.some((g) =>
-          reach.every((other) =>
-            g.nodes.some((id: string) => other.nodes.includes(id)),
-          ),
-        );
-      }
-      const relationshipEvidence = (row.bibliography.tags ?? []).filter(
-        (t: any) => t.kind === "relationships",
-      );
-      if (document.relationships.length === 1 && document.otp === undefined)
-        document.otp = true;
-      if (
-        document.relationships.length > 1 &&
-        relationshipEvidence.every((t: any) => t.source_id) &&
-        document.otp === undefined
-      ) {
-        const resolved = (
-          await db.query(
-            `WITH RECURSIVE tags(id) AS(SELECT t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='relationships' UNION SELECT e.parent FROM catalog_tag_edges e JOIN tags t ON t.id=e.child WHERE e.kind='synonym') SELECT count(*)::int n FROM tags WHERE NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=tags.id AND e.kind='synonym')`,
-            [row.work_id],
-          )
-        ).rows[0];
-        document.otp = resolved.n === 1;
-      }
-      let title = document.title.toLowerCase().replace(/^["'./]/, "");
-      const article = title.match(/^(a|an|the) (.+)$/);
-      if (article) title = article[2] + ", " + article[1];
-      document.sort_title = /^\d/.test(title) ? title.padStart(5, "0") : title;
-      const pseuds = (row.bibliography.entities ?? [])
-        .filter((e: any) => e.kind === "pseud")
-        .map((e: any) => e.name);
-      document.sort_authors = [...(pseuds.length ? pseuds : document.creators)]
-        .sort()
-        .join(",  ")
-        .toLowerCase()
-        .replace(/^[+\-=_?!'"./]/, "");
-      for (const [kind, field] of [
-        ["author", "user_ids"],
-        ["pseud", "pseud_ids"],
-        ["collection", "collection_ids"],
-      ])
-        document[field] = (row.bibliography.entities ?? [])
-          .filter((e: any) => e.kind === kind)
-          .map((e: any) => e.source_id)
-          .filter(Boolean);
-      const ext = (
-        await db.query(
-          "SELECT external_id,(SELECT min(imported_at) FROM archive_snapshots WHERE work_id=$1) AS archived_at FROM archive_work_heads WHERE id=$1",
-          [row.work_id],
-        )
-      ).rows[0];
-      document.alias = !!(
-        await db.query(
-          "SELECT 1 FROM archive_identity_links WHERE work_id=$1",
-          [row.work_id],
-        )
-      ).rowCount;
-      document.external_id = ext.external_id;
-      document.archived_at = ext.archived_at;
-      if (/^\d+$/.test(ext.external_id ?? ""))
-        document.ao3_id = Number(ext.external_id);
-      if (m) {
-        const chapterNotes = new Set(
-          m.chapters.flatMap((c: any) =>
-            (c.notes ?? []).map((n: any) => n.name),
-          ),
-        );
-        const notes = [];
-        for (const n of m.objects.filter(
-          (o: any) => o.kind === "notes_html" && !chapterNotes.has(o.name),
-        ))
-          notes.push(
-            plain(
-              (
-                await (await import("./archive")).readObject(db, n.hash)
-              ).toString(),
-            ),
-          );
-        document.notes = notes.join("\n");
-      }
-      const canonicalTags = (
-        await db.query(
-          "SELECT * FROM catalog_tags WHERE id=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=catalog_tags.id AND e.kind='synonym')",
-          [document.filter_ids],
-        )
-      ).rows;
-      for (const kind of tagKinds)
-        document[kind] = canonicalTags
-          .filter((t) => t.kind === kind)
-          .map((t) => t.name);
-      const sourceTags = (
-        await db.query(
-          "SELECT kind,source_id FROM catalog_tags WHERE id=ANY($1::text[]) AND source_id IS NOT NULL",
-          [row.bibliography.filterTags ?? []],
-        )
-      ).rows;
-      document.filter_ids = [
-        ...document.filter_ids,
-        ...sourceTags.map((t) => t.source_id),
-      ];
-      for (const [kind, field] of Object.entries({
-        rating: "rating_ids",
-        warnings: "archive_warning_ids",
-        category: "category_ids",
-        fandom: "fandom_ids",
-        characters: "character_ids",
-        relationships: "relationship_ids",
-        freeform: "freeform_ids",
-      }))
-        document[field] = sourceTags
-          .filter((t) => t.kind === kind)
-          .map((t) => t.source_id);
-      await searchRequest(
-        "/" + SEARCH_INDEX + "/_doc/" + row.work_id,
-        document,
-        "PUT",
-      );
-      await db.query("DELETE FROM catalog_text_pending WHERE work_id=$1", [
-        row.work_id,
-      ]);
-      return true;
-    });
-    if (!done) break;
-    processed++;
   }
-  return processed;
+  const relationshipEvidence = (row.bibliography.tags ?? []).filter(
+    (t: any) => t.kind === "relationships",
+  );
+  if (document.relationships.length === 1 && document.otp === undefined)
+    document.otp = true;
+  if (
+    document.relationships.length > 1 &&
+    relationshipEvidence.every((t: any) => t.source_id) &&
+    document.otp === undefined
+  ) {
+    const resolved = (
+      await db.query(
+        `WITH RECURSIVE tags(id) AS(SELECT t.id FROM catalog_work_tags w JOIN catalog_tags t ON t.id=w.tag_id WHERE w.work_id=$1 AND t.kind='relationships' UNION SELECT e.parent FROM catalog_tag_edges e JOIN tags t ON t.id=e.child WHERE e.kind='synonym') SELECT count(*)::int n FROM tags WHERE NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=tags.id AND e.kind='synonym')`,
+        [row.work_id],
+      )
+    ).rows[0];
+    document.otp = resolved.n === 1;
+  }
+  let title = document.title.toLowerCase().replace(/^["'./]/, "");
+  const article = title.match(/^(a|an|the) (.+)$/);
+  if (article) title = article[2] + ", " + article[1];
+  document.sort_title = /^\d/.test(title) ? title.padStart(5, "0") : title;
+  const pseuds = (row.bibliography.entities ?? [])
+    .filter((e: any) => e.kind === "pseud")
+    .map((e: any) => e.name);
+  document.sort_authors = [...(pseuds.length ? pseuds : document.creators)]
+    .sort()
+    .join(",  ")
+    .toLowerCase()
+    .replace(/^[+\-=_?!'"./]/, "");
+  for (const [kind, field] of [
+    ["author", "user_ids"],
+    ["pseud", "pseud_ids"],
+    ["collection", "collection_ids"],
+  ])
+    document[field] = (row.bibliography.entities ?? [])
+      .filter((e: any) => e.kind === kind)
+      .map((e: any) => e.source_id)
+      .filter(Boolean);
+  const ext = (
+    await db.query(
+      "SELECT external_id,(SELECT min(imported_at) FROM archive_snapshots WHERE work_id=$1) AS archived_at FROM archive_work_heads WHERE id=$1",
+      [row.work_id],
+    )
+  ).rows[0];
+  document.alias = !!(
+    await db.query("SELECT 1 FROM archive_identity_links WHERE work_id=$1", [
+      row.work_id,
+    ])
+  ).rowCount;
+  document.external_id = ext.external_id;
+  document.archived_at = ext.archived_at;
+  if (/^\d+$/.test(ext.external_id ?? ""))
+    document.ao3_id = Number(ext.external_id);
+  if (m) {
+    const chapterNotes = new Set(
+      m.chapters.flatMap((c: any) => (c.notes ?? []).map((n: any) => n.name)),
+    );
+    const notes = [];
+    for (const n of m.objects.filter(
+      (o: any) => o.kind === "notes_html" && !chapterNotes.has(o.name),
+    ))
+      notes.push(
+        plain(
+          (await (await import("./archive")).readObject(db, n.hash)).toString(),
+        ),
+      );
+    document.notes = notes.join("\n");
+  }
+  const canonicalTags = (
+    await db.query(
+      "SELECT * FROM catalog_tags WHERE id=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM catalog_tag_edges e WHERE e.child=catalog_tags.id AND e.kind='synonym')",
+      [document.filter_ids],
+    )
+  ).rows;
+  for (const kind of tagKinds)
+    document[kind] = canonicalTags
+      .filter((t) => t.kind === kind)
+      .map((t) => t.name);
+  const sourceTags = (
+    await db.query(
+      "SELECT kind,source_id FROM catalog_tags WHERE id=ANY($1::text[]) AND source_id IS NOT NULL",
+      [row.bibliography.filterTags ?? []],
+    )
+  ).rows;
+  document.filter_ids = [
+    ...document.filter_ids,
+    ...sourceTags.map((t) => t.source_id),
+  ];
+  for (const [kind, field] of Object.entries({
+    rating: "rating_ids",
+    warnings: "archive_warning_ids",
+    category: "category_ids",
+    fandom: "fandom_ids",
+    characters: "character_ids",
+    relationships: "relationship_ids",
+    freeform: "freeform_ids",
+  }))
+    document[field] = sourceTags
+      .filter((t) => t.kind === kind)
+      .map((t) => t.source_id);
+  return document;
 }
+export { projectText } from "./catalog-text-bulk";
 export function numericRange(input: string) {
   const v = input.replaceAll(",", "").trim();
   const m = v.match(/^(<=|>=|<|>|=)?\s*(\d+)(?:\s*-\s*(\d+))?$/);

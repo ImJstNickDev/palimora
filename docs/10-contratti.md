@@ -432,3 +432,13 @@ contenuto agli utenti ordinari; `IMPERSONATION_RESTRICTED` (403) blocca sicurezz
 account e sessioni annidate. Audit e problemi hanno paginazione a cursore; il
 pannello aggiorna integrità ogni 3 s, audit ogni 10 s. Nessun risultato o pack
 viene caricato integralmente nel browser.
+
+### Pubblicazione full-text durevole (P2A)
+
+`catalog_text_pending` conserva revisione ordinabile, token di claim, lease,
+tentativi, retry ed errore. Un'invalidazione revoca il claim e avanza la revisione;
+il completamento elimina soltanto la coppia revisione/token confermata.
+La preparazione legge uno snapshot SQL coerente; HTTP bulk avviene dopo il commit.
+OpenSearch usa versioning esterno stretto, per impedire sovrascritture fuori ordine.
+Gli errori permanenti restano visibili e riprovabili, mai scartati. Limiti,
+recupero e misure sono definiti nella sezione P2A di `11-performance-overhaul.md`.

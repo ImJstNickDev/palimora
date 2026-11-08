@@ -1691,3 +1691,162 @@ risultati privati. Report pubblico: [performance-p1b1d.json](performance-p1b1d.j
 Fixture `/mnt/sdb/palimora-p1b1d-{a,b,equivalence}-20261108/` e directory sorelle
 `c-*`, `cold-*`, `text-latency-*`, `control-*`. Container/reti temporanei rimossi,
 bind mount ed evidenze conservati; baseline e servizi di produzione intatti.
+
+## P2A — trasporto bulk e protocollo di pubblicazione
+
+Il runtime usa la stessa `catalog_text_pending`, lo scheduler P1A e i lock di
+sessione operativi. La migrazione additiva 039 assegna revisioni bigint con una
+sequenza persistente; gli hash `generation` continuano a identificare i contenuti.
+Ogni invalidazione aggiorna la revisione e revoca il claim precedente. La sequenza
+parte da 10^12 per separare la prima pubblicazione dalle versioni interne legacy.
+
+Il claim usa una transazione breve, `SKIP LOCKED`, token UUID, generazione richiesta e lease di cinque
+minuti. La costruzione resta sequenziale e usa una transazione read-only
+repeatable-read per opera, senza lock di coda; verifica token e revisione prima
+di leggere. Manifest, capitoli, note e bibliografia seguono il percorso P1B.1:
+nessun prefetch, cache o cambiamento PackStore/P2B. Nessuna transazione della
+proiezione rimane aperta durante HTTP.
+
+NDJSON usa `index`, gli stessi ID e documenti, `version_type=external` stretto.
+Un alias di scrittura con `require_alias` impedisce che un bulk ricrei
+automaticamente un indice senza mapping quando questo scompare durante l’invio.
+OpenSearch rifiuta revisioni uguali o precedenti: anche un retry con preparazione
+ripetuta non sostituisce i byte già pubblicati. Un conflitto di versione conferma
+che quella revisione o una successiva è già presente. Nei soli retry con conflitto,
+un flush confermato da tutti gli shard rende durevole la scrittura osservata prima
+dell'ACK, anche senza aver ricevuto la conferma originaria. Un flush fallito lascia
+il documento pendente. I bulk normalmente riusciti usano la durabilità `request`
+di OpenSearch e non eseguono flush aggiuntivi ([Flush API](https://docs.opensearch.org/latest/api-reference/index-apis/flush/)).
+ACK set-based condizionato
+sia dalla revisione sia dal token: non può cancellare invalidazioni o lease nuovi.
+Riferimento: [Bulk API OpenSearch](https://docs.opensearch.org/latest/api-reference/document-apis/bulk/).
+
+Limiti: default **16 opere**, configurazione P1A fino a 256, target **8 MiB di
+NDJSON effettivi**. Un documento oltre il target viaggia da solo, fino a **64 MiB**;
+oltre tale limite resta pendente con errore esplicito, senza troncamento. Il buffer
+contiene al massimo il bulk corrente più il documento in preparazione; quest'ultimo
+mantiene il costo di ricostruzione P1B.1. Nessun parallelismo illimitato. I gruppi
+64/128 servono alla misura, non modificano il default.
+
+Le risposte sono validate per item e ID. Errori di trasporto, timeout e risposte
+incomplete conservano il lavoro; retry esponenziale fino a 300 s con jitter.
+Errori permanenti per item e documenti oltre limite restano in coda, con retry
+orario, e non sono considerati completati. Il controllo amministrativo retry
+riabilita gli elementi disponibili. Stato e cronologia operativa registrano il
+fallimento anche quando parte del gruppo è stata confermata. Il monitoraggio
+include anche claim e documenti falliti nel backlog. Uno stop conserva i claim
+non completati; il riavvio recupera quelli scaduti. La ricreazione accoda tutte
+le opere **prima** della creazione HTTP dell'indice, eliminando la finestra di
+crash fra creazione e accodamento.
+
+Verifica riproducibile: `scripts/benchmark-text-bulk.cjs` su PostgreSQL/OpenSearch
+isolati e copia fredda della fixture P1B.1, PackStore originale montato read-only.
+`P2A_LABEL=old-16` usa l'immagine P1B.1 senza migrare; `bulk-16`, `bulk-64` e
+`bulk-128` usano il nuovo runtime con migrazione. I confronti verificano hash
+SHA-256 dell'intero `_source` per tutti gli ID e risultati di cinque ricerche.
+`scripts/verify-text-bulk.cjs` esercita guasti e concorrenza su servizi reali.
+Nessun ingest viene eseguito; questa misura riguarda solo il full-text e non è
+la campagna end-to-end P2C.
+
+```sh
+# La fixture sorgente deve essere spenta; la directory risultato deve essere nuova.
+docker build -f infra/Dockerfile --target api -t palimora-p2a-api .
+P2A_SOURCE=/mnt/sdb/palimora-p1b1d-b-20261108 \
+ P2A_ROOT=/mnt/sdb/palimora-p2a-repeat \
+ P2A_IMAGE=palimora-p2a-api ./scripts/benchmark-p2a.sh
+```
+
+Il controllo legacy viene eseguito prima della migrazione e ripetuto dopo i
+bulk sullo stesso schema additivo 039. Il report distingue il primo controllo
+dalla ripetizione strumentata. Il campionamento risorse è esterno al processo;
+la verifica dei documenti avviene dopo la finestra misurata. Il tempo HTTP del
+wrapper termina agli header; quello dello stadio bulk include lettura e parsing
+della risposta. Non sono due misure da sommare. I tempi SQL includono round-trip;
+CPU e I/O sono contatori separati.
+
+Per l'aggiornamento arrestare i proiettori precedenti prima di migrare/avviare
+P2A: scrittori legacy con versioning interno non devono convivere con il nuovo
+protocollo esterno. I controlli P1B.1 del benchmark sono sequenziali, senza
+proiettori applicativi concorrenti.
+
+### Risultati P2A — 2026-11-08
+
+Aggregati pubblici in [performance-p2a.json](performance-p2a.json). Il JavaScript
+legacy `catalog-search.js` è identico alla compilazione del riferimento
+`16a018bef7a8ec777ac7ab2c66abc5938b141020` (hash nel report). La prima popolazione
+legacy ha richiesto **378,307 s**, 29,162 documenti/s; il controllo ripetuto,
+con indice già popolato e schema 039, è la colonna di confronto seguente.
+Sono tempi del motore `projectText`, con claim, preparazione, invio e ACK durevoli;
+refresh/verifica e wrapper amministrativi dello scheduler sono fuori dalla misura.
+La compatibilità dello scheduler è verificata separatamente.
+
+| Misura, 11.032 opere | P1B.1 ripetuto | P2A 16 definitivo | P2A 64 | P2A 128 |
+|---|---:|---:|---:|---:|
+| Full-text, s | 345,744 | 276,305 | 244,189 | 247,893 |
+| Documenti/s | 31,908 | 39,927 | 45,178 | 44,503 |
+| Richieste documenti PUT / bulk | 11.032 | 690 | 173 | 87 |
+| HTTP totali, inclusi HEAD | 11.723 | 1.381 | 347 | 175 |
+| Byte inviati | 426.204.691 | 428.013.939 | 428.013.939 | 428.013.939 |
+| HTTP cumulativo agli header, s | 139,421 | 94,347 | 70,613 | 70,654 |
+| Preparazione, s | 171,197 | 170,064 | 165,795 | 170,303 |
+| Claim / ACK, s | — | 3,627 / 2,185 | 1,608 / 0,638 | 1,065 / 0,405 |
+| Chiamate SQL client | 247.483 | 250.240 | 248.172 | 247.828 |
+| Transazioni, inclusi ACK autocommit | 11.034 | 12.413 | 11.379 | 11.207 |
+| WAL, MiB | 2,965 | 4,838 | 6,402 | 6,820 |
+| CPU Node, s | 150,138 | 110,674 | 103,862 | 105,825 |
+| CPU OpenSearch, s | 128,900 | 98,160 | 93,790 | 93,550 |
+| RSS Node medio / massimo campionato, MiB | 187,85 / 211,95 | 194,65 / 254,52 | 203,11 / 269,36 | 248,40 / 327,51 |
+
+Il default riduce il tempo del motore del **20,08%**, aumentando il throughput
+del **25,13%** in questo confronto. Aumentano invece chiamate SQL, transazioni,
+WAL e picco RSS: sono costi misurati del nuovo protocollo, non miglioramenti.
+Il percorso legacy accumula 29,678 s nelle query BEGIN/dequeue/DELETE/COMMIT;
+la preparazione P2A include la propria transazione di lettura, quindi non attribuire
+l'intera differenza fra quel valore e claim/ACK a una riduzione equivalente di CPU.
+Il bulk propriamente detto, risposta JSON inclusa, occupa **93,645 s** a 16;
+la preparazione residua è **170,064 s, 61,55%** del tempo totale: riferimento per
+P2B, che non è implementata qui.
+
+I/O e CPU dei container, su intervalli campionati circa un secondo più brevi
+dello stadio, nel confronto ripetuto → default 16:
+
+- CPU PostgreSQL: **85,286 → 77,972 s**.
+- Letture fisiche Node da `/proc/self/io`: **2.105.344 → 1.671.168 byte**;
+  scritture fisiche Node zero in entrambi. Le cache rendono questi numeri diversi
+  dai byte letti logicamente dai pack.
+- Scritture PostgreSQL da cgroup: **2.768.896 → 25.063.424 byte**;
+  letture zero negli intervalli osservati.
+- Scritture OpenSearch da cgroup: **1.222.041.600 → 1.203.208.192 byte**;
+  letture **0 → 4.096 byte**. Checkpoint e merge restano inclusi.
+- RAM OpenSearch totale media/massima: **3.167.634.485 / 3.570.483.200 →
+  2.957.856.649 / 3.342.770.176 byte**, inclusa cache. Working set medio
+  **2.088.088.179 → 1.941.186.382 byte**. Il report conserva anche PostgreSQL,
+  finestre, contatori I/O e dati degli altri gruppi.
+
+**Zero retry/errori nelle misure.** Tutti i 11.032 `_source`, inclusi ID,
+generation, snapshot e testo, hanno lo stesso hash del controllo; identiche
+le cinque ricerche confrontate. Code drenate e indice completo dopo recupero.
+Prove su PostgreSQL 17.6/OpenSearch 2.19.4 reali: mapping error parziale,
+risposta persa dopo accettazione, lease scaduto/vecchio token, nuova generazione
+durante preparazione/invio, risposte fuori ordine, SIGKILL prima del commit del
+claim, prima/dopo invio e prima dell'ACK, backoff 429/503, limiti UTF-8 e documenti
+singoli oltre 8 MiB, pausa/ripresa, repliche, cronologia/retry, manutenzione e stop.
+Verificati perdita/ricreazione dell'indice e recupero completo; manifest e viste
+storiche invariati. Il test aggiuntivo verifica flush fallito senza ACK e flush
+reale confermato prima dell'ACK. Timeout/sovraccarico sono iniezioni lato trasporto;
+le scritture, gli errori di mapping e i flush usano OpenSearch reale. Nei test di
+crash il lease viene fatto scadere via SQL, senza attendere cinque minuti.
+
+Build completa riuscita (warning Vite sui chunk già presente), due test mirati
+`ingest-pipeline` passati. Nessuna verifica originale modificata o indebolita.
+Le prove 64/128 precedono l'ultima barriera di flush, che riguarda soltanto
+conflitti/retry assenti nelle misure; il default 16 è stato rimisurato con il
+motore definitivo. Cache, segmenti e carico dell'host non sono controllati:
+nessuna garanzia statistica o modifica del default. La baseline storica rimane
+411,849 s attivi full-text e 434,043 s end-to-end, distinta dal controllo locale.
+Non è stata misurata un'accelerazione end-to-end.
+
+**P2A completata; P2 non conclusa. P2B e P2C non avviate.** Nessun ingest,
+modifica dei dump, del formato canonico, del parser o di PackStore. Fixture ed
+esiti privati conservati in `/mnt/sdb/palimora-p2a-20261108`; container temporanei
+rimossi dopo le verifiche.

@@ -53,7 +53,7 @@ export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
         projected.push(result);
       await writeCurrentDocuments(db, projected);
       await db.query(
-        // Wait for an in-flight PUT/ACK before coalescing this invalidation.
+        // Advance the durable publication revision, fencing any older claim/ACK.
         "INSERT INTO catalog_text_pending SELECT unnest($1::uuid[]) ON CONFLICT(work_id) DO UPDATE SET work_id=excluded.work_id",
         [rows.map((r) => r.work_id)],
       );

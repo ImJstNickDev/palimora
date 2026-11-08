@@ -344,6 +344,10 @@ export async function operationsOperation(
       "UPDATE operations_index SET paused=$2,retry_at=NULL,updated_at=now() WHERE kind=$1",
       [r.id, x.action === "pause"],
     );
+    if (r.id === "search" && x.action === "retry")
+      await db.query(
+        "UPDATE catalog_text_pending SET retry_at=now(),error=NULL WHERE claim IS NULL OR lease_until<=now()",
+      );
     return { ok: true };
   }
   fail("NOT_FOUND", 404);

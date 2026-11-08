@@ -22,7 +22,7 @@ export function strings(v: unknown): string[] {
     (x): x is string => typeof x === "string",
   );
 }
-export async function projectCatalog() {
+export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
   return transaction(async (db) => {
     // Tag and entity upserts are shared across works. Serialize this projection;
     // independent text indexing keeps its per-work SKIP LOCKED concurrency.
@@ -30,91 +30,99 @@ export async function projectCatalog() {
     await projectGraph(db);
     const rows = (
       await db.query(
-        "SELECT p.work_id FROM catalog_pending p ORDER BY p.work_id LIMIT 20 FOR UPDATE SKIP LOCKED",
+        "SELECT p.work_id FROM catalog_pending p ORDER BY p.work_id LIMIT $1 FOR UPDATE SKIP LOCKED",
+        [currentLimit],
       )
     ).rows;
-    if (!rows.length) {
-      const pending = (
-        await db.query(
-          "SELECT p.snapshot_id,s.work_id,s.manifest_hash FROM catalog_snapshot_pending p JOIN archive_snapshots s ON s.id=p.snapshot_id LIMIT 20 FOR UPDATE OF p SKIP LOCKED",
-        )
-      ).rows;
-      for (const item of pending) {
-        const m = JSON.parse(
-          (await readObject(db, item.manifest_hash)).toString(),
-        );
+    if (rows.length) {
+      const works = await hydrateWorks(
+        db,
+        (
+          await db.query(
+            "SELECT * FROM archive_works WHERE id=ANY($1::uuid[])",
+            [rows.map((r) => r.work_id)],
+          )
+        ).rows,
+      );
+      for (const w of works) {
+        const manifest = w.current_snapshot_id
+          ? (await loadSnapshot(db, w.id)).manifest
+          : null;
         const projected = await projectBibliography(
           db,
-          { id: item.work_id, current_snapshot_id: item.snapshot_id },
-          await enrichBibliography(db, m.metadata, m),
-          true,
+          w,
+          await enrichBibliography(db, w.metadata, manifest),
         );
+        const availability = (
+          await db.query(
+            "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",
+            [w.external_id],
+          )
+        ).rows[0]?.availability;
+        if (availability && availability !== "unknown")
+          projected.metadata.availability = availability;
+        const details = {
+          ...projected.details,
+          filterTags: projected.filterTags,
+        };
+        const generation = createHash("sha256")
+          .update(
+            JSON.stringify([
+              w.current_snapshot_id,
+              projected.metadata,
+              details,
+            ]),
+          )
+          .digest("hex");
         await db.query(
-          "INSERT INTO catalog_snapshot_views VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
-          [item.snapshot_id, projected.metadata, projected.details],
-        );
-        await db.query(
-          "DELETE FROM catalog_snapshot_pending WHERE snapshot_id=$1",
-          [item.snapshot_id],
+          `INSERT INTO catalog_documents(work_id,snapshot_id,metadata,title,bibliography,generation) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,metadata=excluded.metadata,title=excluded.title,bibliography=excluded.bibliography,generation=excluded.generation,indexed_at=now()`,
+          [
+            w.id,
+            w.current_snapshot_id,
+            projected.metadata,
+            strings(w.metadata.title).join(" · "),
+            details,
+            generation,
+          ],
         );
       }
-      return pending.length;
+      await db.query(
+        // Wait for an in-flight PUT/ACK before coalescing this invalidation.
+        "INSERT INTO catalog_text_pending SELECT unnest($1::uuid[]) ON CONFLICT(work_id) DO UPDATE SET work_id=excluded.work_id",
+        [rows.map((r) => r.work_id)],
+      );
+      await db.query(
+        "DELETE FROM catalog_pending WHERE work_id=ANY($1::uuid[])",
+        [rows.map((r) => r.work_id)],
+      );
     }
-    const works = await hydrateWorks(
-      db,
-      (
-        await db.query("SELECT * FROM archive_works WHERE id=ANY($1::uuid[])", [
-          rows.map((r) => r.work_id),
-        ])
-      ).rows,
-    );
-    for (const w of works) {
-      const manifest = w.current_snapshot_id
-        ? (await loadSnapshot(db, w.id)).manifest
-        : null;
+    // Reserve historical service even while current work remains queued.
+    const pending = (
+      await db.query(
+        "SELECT p.snapshot_id,s.work_id,s.manifest_hash FROM catalog_snapshot_pending p JOIN archive_snapshots s ON s.id=p.snapshot_id ORDER BY p.snapshot_id LIMIT $1 FOR UPDATE OF p SKIP LOCKED",
+        [historicalLimit],
+      )
+    ).rows;
+    for (const item of pending) {
+      const m = JSON.parse(
+        (await readObject(db, item.manifest_hash)).toString(),
+      );
       const projected = await projectBibliography(
         db,
-        w,
-        await enrichBibliography(db, w.metadata, manifest),
+        { id: item.work_id, current_snapshot_id: item.snapshot_id },
+        await enrichBibliography(db, m.metadata, m),
+        true,
       );
-      const availability = (
-        await db.query(
-          "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",
-          [w.external_id],
-        )
-      ).rows[0]?.availability;
-      if (availability && availability !== "unknown")
-        projected.metadata.availability = availability;
-      const details = {
-        ...projected.details,
-        filterTags: projected.filterTags,
-      };
-      const generation = createHash("sha256")
-        .update(
-          JSON.stringify([w.current_snapshot_id, projected.metadata, details]),
-        )
-        .digest("hex");
       await db.query(
-        `INSERT INTO catalog_documents(work_id,snapshot_id,metadata,title,bibliography,generation) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,metadata=excluded.metadata,title=excluded.title,bibliography=excluded.bibliography,generation=excluded.generation,indexed_at=now()`,
-        [
-          w.id,
-          w.current_snapshot_id,
-          projected.metadata,
-          strings(w.metadata.title).join(" · "),
-          details,
-          generation,
-        ],
+        "INSERT INTO catalog_snapshot_views VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+        [item.snapshot_id, projected.metadata, projected.details],
+      );
+      await db.query(
+        "DELETE FROM catalog_snapshot_pending WHERE snapshot_id=$1",
+        [item.snapshot_id],
       );
     }
-    await db.query(
-      "INSERT INTO catalog_text_pending SELECT unnest($1::uuid[]) ON CONFLICT DO NOTHING",
-      [rows.map((r) => r.work_id)],
-    );
-    await db.query(
-      "DELETE FROM catalog_pending WHERE work_id=ANY($1::uuid[])",
-      [rows.map((r) => r.work_id)],
-    );
-    return rows.length;
+    return rows.length + pending.length;
   });
 }
 export async function loadSnapshot(db: DB, id: string, snapshot?: string) {

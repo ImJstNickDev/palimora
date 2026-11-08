@@ -1,6 +1,5 @@
-import { processingPolicy } from "./maintenance";
 import { recordRequest, startOperations } from "./operations-metrics";
-import { runProjection } from "./operations-index";
+import { startProjections } from "./operations-index";
 import { backupDownload } from "./backup-download";
 import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { closePdf } from "./reader-pdf";
@@ -204,10 +203,12 @@ class Errors implements ExceptionFilter {
     res.status(status).json({ code, requestId: res.locals.requestId });
   }
 }
+const projectionLifecycle = { beforeApplicationShutdown: async () => {} };
 @Module({
   controllers: [ApiController],
   providers: [
     Identity,
+    { provide: "PROJECTION_LIFECYCLE", useValue: projectionLifecycle },
     {
       provide: "PERSONAL_LIFECYCLE",
       useValue: { onApplicationShutdown: stopPersonalWorker },
@@ -290,34 +291,8 @@ export async function start() {
   startPersonalWorker();
   const stopOperations = startOperations();
   app.enableShutdownHooks();
-  let projecting = false;
-  const catalogTimer = setInterval(async () => {
-    if (projecting) return;
-    projecting = true;
-    try {
-      for (let i = 0; i < (await processingPolicy()).projectionPasses; i++)
-        await runProjection("catalog", projectCatalog);
-    } catch {
-      console.error(JSON.stringify({ event: "catalog_projection_failed" }));
-    } finally {
-      projecting = false;
-    }
-  }, 1000);
-  catalogTimer.unref();
-  let indexing = false;
-  const searchTimer = setInterval(async () => {
-    if (indexing) return;
-    indexing = true;
-    try {
-      for (let i = 0; i < (await processingPolicy()).projectionPasses; i++)
-        await runProjection("search", projectText);
-    } catch {
-      console.error(JSON.stringify({ event: "catalog_fulltext_failed" }));
-    } finally {
-      indexing = false;
-    }
-  }, 1000);
-  searchTimer.unref();
+  const stopProjections = startProjections(projectCatalog, projectText);
+  projectionLifecycle.beforeApplicationShutdown = stopProjections;
   const cleanup = setInterval(() => {
     void pool
       .query(
@@ -329,8 +304,7 @@ export async function start() {
   await app.listen(Number(process.env.PORT ?? 3000), "0.0.0.0");
   const close = async () => {
     clearInterval(cleanup);
-    clearInterval(catalogTimer);
-    clearInterval(searchTimer);
+    await stopProjections();
     await stopOperations();
     await stopPersonalWorker();
     await app.close();

@@ -237,7 +237,26 @@ ricostruibili nel bind mount dedicato. Chromium e font DejaVu/Noto (anche CJK) n
 servono alla stampa PDF senza rete. Config/cache Chromium usano directory temporanee
 isolate sotto `/tmp`, compatibili con root filesystem read-only e rimosse dopo
 la stampa; il contenuto importato resta in sola lettura.
-Le misure sul corpus di verifica e i limiti della prova sono in 09.
+Lo scheduler prosegue al termine del batch finché trova lavoro. I parametri
+`PROJECTION_CATALOG_BATCH`, `PROJECTION_HISTORICAL_BATCH`, `PROJECTION_TEXT_BATCH`
+(default 20/20/16, intervallo 1–256) limitano il lavoro atomico/in memoria, non le
+opere al secondo. Lo storico riceve una quota in ogni transazione catalogo.
+`PROJECTION_CONCURRENCY` (1–2, default 2) permette un solo stadio alla volta oppure
+catalogo e testo indipendenti; i lock fra repliche restano invariati.
+`PROJECTION_BUDGET_MS` (1–5000, default 100) è un budget cooperativo prima di
+cedere all'event loop, verificato al confine del batch, non un timeout SQL. In
+manutenzione leggera/totale il budget quadruplica secondo la policy esistente.
+`PROJECTION_IDLE_MS` (1–60000, default 1000) determina il polling senza lavoro,
+in pausa, in retry o con lock occupato. `PROJECTION_TEXT_HIGH_WATER`
+(1–1000000, default 2048) sospende la proiezione corrente quando il full-text
+accumulato raggiunge la soglia; lo storico continua. Possibile superamento di
+al massimo un batch corrente; la coda canonica resta persistita. La concorrenza
+limitata riserva connessioni del pool alle richieste interattive.
+SIGTERM e chiusura API fermano nuovi batch e attendono quelli in corso; un kill
+forzato recupera dalle code SQL. Il confine transazionale PUT/ACK e la verifica generation
+restano invariati; enqueue da head/disponibilità e da catalogo a full-text
+attendono il lock pending del consumatore prima di coalescere una modifica. Valori non validi impediscono l'avvio dello scheduler.
+Misure e limiti P1A in [11](11-performance-overhaul.md); corpus di release in 09.
 
 Il container API include [Typst 0.15.1](https://github.com/typst/typst/releases/tag/v0.15.1)
 (Apache-2.0, LICENSE e NOTICE distribuiti) e Chromium. Il binario nativo è

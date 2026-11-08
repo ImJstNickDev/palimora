@@ -110,10 +110,10 @@ la configurazione già esistente, propagate ai job BullMQ in attesa conservando
 l'invecchiamento dello scheduler. I job amministrativi storage sono consultabili:
 non vengono introdotti nuovi controlli di manutenzione.
 
-I due processi di proiezione catalogo/ricerca rimangono i timer e le code SQL
-esistenti. Pausa al termine del blocco corrente, ripresa e retry modificano il
+Le proiezioni catalogo/ricerca usano lo scheduler continuo di `operations-index`
+e le code SQL esistenti. Pausa al termine del blocco corrente, ripresa e retry modificano il
 loro stato persistito, senza una coda alternativa. Lock di sessione distinti
-impediscono doppie esecuzioni tra API replicate. Dopo un crash il successivo tick
+impediscono doppie esecuzioni tra API replicate. Dopo un crash il successivo passaggio
 riprende dalla coda SQL; errori e retry a un minuto sono visibili. La cronologia
 conserva blocchi con lavoro effettivo, errori e recuperi, al massimo 5.000 righe
 per 30 giorni, senza registrare tick vuoti.

@@ -211,7 +211,7 @@ export async function ensureSearchIndex() {
   }
   return true;
 }
-export async function projectText() {
+export async function projectText(limit = 16, stopped = () => false) {
   const recreated = await ensureSearchIndex();
   if (recreated)
     await transaction((db) =>
@@ -220,7 +220,7 @@ export async function projectText() {
       ),
     );
   let processed = 0;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < limit && !stopped(); i++) {
     const done = await transaction(async (db) => {
       const row = (
         await db.query(

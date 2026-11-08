@@ -3,7 +3,8 @@
 ## Stato e perimetro
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
-non un'installazione in produzione. Nessuna riscrittura P1–P5 in questa modifica.
+non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
+l'implementazione P1A e le nuove misure sono documentate in fondo.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -624,7 +625,7 @@ strategia concreta P1. Restano esplicitamente non dimostrati: saturazione massim
 della VM, cache fisica fredda, scala a milioni, comportamento AO3 online,
 attribuzione CPU nativa/kernel esclusiva e raggiungibilità del target 2.000/s.
 Il riuso futuro del testo deve rimanere ricostruibile dai pack e non dipendere
-più da staging o dump dopo il commit. P1 non è stata iniziata.
+più da staging o dump dopo il commit. Alla chiusura P0, P1 non era stata iniziata.
 
 ### Verifiche del codice e conservazione evidenze
 
@@ -633,3 +634,253 @@ più da staging o dump dopo il commit. P1 non è stata iniziata.
 - Sintassi Bash, Node e Python degli strumenti verificata; `git diff --check` e controllo numerico di `opere/s × secondi = 11032` per gli aggregati superati.
 - Nessuna modifica al codice applicativo, alle migrazioni del prodotto o al formato canonico. Modificati soltanto strumenti benchmark, riepiloghi e documentazione.
 - I container e le reti delle tre fixture vengono rimossi al termine; bind mount e risultati privati rimangono disponibili. Nessun servizio Docker estraneo viene modificato.
+
+
+## P1A — invalidazioni e scheduling delle proiezioni
+
+Perimetro: migrazioni 037–038 e scheduling in `operations-index.ts`, integrazione
+lifecycle API, quote catalogo/storico e dimensione batch full-text. Nessuna
+riscrittura di `projectBibliography`, query set-based bibliografiche, grafo tag,
+PackStore, parser, parallelismo ZIP o invio `_bulk`; P1B e P2 restano separati.
+
+### Decisioni tecniche
+
+- Il job AO3 assente e il job `unknown` non sovrascrivono la disponibilità canonica
+  nel catalogo. La 037 sostituisce soltanto la funzione trigger: salta INSERT
+  `unknown` e UPDATE senza cambiamento; mantiene INSERT informativi e tutte le
+  transizioni reali, incluso il ritorno a `unknown`. La 026 rimane intatta.
+  Nessun cambiamento a seeding, watchlist, osservazioni o outbox notifiche.
+- La prova concorrente ha riprodotto una perdita di invalidazione nel protocollo
+  precedente: `ON CONFLICT DO NOTHING` può ignorare una riga pending bloccata dal
+  consumatore, prima che quest'ultimo la cancelli dopo avere proiettato lo stato
+  vecchio. La 038 coordina enqueue da head/disponibilità con il lock della coda
+  corrente; il produttore full-text usa lo stesso principio. L'upsert della chiave
+  attende il consumatore: dopo il suo DELETE la nuova invalidazione rimane in coda.
+  Nessuna generazione di claim, nuovo formato coda o riprogettazione del grafo.
+- I due timer fissi vengono sostituiti nello scheduler operativo esistente con
+  due cicli limitati, catalogo e testo, indipendenti per default. Dopo un batch
+  con lavoro si procede senza aspettare un secondo. Il ciclo senza lavoro,
+  in pausa/retry o senza lock dorme; il polling recupera anche commit provenienti
+  da altri processi senza dipendere da notifiche volatili.
+- Ogni transazione catalogo riserva una quota allo storico anche quando c'è
+  backlog corrente. Un lotto massimo per classe conserva la fairness; il lock
+  bibliografico globale e le transazioni restano quelli precedenti. Non si
+  riutilizzano arbitrariamente viste correnti per rappresentare lo storico.
+- Batch default 20 correnti + 20 storici e 16 documenti; concorrenza 1 o 2 stadi,
+  default 2. Budget cooperativo default 100 ms, moltiplicato per quattro nelle
+  modalità di manutenzione. Un batch atomico può superarlo; non si interrompono
+  transazioni o ACK a metà. Configurazione e intervalli in [02](02-architettura.md#motore-di-consultazione)
+  e `.env.example`, inoltrati dal Compose al servizio API esistente.
+- Con almeno 2.048 documenti full-text pendenti il catalogo sospende soltanto la
+  quota corrente, continuando lo storico. La produzione può superare la soglia
+  di un batch. Non è un limite alla coda archivistica persistente o alla dimensione
+  totale del corpus. Indicizzazione sequenziale per documento e pool PG invariati.
+- Ogni passaggio rivalida pausa/retry sotto i lock di sessione `70210472/73`.
+  La guardia generation e il confine transazionale PUT/DELETE/COMMIT rimangono
+  invariati. Nessun claim o checkpoint nuovo in memoria. La chiusura API/SIGTERM
+  ferma nuovi batch e attende quelli attivi; dopo kill il lavoro non committato
+  resta nelle code. `operations_index` e la sua cronologia restano il monitor.
+
+### Riproduzione P1A
+
+Stesso `benchmark-p0.sh`, profiler P0 e verificatore originale, scenario B, profilo
+2 parser/2 commit, Zstd 3, PostgreSQL 17.6, Redis 7.4.6 e OpenSearch 2.19.4 heap
+1 GiB. Fixture nuove sullo stesso disco; rete interna, nessuna porta host, dump
+read-only, seeding AO3 attivo. Nessuna quota cgroup durante la misura, come P0.
+L'immagine di attribuzione contiene la stessa immagine P0 più la sola migrazione:
+misura la correzione delle invalidazioni mantenendo i timer e la priorità allo
+storico di P0. La differenza successiva con P1A comprende scheduling, fairness e
+backpressure; non è una misura della futura ottimizzazione bibliografica.
+
+```sh
+docker build -f infra/Dockerfile --target api -t palimora-p1a-api .
+# Immagine di attribuzione: usare l'immagine P0 verificata, non una build P1A.
+docker build -t palimora-p1a-invalidation-only -f - . <<'EOF_DOCKER'
+FROM palimora-release-api:1.0.0
+COPY apps/api/migrations/037_ao3_informative_availability.sql /app/apps/api/migrations/037_ao3_informative_availability.sql
+EOF_DOCKER
+# Eseguire in sequenza, dopo le build, senza altri benchmark concorrenti.
+RELEASE_IMAGE=palimora-p1a-invalidation-only P0_SCENARIO=B RELEASE_KEEP=1 \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p1a-invalidation-clean-20261108 ./scripts/benchmark-p0.sh
+RELEASE_IMAGE=palimora-p1a-api P0_SCENARIO=B RELEASE_KEEP=1 \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p1a-b-20261108 ./scripts/benchmark-p0.sh
+python3 scripts/summarize-performance.py /mnt/sdb/palimora-p1a-invalidation-clean-20261108 /mnt/sdb/palimora-p1a-b-20261108
+# Solo dopo la misura, con API/worker del benchmark già arrestati:
+fixture=$(cat /mnt/sdb/palimora-p1a-b-20261108/name)
+docker exec "$fixture-worker" node scripts/verify-projections.cjs
+python3 scripts/summarize-p1a.py /mnt/sdb/palimora-p0-20261108-b \
+ /mnt/sdb/palimora-p1a-invalidation-clean-20261108 /mnt/sdb/palimora-p1a-b-20261108 \
+ /mnt/sdb/palimora-p1a-latency-p0-20261108 /mnt/sdb/palimora-p1a-latency-new-20261108
+```
+
+Una prima passata esplorativa è stata interrotta ed esclusa dai risultati perché
+si sovrapponeva alla build Docker. Evidenze private conservate separatamente in
+`/mnt/sdb/palimora-p1a-invalidation-20261108`; nessun dato di quella passata entra
+nel confronto. Baseline e strumenti P0 originali conservati senza modifiche.
+
+
+### Risultati B e attribuzione misurata
+
+Fixture definitive: `/mnt/sdb/palimora-p1a-invalidation-clean-20261108` e
+`/mnt/sdb/palimora-p1a-b-20261108`. Un'esecuzione per variante, in sequenza e senza
+build/test concorrenti. La fixture intermedia con errore JVM all'avvio di
+OpenSearch non ha avviato ingest o misura ed è esclusa. P1A è misurata dal working
+tree poi pubblicato: `source-commit.txt` conserva il commit base P0; hash dei sei
+file applicativi/migrazioni e patch sono nei risultati privati. Immagine P1A:
+`sha256:20620eac0055345b255f0d758a04749314fc6b4a1d42ac3603fa4504dc7c73d4`.
+
+| Misura | P0 B | Solo invalidazioni (037), timer P0 | P1A B |
+| --- | ---: | ---: | ---: |
+| End-to-end, s | 1474,721 | 1145,523 | **602,783** |
+| Opere/s ricercabili | 7,481 | 9,631 | **18,302** |
+| Ingest persistente, s | 63,097 | 57,208 | 65,079 |
+| Proiezioni correnti | 17.160 | 11.032 | 11.032 |
+| Riproiezioni aggiuntive | 6.128 | 0 | **0** |
+| Proiezioni storiche | 11.032 | 11.032 | 11.032 |
+| PUT documenti OpenSearch | 17.160 | 11.032 | 11.032 |
+| Catalogo attivo, s | 790,891 | 553,683 | 581,222 |
+| Full-text attivo, s | 695,075 | 445,077 | 464,166 |
+| Chiamate SQL client catalogo | 1.179.090 | 862.462 | 859.731 |
+| Chiamate SQL client full-text | 384.777 | 248.728 | 248.136 |
+
+P1A termina a code vuote, con 11.032 ID corrispondenti, ricerca autenticata e
+lettore verificati dal runner originale. Controllo aggiuntivo dopo la misura:
+**11.032 generazioni coincidenti**, 11.032 viste storiche, 2.560 job work seminati,
+zero errori di proiezione. Snapshot DB prima dei fault test: **0 rollback,
+0 deadlock, 0 byte temporanei**. I risultati aggregati e le risorse complete sono
+in [performance-p1a.json](performance-p1a.json).
+
+Attribuzione, nei limiti delle singole passate su host condiviso:
+
+- **Invalidazioni:** eliminano tutte le 6.128 riproiezioni aggiuntive e altrettanti
+  PUT osservati in P0 (−35,71% dei passaggi correnti/PUT). La sola 037 porta il
+  tempo da 1474,721 a 1145,523 s: **−329,199 s / −22,32%** osservati. Seeding attivo
+  in entrambe le prove; il risultato non dipende dalla sua disattivazione.
+- **Scheduling/fairness:** a conteggi di lavoro invariati, P1A passa da 1145,523
+  a 602,783 s: **−542,739 s / −47,38%** osservati. Include quote storiche e drenaggio
+  continuo; non è una prova isolata di ciascun parametro. La 038 protegge le race,
+  ma questo corpus senza cambi AO3 informativi non ne misura un guadagno di velocità.
+  Soglia backpressure 2.048 non raggiunta in B (massimo testo 187): è una protezione
+  verificata separatamente, non la causa del miglioramento attribuita al benchmark.
+- **Totale:** **−59,13% end-to-end**, throughput **2,447×** P0. Il tempo attivo
+  catalogo/full-text aumenta rispetto alla sola 037: il beneficio dello scheduling
+  è l'eliminazione delle attese e la sovrapposizione dello storico, non una riduzione
+  del costo per opera. Le query bibliografiche restano dominanti; nessun risultato
+  dimostra il target 2.000 opere/s. L'ingest varia fra passate e non è stato ottimizzato.
+
+### Residenza delle code
+
+Secondi per visita, servizio incluso; stesso integrale dei campioni P0 e stesso
+conteggio DELETE. Fra parentesi l'intervallo conservativo dell'attesa, non una
+misura individuale dei timestamp:
+
+| Coda | P0 B | Solo 037 | P1A B |
+| --- | ---: | ---: | ---: |
+| Corrente | 228,04 (222,99–230,22) | 274,32 (269,60–276,43) | 276,08 (269,77–278,22) |
+| Storico | 1063,15 (1058,11–1065,34) | 829,53 (824,82–831,65) | 276,08 (269,77–278,22) |
+| Full-text | 85,02 (73,33–87,20) | 78,69 (67,47–80,81) | 1,29 (0–3,43) |
+
+P0 ha visite aggiuntive: confrontare soltanto la media corrente per visita
+confonderebbe popolazioni diverse. Normalizzata per opera iniziale, la residenza
+corrente è **354,70 → 274,32 → 276,08 s**, testo **132,24 → 78,69 → 1,29 s**.
+Il catalogo corrente non accelera sensibilmente rispetto alla sola 037; la quota
+storica evita la seconda lunga fase e il full-text segue la produzione. P1A:
+code massime 10.432 correnti, 10.432 storici, 187 testo; intervallo di campionamento
+massimo circa 1,068 s, batch catalogo massimo 4,179 s, full-text 7,813 s.
+
+### CPU, RAM e I/O
+
+Cgroup dei quattro container, stesso sampler P0. CPU 100% = un core; working set
+RAM, non heap o somma di RSS. Non sommare picchi RAM non contemporanei.
+
+| Misura | P0 B | Solo 037 | P1A B |
+| --- | ---: | ---: | ---: |
+| CPU totale, CPU-s | 1851,926 | 1298,277 | 1275,433 |
+| CPU media aggregata, % | 125,20 | 112,59 | 210,10 |
+| I/O letto totale, MiB | 250,99 | 59,75 | 92,54 |
+| I/O scritto totale, MiB | 7179,23 | 4603,93 | 4899,40 |
+| Picco RAM applicazione, MiB | 982,63 | 1011,57 | 1027,81 |
+| Picco RAM PostgreSQL, MiB | 523,59 | 391,48 | 428,03 |
+| Picco RAM OpenSearch, MiB | 2231,79 | 1666,39 | 1721,59 |
+| Picco RAM Redis, MiB | 4,88 | 5,15 | 8,23 |
+
+P1A impiega meno CPU totale ma la concentra in meno tempo. Dettaglio CPU P1A:
+applicazione 535,470 CPU-s (88,21% medio), PG 509,305 (83,90%), OpenSearch 225,321
+(37,12%), Redis 5,335 (0,88%). I/O scritto P1A per container: applicazione
+933,02 MiB, PG 2811,38, OpenSearch 1154,21, Redis 0,79. L'applicazione scrive più
+I/O cgroup che in P0 (517,58 MiB), mentre il totale diminuisce: non si attribuisce
+ogni differenza fisica allo scheduler. Campioni includono writeback, profiler e
+cache non controllate; non sono byte logici PackStore o banda disco garantita.
+
+### Verifiche P1A su servizi reali
+
+La sonda `scripts/verify-projections.cjs` è stata eseguita dopo il benchmark di
+attribuzione, con immagine P1A sul corpus conservato e risultati separati in
+`/mnt/sdb/palimora-p1a-validation-clean-20261108/results/`. PostgreSQL, Redis e
+OpenSearch sono quelli isolati della fixture; nessun accesso AO3 esterno.
+
+- INSERT `unknown` e UPDATE invariati non accodano; transizioni fra tutti gli
+  stati, ritorno a `unknown` e INSERT informativo accodano. Ciclo completo di
+  seeding, watchlist prioritaria e nessuna invalidazione residua.
+- Disponibilità aggiornata in catalogo e OpenSearch, viste storiche invariate.
+  Due race sincronizzate con lock/PUT: cambio disponibilità durante proiezione e
+  nuova proiezione durante indicizzazione. Dopo il vecchio ACK la nuova coda
+  rimane e il documento aggiornato viene pubblicato. La seconda prova aveva
+  fallito prima della correzione di enqueue; l'asserzione non è stata rimossa.
+- Pausa/ripresa, retry persistente, errore iniettato, lock fra worker, storico
+  mentre il corrente è sotto backpressure. Con soglia 8 e batch 2, nessuna
+  crescita incontrollata della coda testo.
+- SIGKILL di un processo scheduler realmente bloccato nel catalogo, ripresa con
+  concorrenza 1: backlog di prova drenato in **5,016 s**. Intervallo massimo fra
+  batch catalogo **236,07 ms**, includendo il servizio dello stadio testo; nessun
+  timer obbligatorio di un secondo. Non è una misura end-to-end del corpus.
+- Arresto attende il batch atomico; il full-text si ferma dopo il documento
+  corrente lasciando il successivo pendente. Modalità normal/light/full verificate.
+  A code vuote, 4 chiamate in 180 ms con polling di test 50 ms, poi nessuna dopo
+  stop; configurazione con polling zero rifiutata.
+- Tutte le **11.032 generazioni** PostgreSQL/OpenSearch confrontate; nessun ID
+  mancante o aggiuntivo. Conteggi canonici/outbox e digest di tutte le viste
+  storiche invariati dopo le prove.
+
+Build locale completa e immagine API Docker riuscite. Suite mirata:
+`ao3-monitor`, `ao3-sync`, `ao3`, `ingest-pipeline`, `archive-native`, `contracts`,
+`social`: **16 test passati, 0 falliti, 0 saltati**, PostgreSQL e OpenSearch reali.
+Copre anche semantica bibliografica, filtri, snapshot, sincronizzazione e
+consumatore notifiche. I test usano schemi isolati ed eliminano i loro dati.
+
+### Latenza interattiva: prova abbinata separata
+
+Dopo il drenaggio, sullo stesso corpus conservato della prova di attribuzione:
+prima immagine con timer P0, poi P1A; entrambe con le migrazioni 037–038. In ogni
+variante `benchmark-projection-latency.cjs` riusa senza modifiche il probe HTTP P0:
+3 warmup e 100 richieste sequenziali per endpoint, HTTP interno autenticato.
+Prima code vuote, poi esattamente 1.000 correnti + 1.000 viste storiche riaccodate.
+Il backlog è verificato ancora presente alla fine delle richieste. Nessun ingest
+o worker AO3 concorrente in questa diagnostica; non sostituisce il benchmark B.
+
+| p95 ms | Timer P0, vuoto | P1A, vuoto | Timer P0, backlog | P1A, backlog |
+| --- | ---: | ---: | ---: | ---: |
+| Ricerca | 115,19 | 88,08 | 118,16 | 159,92 |
+| Dettaglio | 20,17 | 28,32 | 29,62 | 32,91 |
+| Lettore | 39,97 | 31,36 | 43,02 | 57,21 |
+
+**Regressione osservata sotto backlog:** ricerca +35,34%, dettaglio +11,10%,
+lettore +33,00%. Anche il p95 dettaglio a vuoto aumenta nel campione. Il maggior
+lavoro continuo compete con le richieste: non si dichiara una latenza invariata o
+un SLO garantito. La singola coppia non separa causalmente rumore/cache e contesa;
+restano host condiviso, ordine P0→P1A e cache non controllate. Alla fine delle
+richieste P0 aveva ancora 800 correnti/1.000 storici/32 testo; P1A 800/800/10:
+la quota storica sta avanzando mentre vengono servite le richieste.
+I file completi sono in `/mnt/sdb/palimora-p1a-latency-{p0,new}-20261108/results/`.
+
+
+### Stato finale P1A
+
+P1A implementata e verificata, con regressioni di latenza interattiva sotto carico
+riportate sopra. Restano costi N+1, proiezione bibliografica seriale, PUT individuali
+con transazione aperta, invalidazioni del grafo e limiti di scala non affrontati.
+P1B e P2 **non implementate**. Nessuna variazione a formati canonici, parser,
+semantica bibliografica, versioni storiche, UI o topologia dei servizi.
+
+Container e reti delle fixture P1A rimossi al termine; bind mount e risultati
+privati conservati. Nessun servizio Docker estraneo modificato.

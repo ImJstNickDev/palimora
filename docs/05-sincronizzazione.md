@@ -73,6 +73,12 @@ conclusione. Backfill: finestre giornaliere retrocedenti e intervallo finale per
 opere datate prima dell'apertura dell'archivio. Il catalogo locale viene percorso
 a gruppi di 256 identità, inclusi record senza current; il cursore riparte dopo
 l'esaurimento per intercettare nuovi ingest. Nessuna ricerca nei dump originali.
+La migrazione 037 evita invalidazioni catalogo per nuovi job `unknown`, equivalenti
+all'assenza del job per la disponibilità proiettata. INSERT con disponibilità nota
+e transizioni effettive (anche verso `unknown`) invalidano ancora; UPDATE allo
+stesso valore no. La 038 fa attendere il lock della coda alle invalidazioni reali,
+per conservarle anche se una proiezione precedente è ancora attiva. Seeding,
+watchlist, osservazioni ed eventi notifiche restano invariati.
 La ricerca AO3 non fornisce snapshot transazionali: finestre sovrapposte e
 riconciliazione ripetuta recuperano variazioni della paginazione, senza attestare
 una completezza remota non osservabile.

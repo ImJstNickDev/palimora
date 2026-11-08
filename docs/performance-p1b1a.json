@@ -1,0 +1,436 @@
+{
+  "phase": "P1B.1a",
+  "date": "2026-11-08",
+  "baseline_commit": "1e99f54306eda32ebb402268f9de950218b4b934",
+  "scope": "Current-work tags and work-tag associations only; no full A/B/C campaign",
+  "method": {
+    "script": "scripts/benchmark-tags.cjs",
+    "postgresql": "17.6",
+    "sample": "First 1024 archive_works ordered by id from the preserved real P1A 11032-work corpus",
+    "works": 1024,
+    "distinct_tags": 8294,
+    "associations": 16103,
+    "explicit_graph_edges": false,
+    "runs_per_variant_and_batch": 1,
+    "order": ["P1A", "P1B.1a"],
+    "batch_sizes": [20, 64, 256],
+    "production_default_batch": 20,
+    "tables": "Isolated logged tables, LIKE INCLUDING ALL; unique indexes retained, foreign keys tested separately on actual catalog tables",
+    "timed": "Tag normalization, resolution, upserts and association updates; includes BEGIN/advisory lock/COMMIT, excludes common hydration/manifest enrichment",
+    "old_boundary": "JavaScript sentinel immediately before first catalog_entity_works DELETE; no PostgreSQL error",
+    "new_path": "projectTagBatch, used by projectCurrentBibliographies in projectCatalog",
+    "wal": "pg_current_wal_insert_lsn difference; fixture-wide WAL, including possible background activity",
+    "resources": "Unmodified P0 cgroup sampler; broader interval includes preparation and all six timed phases",
+    "private_evidence": "/mnt/sdb/palimora-p1b1a-results/"
+  },
+  "measurements": {
+    "p1a": [
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 13.765818743999999,
+        "queries": 34410,
+        "queries_per_work": 33.603515625,
+        "commits": 52,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 17712784,
+        "cpu_seconds": 5.423601,
+        "rss_mib": 146.95703125,
+        "process_peak_rss_mib": 146.95703125,
+        "tags": 8294
+      },
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 14.552005930000004,
+        "queries": 34410,
+        "queries_per_work": 33.603515625,
+        "commits": 52,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 16103,
+        "wal_bytes": 16265824,
+        "cpu_seconds": 5.249647,
+        "rss_mib": 158.4375,
+        "process_peak_rss_mib": 158.4375,
+        "tags": 8294
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 12.760763677000003,
+        "queries": 34302,
+        "queries_per_work": 33.498046875,
+        "commits": 16,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 18520400,
+        "cpu_seconds": 4.972212,
+        "rss_mib": 161.23828125,
+        "process_peak_rss_mib": 164.30859375,
+        "tags": 8294
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 16.767684743000004,
+        "queries": 34302,
+        "queries_per_work": 33.498046875,
+        "commits": 16,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 16103,
+        "wal_bytes": 16285656,
+        "cpu_seconds": 6.487687,
+        "rss_mib": 159.203125,
+        "process_peak_rss_mib": 164.30859375,
+        "tags": 8294
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 15.840427272000001,
+        "queries": 34266,
+        "queries_per_work": 33.462890625,
+        "commits": 4,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 19279464,
+        "cpu_seconds": 5.928637,
+        "rss_mib": 159.203125,
+        "process_peak_rss_mib": 164.30859375,
+        "tags": 8294
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 15.858130500999993,
+        "queries": 34266,
+        "queries_per_work": 33.462890625,
+        "commits": 4,
+        "upserts": 16103,
+        "associations": 16103,
+        "removed": 16103,
+        "wal_bytes": 15742392,
+        "cpu_seconds": 5.559394,
+        "rss_mib": 159.203125,
+        "process_peak_rss_mib": 164.30859375,
+        "tags": 8294
+      }
+    ],
+    "p1b1a": [
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 1.573451719999999,
+        "queries": 364,
+        "queries_per_work": 0.35546875,
+        "commits": 52,
+        "upserts": 8294,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 16316320,
+        "cpu_seconds": 0.53921,
+        "rss_mib": 140.9375,
+        "process_peak_rss_mib": 142.171875,
+        "tags": 8294
+      },
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 1.1359884780000011,
+        "queries": 364,
+        "queries_per_work": 0.35546875,
+        "commits": 52,
+        "upserts": 0,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 733000,
+        "cpu_seconds": 0.505976,
+        "rss_mib": 140.6953125,
+        "process_peak_rss_mib": 148.33984375,
+        "tags": 8294
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 1.1629325709999994,
+        "queries": 112,
+        "queries_per_work": 0.109375,
+        "commits": 16,
+        "upserts": 8294,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 16198136,
+        "cpu_seconds": 0.439652,
+        "rss_mib": 144.31640625,
+        "process_peak_rss_mib": 148.33984375,
+        "tags": 8294
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 0.8766383930000011,
+        "queries": 112,
+        "queries_per_work": 0.109375,
+        "commits": 16,
+        "upserts": 0,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 662488,
+        "cpu_seconds": 0.389213,
+        "rss_mib": 146.57421875,
+        "process_peak_rss_mib": 149.6015625,
+        "tags": 8294
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 0.9377375030000002,
+        "queries": 28,
+        "queries_per_work": 0.02734375,
+        "commits": 4,
+        "upserts": 8294,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 16061816,
+        "cpu_seconds": 0.226452,
+        "rss_mib": 153.02734375,
+        "process_peak_rss_mib": 153.02734375,
+        "tags": 8294
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 0.5542264020000003,
+        "queries": 28,
+        "queries_per_work": 0.02734375,
+        "commits": 4,
+        "upserts": 0,
+        "associations": 16103,
+        "removed": 0,
+        "wal_bytes": 571136,
+        "cpu_seconds": 0.234428,
+        "rss_mib": 158.2109375,
+        "process_peak_rss_mib": 158.453125,
+        "tags": 8294
+      }
+    ]
+  },
+  "resources": {
+    "old-tags-resources": {
+      "worker": {
+        "samples": 100,
+        "seconds": 99.01248121261597,
+        "cpu_seconds": 40.377033,
+        "cpu_mean_percent": 40.77974059987019,
+        "cpu_max_percent": 116.02853502972714,
+        "working_mean_mib": 102.387109375,
+        "working_max_mib": 112.36328125,
+        "memory_max_mib": 112.3671875,
+        "read_mib": 0.0,
+        "write_mib": 0.00390625,
+        "rx_mib": 49.29018020629883,
+        "tx_mib": 78.0001049041748
+      },
+      "pg": {
+        "samples": 100,
+        "seconds": 99.01197075843811,
+        "cpu_seconds": 58.832232,
+        "cpu_mean_percent": 59.419312179468086,
+        "cpu_max_percent": 71.78814338341343,
+        "working_mean_mib": 86.747265625,
+        "working_max_mib": 89.94140625,
+        "memory_max_mib": 158.08203125,
+        "read_mib": 0.00390625,
+        "write_mib": 106.01953125,
+        "rx_mib": 78.00017166137695,
+        "tx_mib": 49.29011344909668
+      }
+    },
+    "new-tags-resources": {
+      "worker": {
+        "samples": 17,
+        "seconds": 15.996060371398926,
+        "cpu_seconds": 9.126453,
+        "cpu_mean_percent": 57.05437956659732,
+        "cpu_max_percent": 116.56186220333763,
+        "working_mean_mib": 80.36351102941177,
+        "working_max_mib": 102.5859375,
+        "memory_max_mib": 102.625,
+        "read_mib": 0.0,
+        "write_mib": 0.0,
+        "rx_mib": 10.568432807922363,
+        "tx_mib": 33.30830764770508
+      },
+      "pg": {
+        "samples": 17,
+        "seconds": 15.993748664855957,
+        "cpu_seconds": 7.898766,
+        "cpu_mean_percent": 49.38658325522173,
+        "cpu_max_percent": 71.46921617394327,
+        "working_mean_mib": 90.16015625,
+        "working_max_mib": 94.921875,
+        "memory_max_mib": 188.24609375,
+        "read_mib": 0.0,
+        "write_mib": 26.34375,
+        "rx_mib": 33.30830764770508,
+        "tx_mib": 10.568432807922363
+      }
+    }
+  },
+  "default_batch_tag_queries_excluding_transaction": {
+    "p1a": 34254,
+    "p1b1a": 208,
+    "p1a_per_work": 33.451171875,
+    "p1b1a_per_work": 0.203125
+  },
+  "limitations": [
+    "Single pass, shared host, serial order and uncontrolled caches; no confidence interval",
+    "Tag phase only, not total catalog query counts or end-to-end throughput",
+    "Graph-changing works keep ordered barriers and existing tagEdges queries",
+    "Historical projection, entities, recursive filters, documents and manifest hydration retain their previous implementations",
+    "Interactive latency and full A/B/C measurements deferred to P1B.1d",
+    "Initial/repeat association cardinality measured; insertion counter was overwritten by cardinality in recorded output, corrected output key for future runs"
+  ],
+  "validation": {
+    "full_corpus_differences": {
+      "heads": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "snapshots": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "identities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "documents": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "historical": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "edges": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "filters": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      }
+    },
+    "full_corpus_counts": {
+      "heads": 11032,
+      "snapshots": 11032,
+      "identities": 0,
+      "documents": 11032,
+      "historical": 11032,
+      "tags": 57661,
+      "entities": 22140,
+      "edges": 0,
+      "work_tags": 167736,
+      "work_entities": 24909,
+      "filters": 167736
+    },
+    "reprojection": {
+      "current": 11032,
+      "indexed": 11032,
+      "generations_verified": 11032
+    },
+    "targeted_tags": {
+      "equivalence": true,
+      "shared_tags": true,
+      "edges_and_filters": true,
+      "no_op_associations": true,
+      "removal": true,
+      "conflict_rollback_and_retry": true,
+      "backend_disconnect_after_bulk_writes": true
+    },
+    "full_build": "passed; Vite reports large chunks warning",
+    "p1a_fault_probes": {
+      "informative_trigger": true,
+      "seed_and_watch": true,
+      "availability_search_and_immutable_history": true,
+      "availability_during_projection_survives_ack": true,
+      "invalidation_during_put_survives_ack": true,
+      "text_stop_preserves_next_document": true,
+      "pause_and_backpressure_historical_fairness": true,
+      "retry_and_replica_lock": true,
+      "crash_recovery_seconds": 9.566359184000001,
+      "continuous_batch_gap_max_ms": 403.56527500000084,
+      "clean_stop_and_single_lane_recovery": true,
+      "stop_waits_for_atomic_batch": true,
+      "maintenance": true,
+      "idle_calls_in_180ms": 4,
+      "all_current_generations_verified": 11032,
+      "canonical_counts_and_events_preserved": true
+    },
+    "ao3_integration": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "services": ["PostgreSQL", "OpenSearch"]
+    }
+  },
+  "status": "P1B.1a complete; full P1B.1 incomplete"
+}

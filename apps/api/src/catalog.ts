@@ -2,6 +2,7 @@ import { mediaDescriptor, resourceRef, workStyles } from "./reader-media";
 import { safeInlineHtml } from "./reader-safety";
 import {
   projectBibliography,
+  projectCurrentBibliographies,
   enrichBibliography,
   projectGraph,
   bibliographyPage,
@@ -44,15 +45,20 @@ export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
           )
         ).rows,
       );
+      const inputs = [];
       for (const w of works) {
         const manifest = w.current_snapshot_id
           ? (await loadSnapshot(db, w.id)).manifest
           : null;
-        const projected = await projectBibliography(
-          db,
-          w,
-          await enrichBibliography(db, w.metadata, manifest),
-        );
+        inputs.push({
+          work: w,
+          raw: await enrichBibliography(db, w.metadata, manifest),
+        });
+      }
+      for await (const { work: w, projected } of projectCurrentBibliographies(
+        db,
+        inputs,
+      )) {
         const availability = (
           await db.query(
             "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",

@@ -220,24 +220,7 @@ async function tagEdges(db: DB, t: any) {
     }
   }
 }
-export async function projectBibliography(
-  db: DB,
-  work: any,
-  raw: Record<string, any>,
-  historical = false,
-) {
-  // Historical views can also be materialized by a reader before the queue reaches
-  // them. Use the same lock as the background projector for shared tag/entity rows.
-  if (historical) await db.query("SELECT pg_advisory_xact_lock(70210408)");
-  const { metadata, source } = bibliography(raw);
-  if (!historical) for (const t of source.tags ?? []) await ensureTag(db, t);
-  if (!historical) for (const t of source.tags ?? []) await tagEdges(db, t);
-  const known = (
-    await db.query(
-      "SELECT name,kind FROM catalog_tags WHERE name=ANY($1::text[]) AND kind<>'unclassified' AND source_id IS NOT NULL",
-      [metadata.unclassified],
-    )
-  ).rows;
+function classifyTags(metadata: Record<string, any>, known: any[]) {
   metadata.unclassified = metadata.unclassified.filter((name: string) => {
     const matches = known.filter((t) => t.name === name);
     if (matches.length !== 1) return true;
@@ -245,19 +228,188 @@ export async function projectBibliography(
     metadata[kind] = [...new Set([...metadata[kind], name])];
     return false;
   });
-  const tags: any[] = [];
-  if (!historical)
-    await db.query("DELETE FROM catalog_work_tags WHERE work_id=$1", [work.id]);
-  for (const kind of tagKinds)
-    for (const name of metadata[kind]) {
-      const row = await ensureTag(db, { kind, name });
-      tags.push(row);
-      if (!historical)
-        await db.query(
-          "INSERT INTO catalog_work_tags VALUES($1,$2) ON CONFLICT DO NOTHING",
-          [work.id, row.id],
-        );
-    }
+}
+
+type PreparedTags = ReturnType<typeof bibliography> & { tags: any[] };
+const tagIdentity = (t: any) => t.kind + "\0" + t.name;
+async function upsertTags(db: DB, tags: any[]) {
+  const unique = new Map<string, any>();
+  for (const tag of tags) {
+    const identity = tagIdentity(tag),
+      previous = unique.get(identity);
+    unique.set(identity, {
+      id: tag.id,
+      name: tag.name,
+      kind: tag.kind,
+      source_id: previous?.source_id ?? tag.source_id ?? null,
+      canonical: tag.canonical ?? previous?.canonical ?? null,
+    });
+  }
+  await db.query(
+    `INSERT INTO catalog_tags(id,source_id,name,kind,canonical)
+    SELECT id,source_id,name,kind,canonical FROM jsonb_to_recordset($1::jsonb)
+      AS s(id text,source_id text,name text,kind text,canonical boolean)
+    ORDER BY kind,name
+    ON CONFLICT(kind,name) DO UPDATE SET
+      source_id=coalesce(catalog_tags.source_id,excluded.source_id),
+      canonical=coalesce(excluded.canonical,catalog_tags.canonical)
+    WHERE (catalog_tags.source_id,catalog_tags.canonical) IS DISTINCT FROM
+      (coalesce(catalog_tags.source_id,excluded.source_id),coalesce(excluded.canonical,catalog_tags.canonical))`,
+    [JSON.stringify([...unique.values()])],
+  );
+}
+
+/** Caller holds the bibliography lock for the whole transaction. Keep the
+ * sequential visibility of source facts in the returned per-work tag rows. */
+export async function projectTagBatch(
+  db: DB,
+  items: { work: any; raw: Record<string, any> }[],
+) {
+  const prepared = items.map((i) => bibliography(i.raw));
+  const names = [
+    ...new Set(prepared.flatMap((p) => tagKinds.flatMap((k) => p.metadata[k]))),
+  ];
+  const existing = (
+    await db.query("SELECT * FROM catalog_tags WHERE name=ANY($1::text[])", [
+      names,
+    ])
+  ).rows;
+  const byKey = new Map(existing.map((t) => [tagIdentity(t), t]));
+  const touched = new Map<string, any>();
+  const ensure = (t: any) => {
+    const identity = tagIdentity(t),
+      previous = byKey.get(identity);
+    const row = {
+      id: previous?.id ?? key("tag", identity),
+      name: t.name,
+      kind: t.kind,
+      source_id: previous?.source_id ?? (t.id == null ? null : String(t.id)),
+      canonical: t.canonical ?? previous?.canonical ?? null,
+    };
+    byKey.set(identity, row);
+    touched.set(identity, row);
+    return { ...row };
+  };
+  const associations: { work_id: string; tag_id: string }[] = [];
+  const result: PreparedTags[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const p = prepared[i];
+    for (const t of p.source.tags ?? []) ensure(t);
+    classifyTags(
+      p.metadata,
+      [...byKey.values()].filter(
+        (t) => t.kind !== "unclassified" && t.source_id !== null,
+      ),
+    );
+    const tags = tagKinds.flatMap((kind) =>
+      p.metadata[kind].map((name: string) => ensure({ kind, name })),
+    );
+    for (const t of tags)
+      associations.push({ work_id: items[i].work.id, tag_id: t.id });
+    result.push({ ...p, tags });
+  }
+  await upsertTags(db, [...touched.values()]);
+  const pairs = JSON.stringify(associations),
+    ids = items.map((i) => i.work.id);
+  await db.query(
+    `DELETE FROM catalog_work_tags t WHERE work_id=ANY($1::uuid[])
+    AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2::jsonb) AS s(work_id uuid,tag_id text)
+      WHERE s.work_id=t.work_id AND s.tag_id=t.tag_id)`,
+    [ids, pairs],
+  );
+  await db.query(
+    `INSERT INTO catalog_work_tags SELECT DISTINCT work_id,tag_id
+    FROM jsonb_to_recordset($1::jsonb) AS s(work_id uuid,tag_id text)
+    ORDER BY work_id,tag_id ON CONFLICT DO NOTHING`,
+    [pairs],
+  );
+  return result;
+}
+
+export async function* projectCurrentBibliographies(
+  db: DB,
+  items: { work: any; raw: Record<string, any> }[],
+) {
+  // Graph-changing works are ordering barriers: do not expose later source facts
+  // to the existing edge resolver or earlier filter closures.
+  let start = 0;
+  const changesGraph = (i: (typeof items)[number]) =>
+    (i.raw.ao3?.tags ?? []).some(
+      (t: any) =>
+        t.synonym_of !== undefined ||
+        t.meta_tags !== undefined ||
+        t.parents !== undefined,
+    );
+  while (start < items.length) {
+    let end = start + 1;
+    if (changesGraph(items[start])) {
+      const source = bibliography(items[start].raw).source;
+      await upsertTags(
+        db,
+        (source.tags ?? []).map((t) => ({
+          id: key("tag", tagIdentity(t)),
+          name: t.name,
+          kind: t.kind,
+          source_id: t.id == null ? null : String(t.id),
+          canonical: t.canonical ?? null,
+        })),
+      );
+      for (const t of source.tags ?? []) await tagEdges(db, t);
+    } else while (end < items.length && !changesGraph(items[end])) end++;
+    const group = items.slice(start, end),
+      prepared = await projectTagBatch(db, group);
+    for (let i = 0; i < group.length; i++)
+      yield {
+        work: group[i].work,
+        projected: await projectBibliography(
+          db,
+          group[i].work,
+          group[i].raw,
+          false,
+          prepared[i],
+        ),
+      };
+    start = end;
+  }
+}
+
+export async function projectBibliography(
+  db: DB,
+  work: any,
+  raw: Record<string, any>,
+  historical = false,
+  prepared?: PreparedTags,
+) {
+  // Historical views can also be materialized by a reader before the queue reaches
+  // them. Use the same lock as the background projector for shared tag/entity rows.
+  if (historical) await db.query("SELECT pg_advisory_xact_lock(70210408)");
+  const { metadata, source } = prepared ?? bibliography(raw);
+  const tags: any[] = prepared?.tags ?? [];
+  if (!prepared) {
+    if (!historical) for (const t of source.tags ?? []) await ensureTag(db, t);
+    if (!historical) for (const t of source.tags ?? []) await tagEdges(db, t);
+    const known = (
+      await db.query(
+        "SELECT name,kind FROM catalog_tags WHERE name=ANY($1::text[]) AND kind<>'unclassified' AND source_id IS NOT NULL",
+        [metadata.unclassified],
+      )
+    ).rows;
+    classifyTags(metadata, known);
+    if (!historical)
+      await db.query("DELETE FROM catalog_work_tags WHERE work_id=$1", [
+        work.id,
+      ]);
+    for (const kind of tagKinds)
+      for (const name of metadata[kind]) {
+        const row = await ensureTag(db, { kind, name });
+        tags.push(row);
+        if (!historical)
+          await db.query(
+            "INSERT INTO catalog_work_tags VALUES($1,$2) ON CONFLICT DO NOTHING",
+            [work.id, row.id],
+          );
+      }
+  }
   const entities: any[] = [];
   if (!historical)
     await db.query("DELETE FROM catalog_entity_works WHERE work_id=$1", [

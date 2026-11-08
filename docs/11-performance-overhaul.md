@@ -884,3 +884,137 @@ semantica bibliografica, versioni storiche, UI o topologia dei servizi.
 
 Container e reti delle fixture P1A rimossi al termine; bind mount e risultati
 privati conservati. Nessun servizio Docker estraneo modificato.
+
+## P1B.1a — Tag e associazioni correnti bulk (8 novembre 2026)
+
+Il percorso corrente di `projectCatalog()` usa ora `projectCurrentBibliographies()`:
+normalizzazione condivisa con lo storico, prefetch dei tag del gruppo, risoluzione
+in memoria delle evidenze nell'ordine originale, upsert collettivo e aggiornamento
+differenziale di `catalog_work_tags`. Per un gruppo senza modifiche esplicite al
+grafo sono **4 query tag**: lettura, upsert, rimozione delle sole associazioni
+assenti, inserimento delle mancanti. Niente `ensureTag()` o INSERT per ogni
+associazione in questo percorso; tag e associazioni invariati non vengono riscritti.
+
+Lo staging è un recordset JSON tipizzato in PostgreSQL (`jsonb_to_recordset` e
+`INSERT … SELECT`), come nei percorsi bulk di outbox/osservazioni già presenti.
+È stata esaminata anche la pipeline COPY binaria di `archive-bulk.ts`: i suoi
+slot e vincoli appartengono al commit canonico dell'ingest. Per gruppi limitati
+si evita una seconda infrastruttura di staging, DDL temporaneo e protocollo COPY.
+Non è stato misurato un confronto JSON/COPY: la scelta è sostenuta dalle misure
+del percorso implementato, non da una superiorità generale di JSON.
+
+Identità `(kind,name)`, ID AO3 esistente e prima evidenza non nulla, ultimo
+attributo `canonical` non nullo e classificazione degli unclassified mantengono
+le regole precedenti. Le righe tag restituite per ciascuna opera sono copie delle
+evidenze visibili a quel punto, anche quando opere successive cambiano attributi.
+Le opere con `synonym_of`, `meta_tags` o `parents` delimitano i gruppi: ricevono
+prima tutti i propri tag sorgente, poi eseguono **lo stesso `tagEdges()`** e infine
+la proiezione. Non si anticipano evidenze future al risolutore degli archi. Questi
+casi conservano query aggiuntive proporzionali al grafo; non sono P1B.2.
+
+Restano il lock bibliografico globale, la transazione del batch, i lock delle code
+e gli ACK/generazioni P1A. Un errore annulla l'intero batch; nessun catalogo
+parziale diventa visibile. Il limite corrente resta configurabile attraverso lo
+scheduler P1A, default **20**. Nessuna migrazione necessaria: vincoli, tabelle e
+code esistenti bastano. Entità, filtri ricorsivi, documenti e proiezione storica
+conservano la loro implementazione; lo storico usa la stessa normalizzazione.
+
+### Misura circoscritta su dati reali
+
+`scripts/benchmark-tags.cjs` usa le prime **1.024 opere per ID** del corpus reale
+P1A conservato: **8.294 tag distinti, 16.103 associazioni**, nessun arco esplicito
+in questo campione. PostgreSQL 17.6 reale, rete interna senza porte host; database
+copiato a freddo dalla fixture P1A, PackStore montato in sola lettura. Immagine P1A
+originale contro stessa immagine con il nuovo JavaScript compilato. Per ciascuna
+variante/dimensione: tabelle **logged** isolate con gli stessi indici/vincoli unici,
+prima popolazione e poi riproiezione identica. Le FK sono verificate separatamente
+nelle prove sul catalogo reale, non copiate da `LIKE INCLUDING ALL` nel benchmark.
+
+Preparazione, lettura manifest e arricchimento sono identici e fuori dal timer.
+Nel percorso P1A una sentinella JavaScript interrompe la funzione subito prima
+della prima query delle entità, senza errore PostgreSQL: si misura esattamente
+la fase tag. Nel nuovo percorso si chiama la stessa funzione bulk integrata nel
+catalogo. BEGIN, lock e COMMIT sono inclusi in tempo e conteggio query. Singola
+esecuzione seriale P1A→nuovo, host condiviso e cache non controllate: nessun
+intervallo di confidenza o estrapolazione end-to-end.
+
+| Batch | Fase | P1A s | P1B.1a s | Query P1A → nuove | Query/opera P1A → nuove |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 20 | Prima popolazione | 13,766 | 1,573 | 34.410 → 364 | 33,604 → 0,355 |
+| 20 | Riproiezione | 14,552 | 1,136 | 34.410 → 364 | 33,604 → 0,355 |
+| 64 | Prima popolazione | 12,761 | 1,163 | 34.302 → 112 | 33,498 → 0,109 |
+| 64 | Riproiezione | 16,768 | 0,877 | 34.302 → 112 | 33,498 → 0,109 |
+| 256 | Prima popolazione | 15,840 | 0,938 | 34.266 → 28 | 33,463 → 0,027 |
+| 256 | Riproiezione | 15,858 | 0,554 | 34.266 → 28 | 33,463 → 0,027 |
+
+Al default 20 la fase tag accelera **8,75×** alla prima popolazione e **12,81×**
+alla riproiezione; query −98,94%. Escludendo le 3 query di transazione/lock per
+batch: **33,451 → 0,203 query tag/opera**, 34.254 → 208. I commit sono 52/16/4,
+invariati fra implementazioni. Upsert con righe effettivamente scritte:
+16.103 → 8.294 alla prima popolazione, 16.103 → **0** alla riproiezione.
+Associazioni finali sempre 16.103; rimozioni alla riproiezione 16.103 → **0**.
+Questi numeri riguardano la fase tag, non tutte le query di `projectCatalog()`.
+
+| Batch 20 | P1A | P1B.1a |
+| --- | ---: | ---: |
+| WAL prima popolazione, byte | 17.712.784 | 16.316.320 |
+| WAL riproiezione, byte | 16.265.824 | 733.000 |
+| CPU Node prima popolazione, CPU-s | 5,424 | 0,539 |
+| CPU Node riproiezione, CPU-s | 5,250 | 0,506 |
+| RSS Node a fine prima popolazione, MiB | 146,96 | 140,94 |
+| RSS Node a fine riproiezione, MiB | 158,44 | 140,70 |
+
+WAL = differenza di LSN di inserimento, include eventuale attività di fondo della
+fixture; non è I/O fisico. Il WAL residuo senza righe cambiate comprende anche
+lock di righe/conflitti e commit. Lo stesso sampler cgroup P0, senza modifiche,
+ha coperto **preparazione + tutte le sei fasi**, quindi un intervallo più ampio
+dei timer precedenti: CPU worker 40,377 → 9,126 CPU-s, PG 58,832 → 7,899 CPU-s;
+picco working set worker 112,36 → 102,59 MiB, PG 89,94 → 94,92 MiB. PG scrive
+106,02 → 26,34 MiB; letture fisiche pressoché nulle (cache). Non sommare picchi
+non contemporanei o confrontare working set cgroup con RSS Node. Le dimensioni
+maggiori migliorano questa misura, ma il default non aumenta: lock più lunghi e
+latenza interattiva richiedono la futura campagna completa.
+
+Risultati aggregati: `docs/performance-p1b1a.json`; evidenze private in
+`/mnt/sdb/palimora-p1b1a-results/`. Le baseline P0/P1A restano inalterate.
+
+### Equivalenza e verifiche
+
+Conservato e riutilizzato `scripts/compare-bibliography.cjs`: confronto per ID e
+hash dei **valori normalizzati**, non solo conteggi. Cattura P1A sulla copia
+isolata; riproiezione corrente integrata di tutte le **11.032 opere**, poi
+indicizzazione ordinaria e drenaggio delle code. Risultato: **zero aggiunte,
+rimozioni o differenze** per identità, snapshot, documenti, viste storiche,
+tag/attributi, entità, archi, associazioni e filtri. Confrontate 57.661 identità tag,
+167.736 associazioni opera-tag e 167.736 filtri; tutte le 11.032 viste storiche
+rimangono identiche. Solo gli array semanticamente insiemistici sono ordinati nel
+confronto; generazioni e timestamp di indicizzazione non sono usati come prova di
+equivalenza bibliografica. Separatamente, OpenSearch reale contiene esattamente
+le **11.032 coppie ID/generazione** attese da PostgreSQL.
+
+`scripts/verify-bulk-tags.cjs` confronta anche il percorso P1A conservato con
+quello bulk, dentro transazioni annullate, sulle tabelle reali con FK. Copre tag
+condivisi, aggiornamento canonical e ID mancanti, conflitti di ID, nomi ambigui
+fra categorie, duplicati, evidenze introdotte da opere successive, sinonimi,
+meta-tag e parent. Confronta risultati, attributi, associazioni, filtri e archi;
+verifica `xmin/ctid` invariati delle associazioni in una riproiezione identica e
+rimozione effettiva quando i tag scompaiono. Conflitto di unicità e terminazione
+del backend **dopo le scritture bulk, prima del commit**: rollback e successivo
+retry verificati senza tag residui.
+
+La sonda P1A `verify-projections.cjs`, riusata senza modifiche, passa con il nuovo
+catalogo: invalidazioni durante proiezione e PUT sopravvivono agli ACK, seeding,
+pausa/ripresa, retry, lock fra worker, fairness storica, manutenzione, stop atomico
+e SIGKILL/ripresa dello scheduler. Code vuote e 11.032 generazioni ricontrollate
+alla fine. Queste sono prove funzionali, non misure end-to-end comparabili a B.
+Build completa riuscita (warning Vite sui chunk grandi); `tests/ao3.test.ts` su
+PostgreSQL/OpenSearch reali: **2 passati, 0 falliti, 0 saltati**, inclusi ricerca,
+wrangling, bibliografia, lettura e snapshot canonici. Controlli di sintassi,
+formattazione del codice e `git diff --check` riusciti.
+
+**P1B.1a completata. P1B.1 complessiva rimane incompleta.** Rimangono N+1 di
+entità, lookup/lettura manifest, filtri ricorsivi per opera, documenti e storico;
+il grafo conserva il costo e le invalidazioni precedenti. Nessuna conclusione
+sul nuovo throughput end-to-end o sulle latenze interattive: non misurati in
+questa fase. Non sono state avviate P1B.1b–d, P1B.2 o P2. Fixture isolate rimosse
+al termine, bind mount ed evidenze conservati; nessun servizio estraneo cambiato.

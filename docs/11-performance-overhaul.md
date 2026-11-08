@@ -1018,3 +1018,188 @@ il grafo conserva il costo e le invalidazioni precedenti. Nessuna conclusione
 sul nuovo throughput end-to-end o sulle latenze interattive: non misurati in
 questa fase. Non sono state avviate P1B.1b–d, P1B.2 o P2. Fixture isolate rimosse
 al termine, bind mount ed evidenze conservati; nessun servizio estraneo cambiato.
+
+## P1B.1b — Bibliografia corrente, filtri e documenti bulk (8 novembre 2026)
+
+La pipeline corrente estende i gruppi P1B.1a senza cambiare il bulk dei tag o le
+barriere delle opere che modificano il grafo. `projectEntityBatch()` prepara
+identità e fatti con la stessa normalizzazione usata dal percorso storico:
+ultimo nome, ultimo URL non nullo, merge superficiale dei dettagli nell'ordine
+originale; i valori annidati sono sostituiti interamente come con `jsonb ||`.
+Le entità nei documenti delle singole opere conservano le proprie evidenze,
+mentre la riga condivisa riceve la fusione ordinata. Restano deduzione dagli URL
+AO3, pseudonimi/owner, identità locali per opera, posizioni, relazioni e anonimato.
+Gli autori anonimi possono conservare evidenze globali, ma non associazioni o
+esposizione nel documento dell'opera, come prima.
+
+Tre query per gruppo gestiscono upsert delle entità e differenze delle
+associazioni. `projectFilterBatch()` usa una CTE ricorsiva su **(work_id,tag_id)**,
+con UNION per deduplicare, attraversando synonym/meta e mantenendo le opere
+separate. Altre due query applicano solo le differenze di `catalog_work_filters`.
+Le barriere P1B.1a impediscono che un cambiamento successivo del grafo alteri la
+chiusura catturata per un'opera precedente. Nessuna modifica a `tagEdges()` o
+all'invalidazione globale.
+
+Il catalogo idrata i metadata una sola volta, valida collettivamente gli snapshot
+correnti e le identità canoniche/alias, poi recupera manifest e HTML con lookup
+collettivi. Il ponte `readObjectBatches()` riusa `PackStore.readMany()` senza
+cambiare PackStore: stesso flush/seal dei writer e lock condiviso contro GC,
+verifica di ogni oggetto, massimo 256 oggetti/16 MiB raw per lettura, salvo un
+singolo oggetto già più grande. Non conserva tutti i buffer HTML del batch:
+conserva le evidenze estratte, riapplicate nell'ordine degli oggetti del manifest.
+Oggetti condivisi sono letti/analizzati una volta per gruppo. La normalizzazione
+e l'estrazione restano uniche; lo storico conserva query e ciclo precedenti.
+
+Availability AO3: un prefetch per batch. Documenti: preparazione in memoria e
+un upsert `INSERT … SELECT`, evitando UPDATE e modifica di `indexed_at` quando
+la riga è identica. L'algoritmo di generazione resta SHA-256 dello stesso JSON;
+i filterTags, insieme semantico prima restituito da SQL senza ORDER BY, sono ora
+ordinati per ID. Una riproiezione dopo l'upgrade può quindi cambiare generazione
+solo per quell'ordine; la nuova generazione rimane stabile al variare del batch.
+Il documento e la sua generazione vengono sempre indicizzati insieme attraverso
+il protocollo P1A esistente. Conservati lock globale bibliografico, lock delle
+code, transazione e ACK; nessuna migrazione necessaria. Nessun riuso full-text.
+
+Una sonda in sola lettura sulla vecchia query, forzando join diversi, ha
+restituito gli stessi **42 tag in ordini differenti**: l'instabilità precedente
+è verificata, non ipotizzata. Il test nuovo verifica anche generazioni identiche
+proiettando lo stesso gruppo insieme e un'opera alla volta.
+
+### Benchmark circoscritto e attribuzione
+
+`scripts/benchmark-current.cjs`, PostgreSQL 17.6 reale, copia a freddo della fixture
+P1B.1a e PackStore in sola lettura. **1.024 opere reali** selezionate per ID:
+2.215 entità, 2.305 associazioni opera-entità, 16.103 filtri e 1.024 documenti.
+Sette tabelle catalogo isolate **logged**, indici/unicità copiati; FK verificate
+separatamente sul catalogo effettivo. Prima popolazione e riproiezione identica.
+Baseline compilata P1B.1a contro nuovo codice nella stessa immagine runtime.
+Worker riavviati prima della coppia finale per escludere memoria residua dei test;
+esecuzioni seriali senza altre prove concorrenti. Default batch invariato: 20.
+
+Entrambi includono **idratazione, lettura/verifica manifest e HTML, arricchimento,
+tag, entità, filtri, availability e documenti**, oltre a BEGIN con
+`SET LOCAL default_toast_compression=lz4`, lock e COMMIT come in produzione.
+Non si confrontano questi tempi con il timer dei soli tag della fase precedente.
+Il runner usa le funzioni di fase della pipeline; nella baseline intercetta
+l'inizio della query ricorsiva per separare entità/filtri, senza saltare SQL.
+Per entrambe le varianti i documenti sono scritti dopo la preparazione del gruppo.
+Il campione non contiene modifiche esplicite al grafo (asserito); la normale
+integrazione `projectCatalog()` è verificata separatamente sul corpus completo.
+Fuori dai timer: setup, conteggi, queue/ACK, scheduler, storico, ingest e ricerca.
+Una prova per caso finale, host condiviso e cache non controllate: nessun
+intervallo di confidenza o accelerazione end-to-end dichiarata.
+
+Per riprodurre: compilare il commit baseline e il nuovo codice in due directory
+`dist`, montate sulla stessa immagine API insieme a `scripts`, fixture `_test`,
+PackStore `/benchmark` in sola lettura e output `/results`. Eseguire in processi
+separati `node scripts/benchmark-current.cjs old` e `new`, dopo il riavvio dei
+worker; campionare con `benchmark-resources.py` e aggregare con
+`summarize-resources.py`. Il runner crea e rimuove da solo gli schemi di misura.
+Il baseline compilato usato resta in `/mnt/sdb/palimora-p1b1b-old-dist/`.
+
+Le due esplorazioni precedenti sono conservate privatamente: una senza il SET
+LZ4 e una con cgroup non ripuliti (circa 75 MiB residui nel worker nuovo contro 4
+nella baseline). Le tabelle seguenti usano soltanto la coppia finale allineata;
+non si attribuiscono al codice le differenze fra queste diverse condizioni.
+
+| Batch | Fase | P1B.1a s | P1B.1b s | Fattore | Query totali prima → dopo | Query/opera prima → dopo |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 20 | Iniziale | 12,859 | 4,366 | 2,95× | 19.453 → 1.197 | 18,997 → 1,169 |
+| 20 | Ripetuta | 13,958 | 3,415 | 4,09× | 19.452 → 1.196 | 18,996 → 1,168 |
+| 64 | Iniziale | 11,170 | 2,413 | 4,63× | 19.092 → 368 | 18,645 → 0,359 |
+| 64 | Ripetuta | 11,882 | 1,939 | 6,13× | 19.092 → 368 | 18,645 → 0,359 |
+| 256 | Iniziale | 11,305 | 2,183 | 5,18× | 18.972 → 92 | 18,527 → 0,090 |
+| 256 | Ripetuta | 12,309 | 1,733 | 7,10× | 18.972 → 92 | 18,527 → 0,090 |
+
+Transazioni/commit invariati: 52/16/4. Il nuovo percorso usa 23 query per gruppo
+ordinario nel campione, più una prima lettura del dizionario non in cache;
+non dipendono dal numero di entità o associazioni. Incluse le query tag invariate.
+
+| Fase, batch 20 | Iniziale prima → dopo, s | Ripetuta prima → dopo, s | Query iniziali prima → dopo |
+| --- | ---: | ---: | ---: |
+| Lookup/manifest/HTML/arricchimento | 5,716 → 1,859 | 5,639 → 1,662 | 8.335 → 417 |
+| Tag, invariati | 0,928 → 1,087 | 0,669 → 0,751 | 208 → 208 |
+| Entità e associazioni | 1,855 → 0,307 | 1,954 → 0,233 | 5.634 → 156 |
+| Filtri | 3,040 → 0,436 | 4,240 → 0,290 | 3.072 → 156 |
+| Availability/documenti | 1,110 → 0,450 | 1,278 → 0,373 | 2.048 → 104 |
+| Transazione/lock/commit | 0,210 → 0,227 | 0,178 → 0,107 | 156 → 156 |
+
+Upsert entità con righe realmente scritte: 2.305 → 2.215 iniziali e 2.305 → **0**
+ripetute. Nella riproiezione nuova: **zero** inserimenti/rimozioni/aggiornamenti
+nelle associazioni, nei filtri e nei documenti. Baseline: 2.305 associazioni e
+16.103 filtri rimossi/reinseriti, 1.024 documenti aggiornati. Conteggi finali uguali.
+
+### WAL e risorse
+
+| Batch | WAL iniziale prima → dopo, byte | WAL ripetuto prima → dopo, byte |
+| --- | ---: | ---: |
+| 20 | 36.309.488 → 35.393.208 | 24.496.024 → 1.048.936 |
+| 64 | 40.026.968 → 35.282.672 | 19.676.912 → 977.528 |
+| 256 | 36.190.960 → 35.124.648 | 24.744.792 → 884.976 |
+
+Al default il WAL cambia del **-2,52%** iniziale e
+**-95,72%** ripetuto. LSN globali della fixture, non I/O fisico;
+checkpoint/full-page images e attività di fondo non separati. Anche conflitti,
+lock e commit possono produrre WAL senza UPDATE di righe. Nella prima esplorazione
+non allineata il WAL iniziale aumentava: non si dichiara un risparmio garantito.
+
+CPU Node batch 20: 5,964 → 2,684 CPU-s iniziali,
+5,426 → 2,349 ripetuti. RSS Node a fine fase iniziale
+142,77 → 151,95 MiB; ripetuta 159,38 → 156,67 MiB.
+A batch 256 il nuovo RSS arriva a 197,78 MiB contro
+160,57: la dimensione maggiore ha un costo di memoria.
+
+Sampler cgroup P0 invariato: sei casi **con setup/teardown**, finestra più ampia
+dei timer. Working set medio/massimo; non confondere con RSS o sommare picchi
+non contemporanei. I contatori I/O sono fisici, non byte logici PackStore;
+includono writeback, quindi non si attribuisce tutto il delta alle sole query
+modificate.
+
+| Risorsa | P1B.1a | P1B.1b |
+| --- | ---: | ---: |
+| CPU worker, CPU-s | 30,942 | 10,227 |
+| CPU PostgreSQL, CPU-s | 45,199 | 7,330 |
+| Working set worker medio / massimo, MiB | 100,91 / 110,86 | 99,08 / 135,02 |
+| Working set PostgreSQL medio / massimo, MiB | 175,70 / 182,83 | 176,96 / 194,95 |
+| I/O worker letto / scritto, MiB | non disponibile | non disponibile |
+| I/O PostgreSQL letto / scritto, MiB | 0,00 / 286,12 | 0,00 / 57,37 |
+
+**Costo residuo maggiore al default:** lookup/manifest/HTML/arricchimento
+1,859 s (42,6% dell'iniziale) e
+1,662 s (48,7% del ripetuto);
+i tag invariati pesano 1,087/0,751 s.
+Sono fasi aggregate: non si attribuisce tutto il residuo alla sola lettura
+PackStore o al parser HTML. Storico e PUT OpenSearch non sono in questi timer.
+
+### Equivalenza e conclusione
+
+`compare-bibliography.cjs` invariato, riferimento catturato con il codice P1B.1a:
+**zero differenze** nei valori normalizzati e nelle relazioni di **11.032 opere**,
+11.032 snapshot/viste storiche, **22.140 entità**, **24.909 associazioni opera-entità**,
+57.661 tag, 167.736 associazioni opera-tag e **167.736 filtri**. Documenti,
+metadata e identità equivalenti. Il runner integrato ha proiettato e indicizzato
+tutte le opere e verificato tutte le 11.032 coppie ID/generazione OpenSearch;
+code drenate, storico immutato.
+
+`verify-current.cjs` confronta anche fixture ordinate con P1B.1a: merge/precedenze
+condivise, statistiche annidate, URL, posizioni, anonimato, pseudonimi, identità
+locali, relazioni e chiusure transitive separate per opera; modifiche del grafo
+fra gruppi, rimozioni e aggiornamenti, conflitto di unicità, rollback/retry.
+Verificati xmin/ctid invariati per associazioni, filtri e documenti riproiettati;
+snapshot estranei rifiutati, alias validi accettati e oggetti mancanti segnalati.
+`verify-bulk-tags.cjs` e `verify-projections.cjs` P1A/P1B.1a passano invariati,
+comprese invalidazioni concorrenti, pausa, backpressure, crash, stop e generazioni.
+
+Build completa riuscita (warning Vite sui chunk grandi); suite reali
+`archive-native`, `archive`, `ao3`: **8 test passati, 0 falliti, 0 saltati** nelle
+esecuzioni finali. Coperti integrità PackStore, commit, dedup, lettura/export e
+snapshot storici/on-demand. Per l'integrazione sono necessari OpenSearch e
+`TYPST_PATH` al binario runtime: i tentativi iniziali senza queste impostazioni
+fallivano per configurazione; log conservati, nessuna asserzione rimossa.
+
+**P1B.1b completata; P1B.1 complessiva resta incompleta.** Restano costo del grafo,
+storico opera-per-opera e PUT individuali. Nessuna misura end-to-end o di latenza
+interattiva in questa fase. Nessuna implementazione P1B.1c/d, P1B.2 o P2.
+Dati aggregati: `docs/performance-p1b1b.json`; evidenze private:
+`/mnt/sdb/palimora-p1b1b-results/`. Baseline precedenti conservate. Fixture isolate
+rimosse al termine, bind mount conservati; nessun servizio estraneo modificato.

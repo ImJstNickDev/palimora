@@ -4,6 +4,7 @@ import {
   projectBibliography,
   projectCurrentBibliographies,
   enrichBibliography,
+  enrichBibliographyBatch,
   projectGraph,
   bibliographyPage,
   bibliography,
@@ -14,7 +15,7 @@ import { posix } from "node:path";
 import { createHash } from "node:crypto";
 import { DB, transaction } from "./db";
 import { hydrateWorks } from "./archive-catalog";
-import { readObject } from "./archive";
+import { readObject, readObjectBatches } from "./archive";
 import { archiveOperation } from "./archive-admin";
 import { fail } from "./security";
 import { safeHtml, readerDocument, escapeHtml } from "./reader-safety";
@@ -45,53 +46,11 @@ export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
           )
         ).rows,
       );
-      const inputs = [];
-      for (const w of works) {
-        const manifest = w.current_snapshot_id
-          ? (await loadSnapshot(db, w.id)).manifest
-          : null;
-        inputs.push({
-          work: w,
-          raw: await enrichBibliography(db, w.metadata, manifest),
-        });
-      }
-      for await (const { work: w, projected } of projectCurrentBibliographies(
-        db,
-        inputs,
-      )) {
-        const availability = (
-          await db.query(
-            "SELECT availability FROM ao3_jobs WHERE kind='work' AND target=$1",
-            [w.external_id],
-          )
-        ).rows[0]?.availability;
-        if (availability && availability !== "unknown")
-          projected.metadata.availability = availability;
-        const details = {
-          ...projected.details,
-          filterTags: projected.filterTags,
-        };
-        const generation = createHash("sha256")
-          .update(
-            JSON.stringify([
-              w.current_snapshot_id,
-              projected.metadata,
-              details,
-            ]),
-          )
-          .digest("hex");
-        await db.query(
-          `INSERT INTO catalog_documents(work_id,snapshot_id,metadata,title,bibliography,generation) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,metadata=excluded.metadata,title=excluded.title,bibliography=excluded.bibliography,generation=excluded.generation,indexed_at=now()`,
-          [
-            w.id,
-            w.current_snapshot_id,
-            projected.metadata,
-            strings(w.metadata.title).join(" · "),
-            details,
-            generation,
-          ],
-        );
-      }
+      const inputs = await loadCurrentBibliographies(db, works);
+      const projected = [];
+      for await (const result of projectCurrentBibliographies(db, inputs))
+        projected.push(result);
+      await writeCurrentDocuments(db, projected);
       await db.query(
         // Wait for an in-flight PUT/ACK before coalescing this invalidation.
         "INSERT INTO catalog_text_pending SELECT unnest($1::uuid[]) ON CONFLICT(work_id) DO UPDATE SET work_id=excluded.work_id",
@@ -131,6 +90,85 @@ export async function projectCatalog(currentLimit = 20, historicalLimit = 20) {
     return rows.length + pending.length;
   });
 }
+// Works are already hydrated by the queue acquisition. Validate snapshot ownership
+// (including canonical aliases) without reloading work payloads per snapshot.
+export async function loadCurrentBibliographies(db: DB, works: any[]) {
+  const selected = works.filter((w) => w.current_snapshot_id);
+  const snapshots = (
+    await db.query(
+      `SELECT i.work_id,s.manifest_hash FROM
+    jsonb_to_recordset($1::jsonb) i(work_id uuid,snapshot_id uuid)
+    JOIN archive_snapshots s ON s.id=i.snapshot_id AND (s.work_id=i.work_id OR EXISTS(
+      SELECT 1 FROM archive_identity_links l WHERE l.work_id=s.work_id AND l.canonical_work_id=i.work_id))`,
+      [
+        JSON.stringify(
+          selected.map((w) => ({
+            work_id: w.id,
+            snapshot_id: w.current_snapshot_id,
+          })),
+        ),
+      ],
+    )
+  ).rows;
+  if (snapshots.length !== selected.length) fail("NOT_FOUND", 404);
+  const manifests = new Map<string, any>();
+  for await (const { hash, bytes } of readObjectBatches(
+    db,
+    snapshots.map((s) => s.manifest_hash),
+  ))
+    manifests.set(hash, JSON.parse(bytes.toString()));
+  const byWork = new Map(
+    snapshots.map((s) => [s.work_id, manifests.get(s.manifest_hash)]),
+  );
+  const raw = await enrichBibliographyBatch(
+    db,
+    works.map((w) => ({ raw: w.metadata, manifest: byWork.get(w.id) })),
+  );
+  return works.map((work, i) => ({ work, raw: raw[i] }));
+}
+
+export async function writeCurrentDocuments(
+  db: DB,
+  results: { work: any; projected: any }[],
+) {
+  const availability = new Map(
+    (
+      await db.query(
+        "SELECT target,availability FROM ao3_jobs WHERE kind='work' AND target=ANY($1::text[])",
+        [results.map((r) => r.work.external_id)],
+      )
+    ).rows.map((r) => [r.target, r.availability]),
+  );
+  const documents = results.map(({ work: w, projected }) => {
+    const state = availability.get(w.external_id);
+    if (state && state !== "unknown") projected.metadata.availability = state;
+    const details = { ...projected.details, filterTags: projected.filterTags };
+    const generation = createHash("sha256")
+      .update(
+        JSON.stringify([w.current_snapshot_id, projected.metadata, details]),
+      )
+      .digest("hex");
+    return {
+      work_id: w.id,
+      snapshot_id: w.current_snapshot_id,
+      metadata: projected.metadata,
+      title: strings(w.metadata.title).join(" · "),
+      bibliography: details,
+      generation,
+    };
+  });
+  await db.query(
+    `INSERT INTO catalog_documents(work_id,snapshot_id,metadata,title,bibliography,generation)
+    SELECT work_id,snapshot_id,metadata,title,bibliography,generation FROM jsonb_to_recordset($1::jsonb)
+      s(work_id uuid,snapshot_id uuid,metadata jsonb,title text,bibliography jsonb,generation text) ORDER BY work_id
+    ON CONFLICT(work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,metadata=excluded.metadata,title=excluded.title,
+      bibliography=excluded.bibliography,generation=excluded.generation,indexed_at=now()
+    WHERE (catalog_documents.snapshot_id,catalog_documents.metadata,catalog_documents.title,catalog_documents.bibliography,catalog_documents.generation)
+      IS DISTINCT FROM (excluded.snapshot_id,excluded.metadata,excluded.title,excluded.bibliography,excluded.generation)`,
+    [JSON.stringify(documents)],
+  );
+}
+
 export async function loadSnapshot(db: DB, id: string, snapshot?: string) {
   const w = (
     await hydrateWorks(

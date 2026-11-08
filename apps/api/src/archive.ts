@@ -374,6 +374,40 @@ export async function readObject(db: DB, hash: string) {
     size: Number(r.size),
   } as Locator);
 }
+// Read-only projection batches reuse PackStore verification and bounded reads.
+// Preserve the same flush/publication and GC protection as readObject().
+export async function* readObjectBatches(db: DB, hashes: string[]) {
+  if (!hashes.length) return;
+  await flushObjects(db);
+  await writers.get(db)?.finish();
+  await registerObjects(db);
+  await db.query("SELECT pg_advisory_xact_lock_shared(70210402)");
+  const unique = [...new Set(hashes)],
+    rows = await findObjects(db, unique);
+  if (rows.length !== unique.length) throw Error("OBJECT_MISSING");
+  for (let start = 0; start < rows.length; ) {
+    let end = start,
+      raw = 0;
+    while (
+      end < rows.length &&
+      end - start < 256 &&
+      (end === start || raw + Number(rows[end].size) <= 16 * 1024 * 1024)
+    )
+      raw += Number(rows[end++].size);
+    const part = rows.slice(start, end);
+    const bytes = await store.readMany(
+      part.map((r) => ({
+        ...r,
+        offset: Number(r.byte_offset),
+        length: Number(r.length),
+        size: Number(r.size),
+      })),
+    );
+    for (let i = 0; i < part.length; i++)
+      yield { hash: part[i].hash, bytes: bytes[i] };
+    start = end;
+  }
+}
 // Copy-on-write compaction retains old packs so active readers and future backup leases remain safe.
 export async function compactObjects(
   hashes: string[],

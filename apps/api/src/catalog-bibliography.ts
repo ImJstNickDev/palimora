@@ -326,6 +326,189 @@ export async function projectTagBatch(
   return result;
 }
 
+function prepareEntities(
+  work: any,
+  raw: Record<string, any>,
+  metadata: Record<string, any>,
+  source: Bibliography,
+) {
+  const facts: any[] = [],
+    entities: any[] = [];
+  const add = (kind: string, e: any, scope?: string) => {
+    const sourceId = e.id ?? e.url ?? null,
+      id = key(kind, sourceId ?? (scope ?? work.id) + "\0" + e.name);
+    facts.push({
+      id,
+      kind,
+      source_id: sourceId,
+      name: e.name,
+      url: e.url ?? null,
+      details: e,
+    });
+    const entity = { ...e, id, kind, source_id: sourceId };
+    entities.push(entity);
+    return entity;
+  };
+  for (const kind of ["author", "pseud", "series", "collection"]) {
+    const field = (
+      {
+        author: "authors",
+        pseud: "pseuds",
+        series: "series",
+        collection: "collections",
+      } as any
+    )[kind];
+    for (const e of (source as any)[field] ?? []) add(kind, e);
+  }
+  if (
+    !source.authors?.length &&
+    !source.pseuds?.length &&
+    !metadata.anonymous
+  ) {
+    const urls = values(raw.author_urls);
+    for (const [i, name] of values(raw.creators).entries()) {
+      const url =
+        urls.length === values(raw.creators).length ? urls[i] : undefined;
+      let user: string | undefined, pseud: string | undefined;
+      try {
+        const u = new URL(url!);
+        if (u.protocol === "https:" && u.hostname === "archiveofourown.org") {
+          const m = u.pathname.match(/^\/users\/([^/]+)(?:\/pseuds\/([^/]+))?/);
+          if (m) {
+            user = decodeURIComponent(m[1]);
+            pseud = m[2] ? decodeURIComponent(m[2]) : undefined;
+          }
+        }
+      } catch {}
+      if (user) {
+        const author = add("author", {
+          id: user,
+          name: user,
+          url: `https://archiveofourown.org/users/${encodeURIComponent(user)}`,
+        });
+        if (pseud)
+          add("pseud", {
+            id: user + "/" + pseud,
+            name: pseud,
+            url,
+            owner_id: user,
+            owner: author.id,
+          });
+      } else add("author", { name });
+    }
+  }
+  for (const kind of ["series", "collection"]) {
+    const field = kind === "series" ? "series" : "collections";
+    if (!(source as any)[field]?.length)
+      for (const name of values(raw[field])) add(kind, { name });
+  }
+  if (metadata.anonymous) metadata.creators = ["Anonymous"];
+  return {
+    facts,
+    entities: metadata.anonymous
+      ? entities.filter((e) => !["author", "pseud"].includes(e.kind))
+      : entities,
+  };
+}
+
+export async function projectEntityBatch(
+  db: DB,
+  items: { work: any; raw: Record<string, any> }[],
+  prepared: PreparedTags[],
+) {
+  const results = items.map((item, i) =>
+    prepareEntities(
+      item.work,
+      item.raw,
+      prepared[i].metadata,
+      prepared[i].source,
+    ),
+  );
+  const entities = new Map<string, any>(),
+    associations = new Map<string, any>();
+  for (let i = 0; i < items.length; i++) {
+    for (const fact of results[i].facts) {
+      const previous = entities.get(fact.id);
+      // Match jsonb ||: omit undefined properties, replace nested values as units.
+      entities.set(fact.id, {
+        ...fact,
+        url: fact.url ?? previous?.url ?? null,
+        details: {
+          ...previous?.details,
+          ...JSON.parse(JSON.stringify(fact.details)),
+        },
+      });
+      if (
+        !prepared[i].metadata.anonymous ||
+        !["author", "pseud"].includes(fact.kind)
+      )
+        associations.set(fact.id + "\0" + items[i].work.id, {
+          entity_id: fact.id,
+          work_id: items[i].work.id,
+          snapshot_id: items[i].work.current_snapshot_id,
+          position: fact.details.position ?? null,
+        });
+    }
+  }
+  await db.query(
+    `INSERT INTO catalog_entities(id,kind,source_id,name,url,details)
+    SELECT id,kind,source_id,name,url,details FROM jsonb_to_recordset($1::jsonb)
+      s(id text,kind text,source_id text,name text,url text,details jsonb) ORDER BY id
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,url=coalesce(excluded.url,catalog_entities.url),details=catalog_entities.details||excluded.details
+    WHERE (catalog_entities.name,catalog_entities.url,catalog_entities.details) IS DISTINCT FROM
+      (excluded.name,coalesce(excluded.url,catalog_entities.url),catalog_entities.details||excluded.details)`,
+    [JSON.stringify([...entities.values()])],
+  );
+  const pairs = JSON.stringify([...associations.values()]);
+  await db.query(
+    `DELETE FROM catalog_entity_works t WHERE work_id=ANY($1::uuid[]) AND NOT EXISTS(
+    SELECT 1 FROM jsonb_to_recordset($2::jsonb) s(entity_id text,work_id uuid)
+    WHERE s.entity_id=t.entity_id AND s.work_id=t.work_id)`,
+    [items.map((i) => i.work.id), pairs],
+  );
+  await db.query(
+    `INSERT INTO catalog_entity_works(entity_id,work_id,snapshot_id,position)
+    SELECT entity_id,work_id,snapshot_id,position FROM jsonb_to_recordset($1::jsonb)
+      s(entity_id text,work_id uuid,snapshot_id uuid,position numeric) ORDER BY entity_id,work_id
+    ON CONFLICT(entity_id,work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,position=excluded.position
+    WHERE (catalog_entity_works.snapshot_id,catalog_entity_works.position) IS DISTINCT FROM (excluded.snapshot_id,excluded.position)`,
+    [pairs],
+  );
+  return results.map((r) => r.entities);
+}
+
+export async function projectFilterBatch(db: DB, workIds: string[]) {
+  // Generations serialize filterTags: planner/batch changes must not reorder it.
+  const pairs = (
+    await db.query(
+      `WITH RECURSIVE closure(work_id,tag_id) AS (
+    SELECT work_id,tag_id FROM catalog_work_tags WHERE work_id=ANY($1::uuid[])
+    UNION SELECT c.work_id,e.parent FROM closure c JOIN catalog_tag_edges e ON e.child=c.tag_id WHERE e.kind IN('synonym','meta'))
+    SELECT work_id,tag_id FROM closure ORDER BY work_id,tag_id`,
+      [workIds],
+    )
+  ).rows;
+  const json = JSON.stringify(pairs);
+  await db.query(
+    `DELETE FROM catalog_work_filters t WHERE work_id=ANY($1::uuid[]) AND NOT EXISTS(
+    SELECT 1 FROM jsonb_to_recordset($2::jsonb) s(work_id uuid,tag_id text) WHERE s.work_id=t.work_id AND s.tag_id=t.tag_id)`,
+    [workIds, json],
+  );
+  await db.query(
+    `INSERT INTO catalog_work_filters(work_id,tag_id)
+    SELECT work_id,tag_id FROM jsonb_to_recordset($1::jsonb) s(work_id uuid,tag_id text)
+    ORDER BY work_id,tag_id ON CONFLICT DO NOTHING`,
+    [json],
+  );
+  const result = new Map<string, string[]>();
+  for (const row of pairs) {
+    const tags = result.get(row.work_id) ?? [];
+    tags.push(row.tag_id);
+    result.set(row.work_id, tags);
+  }
+  return result;
+}
+
 export async function* projectCurrentBibliographies(
   db: DB,
   items: { work: any; raw: Record<string, any> }[],
@@ -358,16 +541,23 @@ export async function* projectCurrentBibliographies(
     } else while (end < items.length && !changesGraph(items[end])) end++;
     const group = items.slice(start, end),
       prepared = await projectTagBatch(db, group);
+    const entities = await projectEntityBatch(db, group, prepared);
+    const filters = await projectFilterBatch(
+      db,
+      group.map((i) => i.work.id),
+    );
     for (let i = 0; i < group.length; i++)
       yield {
         work: group[i].work,
-        projected: await projectBibliography(
-          db,
-          group[i].work,
-          group[i].raw,
-          false,
-          prepared[i],
-        ),
+        projected: {
+          metadata: prepared[i].metadata,
+          details: {
+            tags: prepared[i].tags,
+            entities: entities[i],
+            relations: prepared[i].source.relations ?? [],
+          },
+          filterTags: filters.get(group[i].work.id) ?? [],
+        },
       };
     start = end;
   }
@@ -410,90 +600,27 @@ export async function projectBibliography(
           );
       }
   }
-  const entities: any[] = [];
+  const { facts, entities } = prepareEntities(work, raw, metadata, source);
   if (!historical)
     await db.query("DELETE FROM catalog_entity_works WHERE work_id=$1", [
       work.id,
     ]);
-  const add = async (kind: string, e: any, scope?: string) => {
-    const sourceId = e.id ?? e.url ?? null,
-      id = key(kind, sourceId ?? (scope ?? work.id) + "\0" + e.name);
+  for (const f of facts) {
     await db.query(
       `INSERT INTO catalog_entities(id,kind,source_id,name,url,details) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) ${historical ? "DO NOTHING" : "DO UPDATE SET name=excluded.name,url=coalesce(excluded.url,catalog_entities.url),details=catalog_entities.details||excluded.details"}`,
-      [id, kind, sourceId, e.name, e.url ?? null, e],
+      [f.id, f.kind, f.source_id, f.name, f.url, f.details],
     );
     if (!historical)
       await db.query(
         "INSERT INTO catalog_entity_works VALUES($1,$2,$3,$4) ON CONFLICT(entity_id,work_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,position=excluded.position",
-        [id, work.id, work.current_snapshot_id, e.position ?? null],
+        [f.id, work.id, work.current_snapshot_id, f.details.position ?? null],
       );
-    const entity = { ...e, id, kind, source_id: sourceId };
-    entities.push(entity);
-    return entity;
-  };
-  for (const kind of ["author", "pseud", "series", "collection"]) {
-    const field = (
-      {
-        author: "authors",
-        pseud: "pseuds",
-        series: "series",
-        collection: "collections",
-      } as any
-    )[kind];
-    for (const e of (source as any)[field] ?? []) await add(kind, e);
   }
-  if (
-    !source.authors?.length &&
-    !source.pseuds?.length &&
-    !metadata.anonymous
-  ) {
-    const urls = values(raw.author_urls);
-    for (const [i, name] of values(raw.creators).entries()) {
-      const url =
-        urls.length === values(raw.creators).length ? urls[i] : undefined;
-      let user: string | undefined, pseud: string | undefined;
-      try {
-        const u = new URL(url!);
-        if (u.protocol === "https:" && u.hostname === "archiveofourown.org") {
-          const m = u.pathname.match(/^\/users\/([^/]+)(?:\/pseuds\/([^/]+))?/);
-          if (m) {
-            user = decodeURIComponent(m[1]);
-            pseud = m[2] ? decodeURIComponent(m[2]) : undefined;
-          }
-        }
-      } catch {}
-      if (user) {
-        const author = await add("author", {
-          id: user,
-          name: user,
-          url: `https://archiveofourown.org/users/${encodeURIComponent(user)}`,
-        });
-        if (pseud)
-          await add("pseud", {
-            id: user + "/" + pseud,
-            name: pseud,
-            url,
-            owner_id: user,
-            owner: author.id,
-          });
-      } else await add("author", { name });
-    }
-  }
-  for (const kind of ["series", "collection"]) {
-    const field = kind === "series" ? "series" : "collections";
-    if (!(source as any)[field]?.length)
-      for (const name of values(raw[field])) await add(kind, { name });
-  }
-  // Anonymous works retain source evidence in the manifest, but never acquire an
-  // author-page association or expose original creator names in public lists.
-  if (metadata.anonymous) {
-    if (!historical)
-      await db.query(
-        "DELETE FROM catalog_entity_works WHERE work_id=$1 AND entity_id IN(SELECT id FROM catalog_entities WHERE kind IN('author','pseud'))",
-        [work.id],
-      );
-    metadata.creators = ["Anonymous"];
-  }
+  if (!historical && metadata.anonymous)
+    await db.query(
+      "DELETE FROM catalog_entity_works WHERE work_id=$1 AND entity_id IN(SELECT id FROM catalog_entities WHERE kind IN('author','pseud'))",
+      [work.id],
+    );
   const expanded = (
     await db.query(
       `WITH RECURSIVE closure(id) AS (SELECT tag_id FROM catalog_work_tags WHERE work_id=$1 UNION SELECT e.parent FROM catalog_tag_edges e JOIN closure c ON c.id=e.child WHERE e.kind IN('synonym','meta')) SELECT t.* FROM closure c JOIN catalog_tags t ON t.id=c.id`,
@@ -587,10 +714,98 @@ export async function bibliographyPage(db: DB, kind: string, id: string) {
 }
 
 /** Derive hyperlinks already preserved in the canonical title page, never fetch AO3. */
+function bibliographyEvidence(bytes: Buffer) {
+  const entityLists: Record<string, Map<string, any>> = {
+    series: new Map(),
+    collections: new Map(),
+  };
+  const foundTags: any[] = [];
+  const root = parseDocument(bytes.toString());
+  const walk = (n: any) => {
+    if (n.name === "a" && n.attribs?.href) {
+      let u: URL | undefined;
+      try {
+        u = new URL(n.attribs.href, "https://archiveofourown.org");
+      } catch {}
+      if (u?.hostname === "archiveofourown.org" && u.protocol === "https:") {
+        const series = u.pathname.match(/^\/series\/(\d+)\/?$/),
+          collection = u.pathname.match(/^\/collections\/([^/]+)\/?$/),
+          tag = u.pathname.match(/^\/tags\/([^/]+)\/?(?:works)?$/);
+        const name = plain(render(n)).trim();
+        if (name && (series || collection)) {
+          const field = series ? "series" : "collections",
+            id = decodeURIComponent((series ?? collection)![1]);
+          const siblings = n.parent?.children ?? [];
+          const preceding = plain(
+            siblings
+              .slice(0, siblings.indexOf(n))
+              .map((sibling: any) => render(sibling))
+              .join(""),
+          );
+          const position = series
+            ? preceding.match(/\bPart\s+(\d+(?:\.\d+)?)\s+of\s*$/i)?.[1]
+            : undefined;
+          entityLists[field].set(id, {
+            id,
+            name,
+            url: u.origin + u.pathname,
+            ...(position ? { position: Number(position) } : {}),
+          });
+        }
+        if (tag && name) {
+          let parent = n.parent,
+            kind;
+          while (parent && !kind) {
+            const classes = (parent.attribs?.class ?? "").split(/\s+/);
+            kind = Object.entries({
+              fandom: "fandom",
+              rating: "rating",
+              warning: "warnings",
+              category: "category",
+              character: "characters",
+              relationship: "relationships",
+              freeform: "freeform",
+            }).find(([k]) => classes.includes(k))?.[1];
+            parent = parent.parent;
+          }
+          if (kind) foundTags.push({ name, kind });
+        }
+      }
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(root);
+  return { entityLists, foundTags };
+}
+
+export async function enrichBibliographyBatch(
+  db: DB,
+  items: { raw: Record<string, any>; manifest: any }[],
+) {
+  const { readObjectBatches } = await import("./archive");
+  const evidence = new Map<string, ReturnType<typeof bibliographyEvidence>>();
+  for await (const { hash, bytes } of readObjectBatches(
+    db,
+    items.flatMap((i) =>
+      (i.manifest?.objects ?? [])
+        .filter((o: any) => o.kind === "document_html")
+        .map((o: any) => o.hash),
+    ),
+  ))
+    evidence.set(hash, bibliographyEvidence(bytes));
+  const result = [];
+  for (const item of items)
+    result.push(
+      await enrichBibliography(db, item.raw, item.manifest, evidence),
+    );
+  return result;
+}
+
 export async function enrichBibliography(
   db: DB,
   raw: Record<string, any>,
   manifest: any,
+  prefetched?: Map<string, ReturnType<typeof bibliographyEvidence>>,
 ) {
   if (!manifest) return raw;
   const { readObject } = await import("./archive");
@@ -605,61 +820,12 @@ export async function enrichBibliography(
   for (const object of manifest.objects.filter(
     (o: any) => o.kind === "document_html",
   )) {
-    const root = parseDocument((await readObject(db, object.hash)).toString());
-    const walk = (n: any) => {
-      if (n.name === "a" && n.attribs?.href) {
-        let u: URL | undefined;
-        try {
-          u = new URL(n.attribs.href, "https://archiveofourown.org");
-        } catch {}
-        if (u?.hostname === "archiveofourown.org" && u.protocol === "https:") {
-          const series = u.pathname.match(/^\/series\/(\d+)\/?$/),
-            collection = u.pathname.match(/^\/collections\/([^/]+)\/?$/),
-            tag = u.pathname.match(/^\/tags\/([^/]+)\/?(?:works)?$/);
-          const name = plain(render(n)).trim();
-          if (name && (series || collection)) {
-            const field = series ? "series" : "collections",
-              id = decodeURIComponent((series ?? collection)![1]);
-            const siblings = n.parent?.children ?? [];
-            const preceding = plain(
-              siblings
-                .slice(0, siblings.indexOf(n))
-                .map((sibling: any) => render(sibling))
-                .join(""),
-            );
-            const position = series
-              ? preceding.match(/\bPart\s+(\d+(?:\.\d+)?)\s+of\s*$/i)?.[1]
-              : undefined;
-            entityLists[field].set(id, {
-              id,
-              name,
-              url: u.origin + u.pathname,
-              ...(position ? { position: Number(position) } : {}),
-            });
-          }
-          if (tag && name) {
-            let parent = n.parent,
-              kind;
-            while (parent && !kind) {
-              const classes = (parent.attribs?.class ?? "").split(/\s+/);
-              kind = Object.entries({
-                fandom: "fandom",
-                rating: "rating",
-                warning: "warnings",
-                category: "category",
-                character: "characters",
-                relationship: "relationships",
-                freeform: "freeform",
-              }).find(([k]) => classes.includes(k))?.[1];
-              parent = parent.parent;
-            }
-            if (kind) foundTags.push({ name, kind });
-          }
-        }
-      }
-      for (const c of n.children ?? []) walk(c);
-    };
-    walk(root);
+    const evidence =
+      prefetched?.get(object.hash) ??
+      bibliographyEvidence(await readObject(db, object.hash));
+    for (const [field, entries] of Object.entries(evidence.entityLists))
+      for (const [id, entry] of entries) entityLists[field].set(id, entry);
+    foundTags.push(...evidence.foundTags);
   }
   for (const [field, entries] of Object.entries(entityLists))
     if (!source[field]?.length && entries.size)

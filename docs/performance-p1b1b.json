@@ -1,0 +1,1193 @@
+{
+  "phase": "P1B.1b",
+  "date": "2026-11-08",
+  "baseline_commit": "2e1c8eee74ae423f809a34c4e0a840061819bb2c",
+  "scope": "Current bibliography and document preparation/persistence only; no ingest, full-text or A/B/C campaign",
+  "method": {
+    "runner": "scripts/benchmark-current.cjs",
+    "sample": "First 1024 real archive works by ID, from a cold copy of the retained P1B.1a fixture",
+    "postgresql": "17.6",
+    "batch_sizes": [20, 64, 256],
+    "default_batch": 20,
+    "runs_per_case": 1,
+    "order": ["P1B.1a", "P1B.1b"],
+    "tables": "Seven isolated logged catalog tables, LIKE INCLUDING ALL; FK correctness tested separately on public catalog tables",
+    "transaction": "One BEGIN; SET LOCAL default_toast_compression=lz4 / advisory lock / COMMIT per group, matching production transaction settings in both variants",
+    "timed": "Same complete current-projection phases: hydration, manifest/HTML reading and enrichment, unchanged bulk tags, entities, filters, availability and documents",
+    "excluded": "Schema creation/removal, row counts, queue acquisition/ACK, scheduler, historical projection, full-text and ingest",
+    "phase_attribution": "Wall time of the production phase functions; P1B.1a entity/filter boundary intercepted immediately before its recursive query, without suppressing any SQL; documents persisted after group preparation in both variants, outside the operational scheduler",
+    "integrated_path_validation": "Separate full-corpus projectCatalog run using the unmodified reproject-tags-fixture.cjs runner",
+    "wal": "Global insert LSN delta on isolated PostgreSQL, may include background WAL",
+    "resource_sampler": "Unmodified P0 cgroup sampler, covers six cases and schema setup/teardown; 1-second samples",
+    "memory_bound": "PackStore reads at most 256 objects / 16 MiB raw per group, except one intrinsically larger object; parsed evidence and metadata bounded by work batch",
+    "private_evidence": "/mnt/sdb/palimora-p1b1b-results",
+    "worker_cgroups": "Both worker containers restarted immediately before the final paired measurement; previous validation memory excluded",
+    "superseded_runs": [
+      {
+        "directory": "exploratory-default-toast",
+        "reason": "Preliminary run omitted the production LZ4 transaction setting in both variants"
+      },
+      {
+        "directory": "lz4-before-cgroup-reset",
+        "reason": "New worker retained about 75 MiB working set after full validation; old started near 4 MiB"
+      }
+    ]
+  },
+  "measurements": {
+    "p1b1a": [
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 12.858894479,
+        "queries": 19453,
+        "queries_per_work": 18.9970703125,
+        "commits": 52,
+        "phases": {
+          "coordination": {
+            "seconds": 0.20961746299999767,
+            "queries": 156,
+            "sql_seconds": 0.2081993260000178,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 5.716192332000003,
+            "queries": 8335,
+            "sql_seconds": 3.716936792000097,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.9283462769999977,
+            "queries": 208,
+            "sql_seconds": 0.7555796899999866,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 1.8545448670000062,
+            "queries": 5634,
+            "sql_seconds": 1.6985410690000127,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 3.040106492999993,
+            "queries": 3072,
+            "sql_seconds": 3.001408010999993,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 1.1100700049999999,
+            "queries": 2048,
+            "sql_seconds": 1.00690039799998,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 36309488,
+        "node_cpu_seconds": 5.964199,
+        "rss_mib": 142.765625,
+        "process_peak_rss_mib": 142.765625,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "old",
+        "batch": 20,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 13.957685446999998,
+        "queries": 19452,
+        "queries_per_work": 18.99609375,
+        "commits": 52,
+        "phases": {
+          "coordination": {
+            "seconds": 0.17752614600001834,
+            "queries": 156,
+            "sql_seconds": 0.17653584999997107,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 5.639283839999986,
+            "queries": 8334,
+            "sql_seconds": 3.8010498699999933,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.6690120480000042,
+            "queries": 208,
+            "sql_seconds": 0.5315755619999947,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 1.95409451699996,
+            "queries": 5634,
+            "sql_seconds": 1.7987424869997817,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 2305,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 4.240060389000022,
+            "queries": 3072,
+            "sql_seconds": 4.198594997999991,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 16103,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 1.2777057140000032,
+            "queries": 2048,
+            "sql_seconds": 1.1705958820000282,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 24496024,
+        "node_cpu_seconds": 5.426431,
+        "rss_mib": 159.3828125,
+        "process_peak_rss_mib": 168.02734375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 11.169763484000002,
+        "queries": 19092,
+        "queries_per_work": 18.64453125,
+        "commits": 16,
+        "phases": {
+          "coordination": {
+            "seconds": 0.08310679700000037,
+            "queries": 48,
+            "sql_seconds": 0.08278135900000051,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 5.246139768999988,
+            "queries": 8226,
+            "sql_seconds": 3.5125053719999895,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.7640059780000084,
+            "queries": 64,
+            "sql_seconds": 0.6197133429999845,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 1.6397462969999852,
+            "queries": 5634,
+            "sql_seconds": 1.5224379630001097,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 2.426344203000005,
+            "queries": 3072,
+            "sql_seconds": 2.3970803590000047,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 1.0104169260000126,
+            "queries": 2048,
+            "sql_seconds": 0.9144986720002093,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 40026968,
+        "node_cpu_seconds": 4.913361,
+        "rss_mib": 158.22265625,
+        "process_peak_rss_mib": 168.02734375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "old",
+        "batch": 64,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 11.882312663999997,
+        "queries": 19092,
+        "queries_per_work": 18.64453125,
+        "commits": 16,
+        "phases": {
+          "coordination": {
+            "seconds": 0.07646211699999549,
+            "queries": 48,
+            "sql_seconds": 0.07610712799997418,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 5.1353014770000005,
+            "queries": 8226,
+            "sql_seconds": 3.4754097689998877,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.49612484799998485,
+            "queries": 64,
+            "sql_seconds": 0.3849791989999939,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 1.8661703970000227,
+            "queries": 5634,
+            "sql_seconds": 1.717946952999771,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 2305,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 3.2148331429999795,
+            "queries": 3072,
+            "sql_seconds": 3.1816775849999455,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 16103,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 1.0934161580000146,
+            "queries": 2048,
+            "sql_seconds": 0.9917081380000881,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 19676912,
+        "node_cpu_seconds": 4.740623,
+        "rss_mib": 158.6796875,
+        "process_peak_rss_mib": 168.02734375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 11.304762833,
+        "queries": 18972,
+        "queries_per_work": 18.52734375,
+        "commits": 4,
+        "phases": {
+          "coordination": {
+            "seconds": 0.01431424400000833,
+            "queries": 12,
+            "sql_seconds": 0.014263393000008364,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 5.152924675000002,
+            "queries": 8190,
+            "sql_seconds": 3.4754990619996926,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.6484768109999932,
+            "queries": 16,
+            "sql_seconds": 0.5264209340000016,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 1.7161743380000536,
+            "queries": 5634,
+            "sql_seconds": 1.589119179999876,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 2.7946373819999337,
+            "queries": 3072,
+            "sql_seconds": 2.76266310500001,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 0.9782322110000096,
+            "queries": 2048,
+            "sql_seconds": 0.887051915999984,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 36190960,
+        "node_cpu_seconds": 4.59134,
+        "rss_mib": 160.56640625,
+        "process_peak_rss_mib": 168.02734375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "old",
+        "batch": 256,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 12.309286390999993,
+        "queries": 18972,
+        "queries_per_work": 18.52734375,
+        "commits": 4,
+        "phases": {
+          "coordination": {
+            "seconds": 0.10675084899998184,
+            "queries": 12,
+            "sql_seconds": 0.10665797099998597,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 4.995669305000003,
+            "queries": 8190,
+            "sql_seconds": 3.3412600330003874,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.4460899450000143,
+            "queries": 16,
+            "sql_seconds": 0.3125520379999653,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 1.7460431990000145,
+            "queries": 5634,
+            "sql_seconds": 1.623289519000313,
+            "modified_rows": {
+              "DELETE FROM catalog_entity_works": 2305,
+              "INSERT INTO catalog_entities": 2305,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 3.5102680279999707,
+            "queries": 3072,
+            "sql_seconds": 3.4763756969999,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 16103,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 1.5044620280000092,
+            "queries": 2048,
+            "sql_seconds": 1.3726958449999718,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 24744792,
+        "node_cpu_seconds": 4.768804,
+        "rss_mib": 160.12890625,
+        "process_peak_rss_mib": 168.02734375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      }
+    ],
+    "p1b1b": [
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 4.365941180000001,
+        "queries": 1197,
+        "queries_per_work": 1.1689453125,
+        "commits": 52,
+        "phases": {
+          "coordination": {
+            "seconds": 0.2272899280000019,
+            "queries": 156,
+            "sql_seconds": 0.22521355499999957,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 1.8585551870000006,
+            "queries": 417,
+            "sql_seconds": 0.5887550750000033,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 1.087076498999998,
+            "queries": 208,
+            "sql_seconds": 0.9000254680000045,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 0.3068074500000015,
+            "queries": 156,
+            "sql_seconds": 0.2506816800000001,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 2215,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 0.4358921420000024,
+            "queries": 156,
+            "sql_seconds": 0.41857449899999805,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 0.45029905399999537,
+            "queries": 104,
+            "sql_seconds": 0.3376199079999976,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 35393208,
+        "node_cpu_seconds": 2.683688,
+        "rss_mib": 151.953125,
+        "process_peak_rss_mib": 151.953125,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "new",
+        "batch": 20,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 3.4153585600000005,
+        "queries": 1196,
+        "queries_per_work": 1.16796875,
+        "commits": 52,
+        "phases": {
+          "coordination": {
+            "seconds": 0.10705061900000057,
+            "queries": 156,
+            "sql_seconds": 0.10599040700000205,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 1.662172492999997,
+            "queries": 416,
+            "sql_seconds": 0.5601849819999986,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.7506287449999992,
+            "queries": 208,
+            "sql_seconds": 0.6086869009999966,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 0.2325303400000038,
+            "queries": 156,
+            "sql_seconds": 0.19118611700000115,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 0,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 0
+            }
+          },
+          "filters": {
+            "seconds": 0.29037838299999374,
+            "queries": 156,
+            "sql_seconds": 0.27589529999999013,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 0
+            }
+          },
+          "documents": {
+            "seconds": 0.37259636500000487,
+            "queries": 104,
+            "sql_seconds": 0.2627545439999977,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 0
+            }
+          }
+        },
+        "wal_bytes": 1048936,
+        "node_cpu_seconds": 2.348771,
+        "rss_mib": 156.66796875,
+        "process_peak_rss_mib": 161.19140625,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 2.412648596000001,
+        "queries": 368,
+        "queries_per_work": 0.359375,
+        "commits": 16,
+        "phases": {
+          "coordination": {
+            "seconds": 0.11878142400000247,
+            "queries": 48,
+            "sql_seconds": 0.11838431100000706,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 0.8115846139999995,
+            "queries": 128,
+            "sql_seconds": 0.1869087350000064,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.6791883550000002,
+            "queries": 64,
+            "sql_seconds": 0.5655320900000007,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 0.17055690099999996,
+            "queries": 48,
+            "sql_seconds": 0.13316308499999466,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 2215,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 0.2964328520000035,
+            "queries": 48,
+            "sql_seconds": 0.2851314750000037,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 0.336102417999995,
+            "queries": 32,
+            "sql_seconds": 0.2509619450000028,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 35282672,
+        "node_cpu_seconds": 1.486085,
+        "rss_mib": 163.37890625,
+        "process_peak_rss_mib": 165.30078125,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "new",
+        "batch": 64,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 1.9388314439999994,
+        "queries": 368,
+        "queries_per_work": 0.359375,
+        "commits": 16,
+        "phases": {
+          "coordination": {
+            "seconds": 0.037559332999999244,
+            "queries": 48,
+            "sql_seconds": 0.037198740999996524,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 0.8553706300000012,
+            "queries": 128,
+            "sql_seconds": 0.1816963030000153,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.4585982270000022,
+            "queries": 64,
+            "sql_seconds": 0.3709257710000093,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 0.11316845699999976,
+            "queries": 48,
+            "sql_seconds": 0.08577574699999786,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 0,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 0
+            }
+          },
+          "filters": {
+            "seconds": 0.227212012,
+            "queries": 48,
+            "sql_seconds": 0.2173982730000043,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 0
+            }
+          },
+          "documents": {
+            "seconds": 0.24692107299999771,
+            "queries": 32,
+            "sql_seconds": 0.16498864900000448,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 0
+            }
+          }
+        },
+        "wal_bytes": 977528,
+        "node_cpu_seconds": 1.203633,
+        "rss_mib": 193.28125,
+        "process_peak_rss_mib": 193.3671875,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "initial",
+        "works": 1024,
+        "seconds": 2.183454176000001,
+        "queries": 92,
+        "queries_per_work": 0.08984375,
+        "commits": 4,
+        "phases": {
+          "coordination": {
+            "seconds": 0.08218866300000083,
+            "queries": 12,
+            "sql_seconds": 0.08202900800000316,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 0.6866121199999997,
+            "queries": 32,
+            "sql_seconds": 0.10138524799999685,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.6063428980000007,
+            "queries": 16,
+            "sql_seconds": 0.46982712100000024,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 8294,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 16103
+            }
+          },
+          "entities": {
+            "seconds": 0.11248076299999957,
+            "queries": 12,
+            "sql_seconds": 0.08974171000000024,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 2215,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 2305
+            }
+          },
+          "filters": {
+            "seconds": 0.3603731990000014,
+            "queries": 12,
+            "sql_seconds": 0.3491459279999999,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 16103
+            }
+          },
+          "documents": {
+            "seconds": 0.3354539539999987,
+            "queries": 8,
+            "sql_seconds": 0.24005646100000194,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 1024
+            }
+          }
+        },
+        "wal_bytes": 35124648,
+        "node_cpu_seconds": 1.131542,
+        "rss_mib": 184.84765625,
+        "process_peak_rss_mib": 195.0859375,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      },
+      {
+        "mode": "new",
+        "batch": 256,
+        "phase": "repeat",
+        "works": 1024,
+        "seconds": 1.7326821360000013,
+        "queries": 92,
+        "queries_per_work": 0.08984375,
+        "commits": 4,
+        "phases": {
+          "coordination": {
+            "seconds": 0.008733357999999499,
+            "queries": 12,
+            "sql_seconds": 0.008632160999995904,
+            "modified_rows": {}
+          },
+          "lookup_manifest": {
+            "seconds": 0.7384116999999987,
+            "queries": 32,
+            "sql_seconds": 0.10342053700000362,
+            "modified_rows": {}
+          },
+          "tags": {
+            "seconds": 0.4146901670000006,
+            "queries": 16,
+            "sql_seconds": 0.29134681400000234,
+            "modified_rows": {
+              "INSERT INTO catalog_tags": 0,
+              "DELETE FROM catalog_work_tags": 0,
+              "INSERT INTO catalog_work_tags": 0
+            }
+          },
+          "entities": {
+            "seconds": 0.1052823389999994,
+            "queries": 12,
+            "sql_seconds": 0.07681601800000135,
+            "modified_rows": {
+              "INSERT INTO catalog_entities": 0,
+              "DELETE FROM catalog_entity_works": 0,
+              "INSERT INTO catalog_entity_works": 0
+            }
+          },
+          "filters": {
+            "seconds": 0.21021501100000206,
+            "queries": 12,
+            "sql_seconds": 0.19860880899999575,
+            "modified_rows": {
+              "DELETE FROM catalog_work_filters": 0,
+              "INSERT INTO catalog_work_filters": 0
+            }
+          },
+          "documents": {
+            "seconds": 0.25534703500000067,
+            "queries": 8,
+            "sql_seconds": 0.1451674519999997,
+            "modified_rows": {
+              "INSERT INTO catalog_documents": 0
+            }
+          }
+        },
+        "wal_bytes": 884976,
+        "node_cpu_seconds": 1.093556,
+        "rss_mib": 197.78125,
+        "process_peak_rss_mib": 202.39453125,
+        "counts": {
+          "catalog_tags": 8294,
+          "catalog_tag_edges": 0,
+          "catalog_work_tags": 16103,
+          "catalog_entities": 2215,
+          "catalog_entity_works": 2305,
+          "catalog_work_filters": 16103,
+          "catalog_documents": 1024
+        }
+      }
+    ]
+  },
+  "resources": {
+    "new-current-resources": {
+      "worker": {
+        "samples": 17,
+        "seconds": 16.0018413066864,
+        "cpu_seconds": 10.227412,
+        "cpu_mean_percent": 63.913969673767824,
+        "cpu_max_percent": 101.49972607928193,
+        "working_mean_mib": 99.08318014705883,
+        "working_max_mib": 135.0234375,
+        "memory_max_mib": 135.03125,
+        "read_mib": null,
+        "write_mib": null,
+        "rx_mib": 27.73721981048584,
+        "tx_mib": 102.7254285812378
+      },
+      "pg": {
+        "samples": 17,
+        "seconds": 16.002650499343872,
+        "cpu_seconds": 7.33029,
+        "cpu_mean_percent": 45.80672433170087,
+        "cpu_max_percent": 62.869289274863135,
+        "working_mean_mib": 176.9563419117647,
+        "working_max_mib": 194.9453125,
+        "memory_max_mib": 590.53515625,
+        "read_mib": 0.0,
+        "write_mib": 57.37109375,
+        "rx_mib": 102.7254285812378,
+        "tx_mib": 27.73721981048584
+      }
+    },
+    "old-current-resources": {
+      "worker": {
+        "samples": 75,
+        "seconds": 74.005042552948,
+        "cpu_seconds": 30.942388,
+        "cpu_mean_percent": 41.81118871442012,
+        "cpu_max_percent": 97.38232794415877,
+        "working_mean_mib": 100.91171875,
+        "working_max_mib": 110.86328125,
+        "memory_max_mib": 110.87890625,
+        "read_mib": null,
+        "write_mib": null,
+        "rx_mib": 59.891846656799316,
+        "tx_mib": 117.857102394104
+      },
+      "pg": {
+        "samples": 75,
+        "seconds": 74.00427412986755,
+        "cpu_seconds": 45.198658,
+        "cpu_mean_percent": 61.075739923727156,
+        "cpu_max_percent": 86.2962499785946,
+        "working_mean_mib": 175.69510416666665,
+        "working_max_mib": 182.83203125,
+        "memory_max_mib": 584.7265625,
+        "read_mib": 0.0,
+        "write_mib": 286.1171875,
+        "rx_mib": 117.8737964630127,
+        "tx_mib": 59.892178535461426
+      }
+    }
+  },
+  "comparisons": [
+    {
+      "batch": 20,
+      "phase": "initial",
+      "speedup": 2.9452743289134276,
+      "query_reduction_percent": 93.84670744872257,
+      "wal_change_percent": -2.523527734679154
+    },
+    {
+      "batch": 20,
+      "phase": "repeat",
+      "speedup": 4.08674087999709,
+      "query_reduction_percent": 93.8515319761464,
+      "wal_change_percent": -95.71793365323286
+    },
+    {
+      "batch": 64,
+      "phase": "initial",
+      "speedup": 4.62966861503108,
+      "query_reduction_percent": 98.07249109574691,
+      "wal_change_percent": -11.85274887670732
+    },
+    {
+      "batch": 64,
+      "phase": "repeat",
+      "speedup": 6.12859498476341,
+      "query_reduction_percent": 98.07249109574691,
+      "wal_change_percent": -95.03210666389116
+    },
+    {
+      "batch": 256,
+      "phase": "initial",
+      "speedup": 5.177467407953514,
+      "query_reduction_percent": 99.51507484714315,
+      "wal_change_percent": -2.946349033018192
+    },
+    {
+      "batch": 256,
+      "phase": "repeat",
+      "speedup": 7.104180354405169,
+      "query_reduction_percent": 99.51507484714315,
+      "wal_change_percent": -96.42358682990748
+    }
+  ],
+  "limitations": [
+    "Single pass per final case; shared host, serial baseline/new order, uncontrolled caches, no confidence interval",
+    "WAL includes possible checkpoint/full-page-image and background effects; no causal attribution from a single pair",
+    "Working-set peaks and RSS can increase with larger batches; production default remains 20",
+    "Cgroup resources cover six cases and schema creation/removal, not individual timed phases",
+    "Graph-changing groups retain existing barriers and tagEdges costs; global graph invalidation unchanged",
+    "Historical projection and OpenSearch PUT protocol unchanged",
+    "No end-to-end throughput or interactive latency claim"
+  ],
+  "validation": {
+    "full_corpus_differences": {
+      "heads": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "snapshots": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "identities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "documents": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "historical": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "edges": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_tags": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "work_entities": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      },
+      "filters": {
+        "added": 0,
+        "changed": 0,
+        "removed": 0
+      }
+    },
+    "full_corpus_counts": {
+      "heads": 11032,
+      "snapshots": 11032,
+      "identities": 0,
+      "documents": 11032,
+      "historical": 11032,
+      "tags": 57661,
+      "entities": 22140,
+      "edges": 0,
+      "work_tags": 167736,
+      "work_entities": 24909,
+      "filters": 167736
+    },
+    "generations": {
+      "current": 11032,
+      "indexed": 11032,
+      "generations_verified": 11032
+    },
+    "targeted_current": {
+      "mode": "new",
+      "shared_entity_precedence": true,
+      "anonymous": true,
+      "pseuds_and_scoped_identities": true,
+      "recursive_filters_and_graph_barriers": true,
+      "changed_associations": true,
+      "rollback_retry": true,
+      "equivalence": true,
+      "unchanged_associations_filters_documents": true,
+      "batch_independent_generation": true,
+      "snapshot_ownership_aliases_and_missing_objects": true
+    },
+    "targeted_tags": {
+      "equivalence": true,
+      "shared_tags": true,
+      "edges_and_filters": true,
+      "no_op_associations": true,
+      "removal": true,
+      "conflict_rollback_and_retry": true,
+      "backend_disconnect_after_bulk_writes": true
+    },
+    "fault_probes": {
+      "informative_trigger": true,
+      "seed_and_watch": true,
+      "availability_search_and_immutable_history": true,
+      "availability_during_projection_survives_ack": true,
+      "invalidation_during_put_survives_ack": true,
+      "text_stop_preserves_next_document": true,
+      "pause_and_backpressure_historical_fairness": true,
+      "retry_and_replica_lock": true,
+      "crash_recovery_seconds": 5.3034056949999995,
+      "continuous_batch_gap_max_ms": 234.60596199999964,
+      "clean_stop_and_single_lane_recovery": true,
+      "stop_waits_for_atomic_batch": true,
+      "maintenance": true,
+      "idle_calls_in_180ms": 4,
+      "all_current_generations_verified": 11032,
+      "canonical_counts_and_events_preserved": true
+    },
+    "old_filter_order_probe": {
+      "tags": 42,
+      "same_order": false,
+      "same_set": true
+    },
+    "build": "Full build passed; existing Vite chunk-size warning",
+    "suites": {
+      "archive": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      "archive_native": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      "ao3": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "test_environment": "Real isolated PostgreSQL/OpenSearch; TYPST_PATH points to the binary from the runtime image. Earlier missing endpoint/binary setup failures retained in private logs.",
+    "final_combined_suite": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 17471.031148
+    }
+  },
+  "status": "P1B.1b complete; P1B.1c/d, P1B.2 and P2 not started"
+}

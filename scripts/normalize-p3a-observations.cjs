@@ -24,7 +24,9 @@ const hash = (x) =>
 (async () => {
   const works = new Map(
     (
-      await pool.query("SELECT id,external_id FROM archive_work_heads")
+      await pool.query(
+        "SELECT id,coalesce(external_id,'provisional:'||provisional_key) AS external_id FROM archive_works",
+      )
     ).rows.map((r) => [r.id, r.external_id]),
   );
   const snapshots = new Map(

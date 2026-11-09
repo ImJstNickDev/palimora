@@ -64,11 +64,26 @@ function counters() {
   };
 }
 async function stats() {
-  return (
+  const result = (
     await pool.query(
       `SELECT (SELECT count(*)::int FROM archive_work_heads) works,(SELECT count(*)::int FROM archive_snapshots) snapshots,(SELECT count(*)::int FROM archive_chapter_revisions) chapters,(SELECT count(*)::int FROM archive_object_data) objects,(SELECT coalesce(sum(length),0)::float FROM archive_object_data) object_stored_bytes,(SELECT coalesce(sum(size),0)::float FROM archive_object_data) object_raw_bytes,pg_database_size(current_database())::float database_bytes,(SELECT sum(pg_total_relation_size(relid))::float FROM pg_stat_user_tables) relation_bytes,(SELECT count(*)::int FROM catalog_pending) current_pending,(SELECT count(*)::int FROM catalog_snapshot_pending) historical_pending,(SELECT count(*)::int FROM catalog_text_pending) text_pending,(pg_total_relation_size('catalog_pending')+pg_total_relation_size('catalog_snapshot_pending')+pg_total_relation_size('catalog_text_pending'))::float queue_bytes,(SELECT wal_bytes::float FROM pg_stat_wal) wal_generated_bytes,(SELECT sum(size)::float FROM pg_ls_waldir()) wal_retained_bytes,(SELECT xact_commit::float FROM pg_stat_database WHERE datname=current_database()) commits`,
     )
   ).rows[0];
+  if (process.env.STORAGE_OVERHAUL_ONLY === "1") {
+    result.storage_groups = Object.fromEntries(
+      (
+        await pool.query(`
+      SELECT CASE
+        WHEN relname IN ('catalog_documents','catalog_work_tags','catalog_work_filters','catalog_entity_works') THEN 'current'
+        WHEN relname='catalog_snapshot_views' THEN 'history'
+        WHEN relname IN ('catalog_tags','catalog_entities','catalog_tag_edges') THEN 'dictionary'
+        WHEN relname LIKE 'archive_%' OR relname LIKE 'ingest_%' THEN 'canonical'
+        ELSE 'other' END AS kind,sum(pg_total_relation_size(relid))::float AS bytes
+      FROM pg_stat_user_tables GROUP BY 1`)
+      ).rows.map((r) => [r.kind, r.bytes]),
+    );
+  }
+  return result;
 }
 let seq = resume ? JSON.parse(fs.readFileSync(root + "/control.json")).id : 0;
 async function control(action) {
@@ -236,6 +251,15 @@ async function sample() {
     report.started = started;
   }
   save();
+  if (process.env.STORAGE_OVERHAUL_ONLY === "1")
+    timer = setInterval(
+      () =>
+        sample().catch((error) => {
+          console.error(error);
+          process.exitCode = 1;
+        }),
+      1000,
+    );
   const sources = fs
     .readdirSync("/dumps/ao3_stories")
     .filter(
@@ -285,6 +309,12 @@ async function sample() {
     assert.equal(after.snapshots, before.snapshots);
     report.replay = { seconds: (Date.now() - t) / 1000, before, after };
     save();
+  }
+  if (process.env.STORAGE_OVERHAUL_ONLY === "1") {
+    report.finished = Date.now();
+    report.final = await stats();
+    save();
+    return;
   }
   // Preserve heterogeneous fixture for the later real backup/restore before synthetic load.
   fs.writeFileSync(root + "/heterogeneous-ready", "ready");

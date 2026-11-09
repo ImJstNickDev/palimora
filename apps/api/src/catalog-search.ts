@@ -292,13 +292,17 @@ export async function ensureSearchIndex() {
       settings: {
         number_of_shards: 1,
         number_of_replicas: 0,
+        "index.codec": "zstd",
+        "index.codec.compression_level": 3,
         analysis: {
           normalizer: {
             folded: { type: "custom", filter: ["lowercase", "asciifolding"] },
           },
         },
       },
-      mappings: { dynamic: false, properties },
+      // Full text is indexed with positions, but its stored copy is redundant.
+      // Rebuild through catalog_text_pending from canonical packs, not _reindex.
+      mappings: { dynamic: false, _source: { excludes: ["text"] }, properties },
       aliases: { [SEARCH_WRITE_ALIAS]: {} },
     },
     "PUT",

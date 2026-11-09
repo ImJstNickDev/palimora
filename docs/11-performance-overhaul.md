@@ -4128,3 +4128,24 @@ ricerca, facet paralleli 0; **P3** indipendenza e backpressure; **P4** percorso
 canonico con confronto alternato; **P5** scala bounded, recovery, restore e
 readiness: tutte tecnicamente concluse. **Performance Overhaul P0–P5 concluso.**
 Nessun vero ingest viene avviato automaticamente, indipendentemente dalle prove.
+
+## Correzione pre-ingest del modello storage
+
+Lo [Storage Overhaul](storage-overhaul.md) conserva i risultati P0–P5 e aggiunge
+un censimento delle identità: 48.237.465 righe SQLite corrispondono a 16.468.371
+ID distinti, con forti sovrapposizioni ZIP/SQLite. I 2.351 GiB metadata PostgreSQL
+centrali sono un'estrapolazione condizionata, non una capacità dimostrata.
+Acquisizioni e provenienze restano da preservare anche quando condividono la
+proiezione corrente. Le sensibilità nuove non trasformano ID candidati da nomi
+ZIP in identità canoniche e non attribuiscono risparmi ai soli duplicati di ID.
+
+Sono integrati rimozione di due indici SQL inutilizzati e mapping/compressione
+OpenSearch. PackStore resta compatibile e invariato. I dettagli comparativi e le
+limitazioni della validazione sono nel nuovo JSON. La fixture eterogenea P5 è
+ricostruita dai manifest con verifica SHA-256 e acquisita integralmente nelle due
+configurazioni; il secondo corpus contiene 11.032 EPUB distinti. La proiezione
+corrente viene addebitata una sola volta per identità, separatamente da canonico,
+storia e dizionari. Le invalidazioni globali del grafo non sono un costo di nuove
+opere attribuibile alle sole righe SQLite appena importate. Le nuove sensibilità
+restano condizionate alle identità nei nomi ZIP e alle densità del campione.
+Il primo ingest resta NO-GO, senza una nuova milestone o autorizzazione implicita.

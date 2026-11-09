@@ -387,3 +387,27 @@ richiedono analisi o restore su target isolato: non vengono ricostruite per
 ipotesi. I record corrotti rimasti in pack non più referenziati sono segnalati
 separatamente (`UNREFERENCED_CORRUPT`), senza proporre un altro recupero del
 locator già sano. Compattazione/GC conservano le protezioni esistenti.
+
+## Storage Overhaul pre-ingest
+
+La migrazione `040` rimuove i soli indici derivati `catalog_metadata` (GIN) e
+`catalog_title` (B-tree). Restano primaria, relazioni e dati correnti/storici.
+I nuovi indici OpenSearch usano codec Zstd livello 3 ed escludono `text` dallo
+`_source` stored: il campo resta indicizzato con analyzer e posizioni invariati.
+Doc values, generazioni, fencing, facet e sort restano invariati. OpenSearch
+2.19.4 conserva il documento completo anche in `_recovery_source` fino ai merge;
+questo costo entra nel budget di scrittura. Il recovery non viene disabilitato.
+
+Gli indici esistenti non vengono riscritti automaticamente. Per ricostruire,
+usare il percorso applicativo da canonico: su indice assente `ensureSearchIndex`
+invalida tutti i documenti nella coda durevole e il worker ricrea i documenti
+completi da PostgreSQL/pack. Non usare `_reindex` o `_update` standard per
+ricostruire il testo escluso dallo stored source. La ricostruzione richiede
+indisponibilità temporanea della ricerca finché la coda non si drena; non cambia
+l'autorità archivistica e non richiede i dump. Il test AO3 verifica cancellazione,
+ricostruzione, generazioni e query sullo stesso canonico.
+
+Pack v1, default Zstd 3, TXT, cache parser e bibliografie immutabili non cambiano.
+Misure, candidati non adottati e limiti della campagna sono in
+[storage-overhaul](storage-overhaul.md) e
+[performance-storage-overhaul.json](performance-storage-overhaul.json).

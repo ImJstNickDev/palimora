@@ -259,6 +259,43 @@ test(
         await search.searchRequest("/" + search.SEARCH_INDEX + "/_refresh");
       };
       await drain();
+      const stored = await search.searchRequest(
+        "/" + search.SEARCH_INDEX + "/_search",
+        {
+          size: 1,
+          query: { match_all: {} },
+        },
+      );
+      assert.equal(Object.hasOwn(stored.hits.hits[0]._source, "text"), false);
+      // Rebuild uses canonical packs/SQL, never stored full text or dump files.
+      const indexed = await search.searchRequest(
+        "/" + search.SEARCH_INDEX + "/_search",
+        {
+          size: 100,
+          sort: [{ id: "asc" }],
+          _source: false,
+          docvalue_fields: ["generation"],
+          query: { match_all: {} },
+        },
+      );
+      await search.searchRequest(
+        "/" + search.SEARCH_INDEX,
+        undefined,
+        "DELETE",
+      );
+      assert.equal(await search.ensureSearchIndex(), true);
+      await drain();
+      const rebuilt = await search.searchRequest(
+        "/" + search.SEARCH_INDEX + "/_search",
+        {
+          size: 100,
+          sort: [{ id: "asc" }],
+          _source: false,
+          docvalue_fields: ["generation"],
+          query: { match_all: {} },
+        },
+      );
+      assert.deepEqual(rebuilt.hits, indexed.hits);
       await transaction(async (db) => {
         const q = (x: any) => catalogOperation(db, "catalogWorks", x);
         assert.equal((await q({ language: "English" })).total, 1);

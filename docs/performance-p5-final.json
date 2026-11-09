@@ -5582,5 +5582,347 @@
       "private_evidence_retained": "/mnt/sdb/palimora-p5-completion-20261109/results",
       "timestamp_unix": 1794228705.5131564
     }
+  },
+  "storage_overhaul": {
+    "report": "performance-storage-overhaul.json",
+    "historical_results_preserved": true,
+    "capacity_sensitivity": {
+      "scenarios": [
+        {
+          "scenario": "favorable",
+          "pack_gib": 1297.277403898639,
+          "postgres_gib": 1515.282725249966,
+          "postgres_current_gib": 346.41612506696225,
+          "postgres_noncurrent_gib": 1168.8666001830038,
+          "search_store_gib": 1321.584223935199,
+          "persistent_core_gib": 4134.144353083804,
+          "unique_work_sensitivity": 16780899,
+          "csv_additional_work_sensitivity": 1041664.7054132341,
+          "sqlite_records": 48237465,
+          "sqlite_noncurrent_gib": 655.7523873647054,
+          "sqlite_pack_gib": 141.21829189052806,
+          "sqlite_additional_current_sensitivity": 0,
+          "sqlite_search_gib": 0.0,
+          "metadata_cache_gib": 58.82743750112132,
+          "untyped_raw_budget_gib": 7.651207380928099,
+          "fixed_postgres_gib": 0.011683600954711437,
+          "operational_total_gib": 106.49032848300413,
+          "wal_retention_budget_gib": 16,
+          "backlog_budget_gib": 8,
+          "staging_temporary_gib": 8,
+          "search_translog_budget_gib": 8,
+          "maintenance_gib": 1736.7287597186441,
+          "safety_margin_gib": 1512.2295354937014,
+          "working_total_gib": 7489.592976779154,
+          "backup_one_copy_gib": 3196.930149286836,
+          "restore_working_gib": 7489.592976779154,
+          "strata": [
+            {
+              "kind": "epub-small",
+              "pack_gib": 176.04376890415702,
+              "postgres_noncurrent_gib": 204.30667877197266,
+              "search_gib": 189.09875465770972,
+              "records": 13821360,
+              "pack_ratio": 1.6590237703954396,
+              "index_ratio": 1.7820530137599648,
+              "postgres_noncurrent_bytes_per_record": 15872.0
+            },
+            {
+              "kind": "epub-medium",
+              "pack_gib": 366.9549615500953,
+              "postgres_noncurrent_gib": 133.01305150985718,
+              "search_gib": 496.2485484296002,
+              "records": 7539151,
+              "pack_ratio": 1.2354574430050433,
+              "index_ratio": 1.6707607934989075,
+              "postgres_noncurrent_bytes_per_record": 18944.0
+            },
+            {
+              "kind": "epub-large",
+              "pack_gib": 315.7082103600005,
+              "postgres_noncurrent_gib": 44.19902801513672,
+              "search_gib": 309.07357889902175,
+              "records": 1158651,
+              "pack_ratio": 1.0966776345367149,
+              "index_ratio": 1.0736308726918067,
+              "postgres_noncurrent_bytes_per_record": 40960.0
+            },
+            {
+              "kind": "epub-huge",
+              "pack_gib": 37.225768133106776,
+              "postgres_noncurrent_gib": 3.399444580078125,
+              "search_gib": 18.35033285614144,
+              "records": 24754,
+              "pack_ratio": 0.9309379221791247,
+              "index_ratio": 0.4589031092470281,
+              "postgres_noncurrent_bytes_per_record": 147456.0
+            },
+            {
+              "kind": "txt",
+              "pack_gib": 251.3692171226655,
+              "postgres_noncurrent_gib": 111.73881731033326,
+              "search_gib": 293.0705713111385,
+              "records": 7633006,
+              "pack_ratio": 2.29614189762219,
+              "index_ratio": 2.6770645405606426,
+              "postgres_noncurrent_bytes_per_record": 15718.400000000001
+            },
+            {
+              "kind": "html",
+              "pack_gib": 5.480085640559478,
+              "postgres_noncurrent_gib": 3.785710525512696,
+              "search_gib": 8.868952039928356,
+              "records": 230791,
+              "pack_ratio": 1.483587142124213,
+              "index_ratio": 2.4010324059845702,
+              "postgres_noncurrent_bytes_per_record": 17612.800000000003
+            }
+          ],
+          "working_plus_one_backup_gib": 10686.52312606599,
+          "working_backup_parallel_restore_gib": 18176.116102845142
+        },
+        {
+          "scenario": "central",
+          "pack_gib": 1305.3777159811425,
+          "postgres_gib": 1629.887814437588,
+          "postgres_current_gib": 346.41612506696225,
+          "postgres_noncurrent_gib": 1283.4716893706259,
+          "search_store_gib": 1479.3700614765044,
+          "persistent_core_gib": 4414.635591895235,
+          "unique_work_sensitivity": 16780899,
+          "csv_additional_work_sensitivity": 1041664.7054132341,
+          "sqlite_records": 48237465,
+          "sqlite_noncurrent_gib": 655.7523873647054,
+          "sqlite_pack_gib": 141.21829189052806,
+          "sqlite_additional_current_sensitivity": 1479090,
+          "sqlite_search_gib": 9.75986224050585,
+          "metadata_cache_gib": 90.64032732645671,
+          "untyped_raw_budget_gib": 7.651207380928099,
+          "fixed_postgres_gib": 0.011683600954711437,
+          "operational_total_gib": 138.30321830833952,
+          "wal_retention_budget_gib": 16,
+          "backlog_budget_gib": 8,
+          "staging_temporary_gib": 8,
+          "search_translog_budget_gib": 8,
+          "maintenance_gib": 3546.0832615891613,
+          "safety_margin_gib": 2682.108271978418,
+          "working_total_gib": 10781.130343771154,
+          "backup_one_copy_gib": 3336.4047129540495,
+          "restore_working_gib": 10781.130343771154,
+          "strata": [
+            {
+              "kind": "epub-small",
+              "pack_gib": 176.04376890415702,
+              "postgres_noncurrent_gib": 226.8243503570557,
+              "search_gib": 189.09875465770972,
+              "records": 13821360,
+              "pack_ratio": 1.6590237703954396,
+              "index_ratio": 1.7820530137599648,
+              "postgres_noncurrent_bytes_per_record": 17621.333333333336
+            },
+            {
+              "kind": "epub-medium",
+              "pack_gib": 369.83484492773573,
+              "postgres_noncurrent_gib": 204.01326143741608,
+              "search_gib": 496.2485484296002,
+              "records": 7539151,
+              "pack_ratio": 1.2451533831794528,
+              "index_ratio": 1.6707607934989075,
+              "postgres_noncurrent_bytes_per_record": 29056.0
+            },
+            {
+              "kind": "epub-large",
+              "pack_gib": 320.92863906486355,
+              "postgres_noncurrent_gib": 61.095948100090034,
+              "search_gib": 446.6773087220501,
+              "records": 1158651,
+              "pack_ratio": 1.1148118712003365,
+              "index_ratio": 1.5516258312444193,
+              "postgres_noncurrent_bytes_per_record": 56618.66666666667
+            },
+            {
+              "kind": "epub-huge",
+              "pack_gib": 37.225768133106776,
+              "postgres_noncurrent_gib": 7.5897321701049805,
+              "search_gib": 28.772578333912723,
+              "records": 24754,
+              "pack_ratio": 0.9309379221791247,
+              "index_ratio": 0.7195414798193812,
+              "postgres_noncurrent_bytes_per_record": 329216.0
+            },
+            {
+              "kind": "txt",
+              "pack_gib": 251.3692171226655,
+              "postgres_noncurrent_gib": 111.73881731033326,
+              "search_gib": 293.0705713111385,
+              "records": 7633006,
+              "pack_ratio": 2.29614189762219,
+              "index_ratio": 2.6770645405606426,
+              "postgres_noncurrent_bytes_per_record": 15718.400000000001
+            },
+            {
+              "kind": "html",
+              "pack_gib": 5.480085640559478,
+              "postgres_noncurrent_gib": 3.785710525512696,
+              "search_gib": 8.868952039928356,
+              "records": 230791,
+              "pack_ratio": 1.483587142124213,
+              "index_ratio": 2.4010324059845702,
+              "postgres_noncurrent_bytes_per_record": 17612.800000000003
+            }
+          ],
+          "working_plus_one_backup_gib": 14117.535056725203,
+          "working_backup_parallel_restore_gib": 24898.665400496357
+        },
+        {
+          "scenario": "prudent",
+          "pack_gib": 1316.4603380927283,
+          "postgres_gib": 1708.5810508889465,
+          "postgres_current_gib": 425.1093615183206,
+          "postgres_noncurrent_gib": 1283.4716893706259,
+          "search_store_gib": 1588.934952058501,
+          "persistent_core_gib": 4613.976341040176,
+          "unique_work_sensitivity": 20829542,
+          "csv_additional_work_sensitivity": 1041664.7054132341,
+          "sqlite_records": 48237465,
+          "sqlite_noncurrent_gib": 655.7523873647054,
+          "sqlite_pack_gib": 141.21829189052806,
+          "sqlite_additional_current_sensitivity": 1479090,
+          "sqlite_search_gib": 9.75986224050585,
+          "metadata_cache_gib": 90.64032732645671,
+          "untyped_raw_budget_gib": 7.651207380928099,
+          "fixed_postgres_gib": 0.011683600954711437,
+          "operational_total_gib": 138.30321830833952,
+          "wal_retention_budget_gib": 16,
+          "backlog_budget_gib": 8,
+          "staging_temporary_gib": 8,
+          "search_translog_budget_gib": 8,
+          "maintenance_gib": 3642.5054184135415,
+          "safety_margin_gib": 2754.371702159587,
+          "working_total_gib": 11149.156679921645,
+          "backup_one_copy_gib": 3438.449517594321,
+          "restore_working_gib": 11149.156679921645,
+          "strata": [
+            {
+              "kind": "epub-small",
+              "pack_gib": 182.18176997980964,
+              "postgres_noncurrent_gib": 226.8243503570557,
+              "search_gib": 241.4702199746546,
+              "records": 13821360,
+              "pack_ratio": 1.7168678494594618,
+              "index_ratio": 2.2755979224613614,
+              "postgres_noncurrent_bytes_per_record": 17621.333333333336
+            },
+            {
+              "kind": "epub-medium",
+              "pack_gib": 369.83484492773573,
+              "postgres_noncurrent_gib": 204.01326143741608,
+              "search_gib": 553.4419736946521,
+              "records": 7539151,
+              "pack_ratio": 1.2451533831794528,
+              "index_ratio": 1.8633186012368876,
+              "postgres_noncurrent_bytes_per_record": 29056.0
+            },
+            {
+              "kind": "epub-large",
+              "pack_gib": 320.92863906486355,
+              "postgres_noncurrent_gib": 61.095948100090034,
+              "search_gib": 446.6773087220501,
+              "records": 1158651,
+              "pack_ratio": 1.1148118712003365,
+              "index_ratio": 1.5516258312444193,
+              "postgres_noncurrent_bytes_per_record": 56618.66666666667
+            },
+            {
+              "kind": "epub-huge",
+              "pack_gib": 42.170389169039915,
+              "postgres_noncurrent_gib": 7.5897321701049805,
+              "search_gib": 28.772578333912723,
+              "records": 24754,
+              "pack_ratio": 1.0545924621390668,
+              "index_ratio": 0.7195414798193812,
+              "postgres_noncurrent_bytes_per_record": 329216.0
+            },
+            {
+              "kind": "txt",
+              "pack_gib": 251.3692171226655,
+              "postgres_noncurrent_gib": 111.73881731033326,
+              "search_gib": 293.0705713111385,
+              "records": 7633006,
+              "pack_ratio": 2.29614189762219,
+              "index_ratio": 2.6770645405606426,
+              "postgres_noncurrent_bytes_per_record": 15718.400000000001
+            },
+            {
+              "kind": "html",
+              "pack_gib": 5.480085640559478,
+              "postgres_noncurrent_gib": 3.785710525512696,
+              "search_gib": 8.868952039928356,
+              "records": 230791,
+              "pack_ratio": 1.483587142124213,
+              "index_ratio": 2.4010324059845702,
+              "postgres_noncurrent_bytes_per_record": 17612.800000000003
+            }
+          ],
+          "working_plus_one_backup_gib": 14587.606197515966,
+          "working_backup_parallel_restore_gib": 25736.762877437613
+        }
+      ],
+      "current_catalog_bytes_per_unique_work": 20870.256835128417,
+      "measured_backup_ratio": 0.9093295794545972,
+      "metadata_coefficients": {
+        "sample_ao3.sqlite3": {
+          "n": 60,
+          "groups": {
+            "canonical": 5870.933333333333,
+            "history": 3959.4666666666667,
+            "dictionary": 6417.066666666667
+          },
+          "pack_per_record": 3381.3333333333335,
+          "index_per_record": 7953.316666666667,
+          "pack_ratio": null,
+          "index_ratio": null
+        },
+        "sample_ao3_deduped.sqlite3": {
+          "n": 60,
+          "groups": {
+            "canonical": 7509.333333333333,
+            "history": 3822.9333333333334,
+            "dictionary": 4915.2
+          },
+          "pack_per_record": 3331.016666666667,
+          "index_per_record": 7552.25,
+          "pack_ratio": null,
+          "index_ratio": null
+        },
+        "sample_ao3_old_files.sqlite3": {
+          "n": 120,
+          "groups": {
+            "canonical": 3618.133333333333,
+            "history": 1638.4,
+            "dictionary": 1433.6
+          },
+          "pack_per_record": 2110.6833333333334,
+          "index_per_record": 3776.8333333333335,
+          "pack_ratio": null,
+          "index_ratio": null
+        }
+      },
+      "unverified_filename_single_work_member_upper_sensitivity": 46876154,
+      "method": "Current catalog charged once per unique identity; canonical/history/dictionary charged conservatively per acquisition. ZIP indexing keeps all source-version volume as a conservative sensitivity, without assuming proportional savings from duplicate IDs. SQLite search uses distinct additional identities. CSV count remains P5 size-based estimate. No statistical confidence interval. History/content dedup and graph tail cardinalities remain unknown. Existing maintenance/safety absolute reservations are not reduced.",
+      "definitive_layout_approved": false,
+      "unmodelled_graph_tail": {
+        "measured_filter_relation_bytes_per_association": 433.1788486890289,
+        "extra_gib_per_additional_filter_per_central_work": 7.190143341755287,
+        "note": "Sample-density sensitivity, not a measured full-graph closure bound. Work filters are retained."
+      },
+      "unverified_filenames_extreme": {
+        "single_work_members_plus_sqlite": 46876154,
+        "additional_current_sql_gib_over_central": 584.9597057035962,
+        "additional_metadata_search_gib_over_central": 98.90787543661843,
+        "note": "All ZIP members treated as separate works and no SQLite overlap. Excludes extra CSV uncertainty; not an absolute bound. Main scenarios assume filename candidates are valid."
+      }
+    },
+    "first_ingest": "NO-GO"
   }
 }

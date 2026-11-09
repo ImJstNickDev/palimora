@@ -13,7 +13,7 @@ const hash = (x) =>
 (async () => {
   const rows = (
     await pool.query(
-      "SELECT h.id,h.external_id,d.metadata,d.bibliography FROM archive_work_heads h JOIN catalog_documents d ON d.work_id=h.id ORDER BY h.external_id",
+      "SELECT h.id,coalesce(h.external_id,'provisional:'||h.provisional_key) AS external_id,d.metadata,d.bibliography FROM archive_works h JOIN catalog_documents d ON d.work_id=h.id ORDER BY external_id",
     )
   ).rows;
   const replacements = new Map(),
@@ -49,15 +49,34 @@ const hash = (x) =>
   );
   const historicalRows = (
     await pool.query(
-      "SELECT h.external_id,v.metadata,v.bibliography FROM catalog_snapshot_views v JOIN archive_snapshots s ON s.id=v.snapshot_id JOIN archive_work_heads h ON h.id=s.work_id ORDER BY h.external_id",
+      `SELECT h.id,coalesce(h.external_id,'provisional:'||h.provisional_key) AS external_id,v.metadata,v.bibliography,
+       (SELECT jsonb_agg(jsonb_build_array(r.source_path,r.locator,r.parser,r.result_hash,r.evidence)
+         ORDER BY r.source_path,r.locator,r.parser,r.result_hash) FROM archive_records r WHERE r.snapshot_id=s.id) AS acquisition_key
+       FROM catalog_snapshot_views v JOIN archive_snapshots s ON s.id=v.snapshot_id JOIN archive_works h ON h.id=s.work_id ORDER BY external_id`,
     )
   ).rows;
+  for (const r of historicalRows)
+    for (const e of r.bibliography.entities ?? [])
+      if (e.source_id === null) {
+        assert.equal(e.id, key(e.kind, r.id + "\0" + e.name));
+        replacements.set(
+          e.id,
+          key(e.kind, "ao3-work:" + r.external_id + "\0" + e.name),
+        );
+      }
+  // An external work can have multiple snapshots. SQL ordering by that work
+  // alone is not deterministic; bind each view to its preserved acquisitions
+  // and compare a sorted multiset, without discarding any historical value.
   const historical = hash(
-    historicalRows.map((r) => [
-      r.external_id,
-      stable(r.metadata),
-      stable(r.bibliography),
-    ]),
+    historicalRows
+      .map((r) => [
+        r.external_id,
+        stable(r.acquisition_key),
+        stable(r.metadata),
+        stable(r.bibliography),
+      ])
+      .map((r) => JSON.stringify(r))
+      .sort(),
   );
   const documents = [];
   let after;
@@ -71,6 +90,7 @@ const hash = (x) =>
     if (!page.hits.hits.length) break;
     for (const hit of page.hits.hits) {
       const d = hit._source;
+      if (process.env.STORAGE_OMIT_SEARCH_TEXT === "1") delete d.text;
       for (const field of [
         "id",
         "snapshot",
@@ -92,6 +112,7 @@ const hash = (x) =>
   fs.writeFileSync(
     "/results/p3a-normalized-catalog.json",
     JSON.stringify({
+      source_text_omitted: process.env.STORAGE_OMIT_SEARCH_TEXT === "1",
       sorted_tag_fields: require("../apps/api/dist/catalog-bibliography")
         .tagKinds,
       works: rows.length,

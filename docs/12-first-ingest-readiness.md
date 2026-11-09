@@ -220,6 +220,24 @@ misura HTTP/P95. La prova HTTP precedente rimane nel report storico.
 
 ## Modello di capacità ricalibrato
 
+**Aggiornamento Storage Overhaul:** le tabelle P5 sottostanti sono risultati
+storici condizionati. Il censimento successivo conta 48.237.465 righe SQLite ma
+16.468.371 ID distinti. Non trattare la componente centrale metadata PostgreSQL
+come spazio necessario dimostrato. [Storage Overhaul](storage-overhaul.md) e
+[nuovo report](performance-storage-overhaul.json) distinguono misure, sensibilità
+e assunzioni residue. La campagna eterogenea comparativa è stata rieseguita,
+separando catalogo corrente, canonico, storia e dizionari; i nuovi valori sono
+sensibilità per il dimensionamento, non previsioni statistiche. Restano da
+approvare layout fisico, capacità disponibile e controlli operativi del primo
+ingest. Nessuna riduzione ipotetica delle riserve di manutenzione o del margine.
+Il gate rimane NO-GO. Le nuove sensibilità per il core PackStore/PostgreSQL/indice
+sono 4.134/4.415/4.614 GiB (favorevole/centrale/prudente). Nel centrale il working,
+comprese le riserve, è 10,53 TiB; working più una copia di backup separata è
+13,79 TiB. Il margine centrale resta 2.682 GiB e la manutenzione 3.546 GiB:
+nessun risparmio di riserva viene accreditato. Il target per restore simultaneo
+richiede ulteriore spazio, dettagliato nel nuovo report.
+
+Le tabelle che seguono conservano il modello P5 **precedente** per confronto.
 Il report conserva per categoria byte sorgente compressi e decompressi, opere,
 snapshot, capitoli, oggetti, pack, crescita SQL, CPU e durata. I costi fissi sono
 separati: database iniziale 12.659.859 byte. Il rapporto tra filesystem totale e

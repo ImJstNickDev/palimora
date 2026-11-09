@@ -43,7 +43,7 @@ const {
   };
   const { seal, unseal, hashPassword } = require("../apps/api/dist/security");
   await pool.query(
-    "INSERT INTO users(id,username,password_hash,role,totp_secret) VALUES($1,'p5owner',$2,'Owner',$3)",
+    "INSERT INTO users(id,username,password_hash,role,totp_secret) VALUES($1,'p5owner',$2,'Owner',$3) ON CONFLICT(lower(username)) DO NOTHING",
     [
       randomUUID(),
       await hashPassword("Isolated P5 restore password 862!"),
@@ -105,7 +105,9 @@ const {
     };
     execFileSync(
       process.execPath,
-      ["scripts/benchmark-release.cjs", "project"],
+      process.env.STORAGE_OVERHAUL_ONLY === "1"
+        ? ["scripts/storage-drain.cjs"]
+        : ["scripts/benchmark-release.cjs", "project"],
       { env, stdio: "inherit", timeout: 600000 },
     );
     execFileSync(

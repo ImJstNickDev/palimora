@@ -1,5 +1,7 @@
 // Measurement on owned test databases only. Search mode creates/deletes temporary test indexes.
-if (process.argv[2] === "search") {
+if (["search", "storage-search"].includes(process.argv[2])) {
+  if (process.argv[2] === "storage-search")
+    process.env.OPENSEARCH_URL ??= "http://opensearch:9200";
   const fs = require("fs"),
     assert = require("assert/strict");
   const { pool } = require("../apps/api/dist/db");
@@ -18,17 +20,31 @@ if (process.argv[2] === "search") {
     }
   }
   (async () => {
-    assert.equal(
-      new URL(process.env.DATABASE_URL).pathname,
-      "/palimora_p5_restore_test",
-    );
-    assert.equal(
-      new URL(process.env.OPENSEARCH_URL).hostname,
-      "restore-search",
-    );
+    if (process.argv[2] === "storage-search") {
+      assert.ok(new URL(process.env.DATABASE_URL).pathname.endsWith("_test"));
+      assert.equal(new URL(process.env.OPENSEARCH_URL).hostname, "opensearch");
+      assert.equal(process.env.ARCHIVE_ROOT, "/benchmark/main");
+    } else {
+      assert.equal(
+        new URL(process.env.DATABASE_URL).pathname,
+        "/palimora_p5_restore_test",
+      );
+      assert.equal(
+        new URL(process.env.OPENSEARCH_URL).hostname,
+        "restore-search",
+      );
+    }
     const config = (await searchRequest("/" + SEARCH_INDEX, undefined, "GET"))[
       SEARCH_INDEX
     ];
+    const flat = (
+      await searchRequest(
+        "/" + SEARCH_INDEX + "/_settings?flat_settings=true",
+        undefined,
+        "GET",
+      )
+    )[SEARCH_INDEX].settings;
+    const { prepareTextDocument } = require("../apps/api/dist/catalog-search");
     const groups = (
       await pool.query(
         "SELECT source_path,array_agg(DISTINCT work_id) ids FROM archive_records GROUP BY source_path ORDER BY source_path",
@@ -47,6 +63,13 @@ if (process.argv[2] === "search") {
             number_of_shards: 1,
             number_of_replicas: 0,
             analysis: config.settings.index.analysis,
+            "index.codec": flat["index.codec"] ?? "default",
+            ...(flat["index.codec.compression_level"]
+              ? {
+                  "index.codec.compression_level":
+                    flat["index.codec.compression_level"],
+                }
+              : {}),
           },
           mappings: config.mappings,
         },
@@ -56,12 +79,17 @@ if (process.argv[2] === "search") {
         sourceBytes = 0;
       for (let start = 0; start < g.ids.length; start += 1) {
         const docs = (
-          await searchRequest("/" + SEARCH_INDEX + "/_mget", {
-            ids: g.ids.slice(start, start + 1),
-          })
-        ).docs;
-        for (const d of docs) {
-          assert.ok(d.found);
+          await pool.query(
+            "SELECT * FROM catalog_documents WHERE work_id=ANY($1::uuid[])",
+            [g.ids.slice(start, start + 1)],
+          )
+        ).rows;
+        assert.equal(docs.length, 1);
+        for (const row of docs) {
+          const d = {
+            _id: row.work_id,
+            _source: await prepareTextDocument(pool, row),
+          };
           const s = JSON.stringify(d._source);
           sourceBytes += Buffer.byteLength(s);
           body +=
@@ -107,6 +135,18 @@ if (process.argv[2] === "search") {
         JSON.stringify(out, null, 2),
       );
     }
+    if (process.argv[2] === "storage-search")
+      require("node:child_process").execFileSync(
+        process.execPath,
+        ["scripts/storage-maintenance.cjs"],
+        { stdio: "inherit", timeout: 120000 },
+      );
+    if (process.argv[2] === "storage-search")
+      require("node:child_process").execFileSync(
+        process.execPath,
+        ["scripts/storage-search-semantics.cjs"],
+        { stdio: "inherit", timeout: 120000 },
+      );
   })()
     .catch((e) => {
       console.error(e);
@@ -129,9 +169,21 @@ if (process.argv[2] === "search") {
         "SELECT k.name,count(*)::int objects,sum(o.size)::float raw_bytes,sum(o.length)::float stored_bytes FROM archive_object_data o JOIN archive_kinds k ON k.id=o.kind_id GROUP BY k.name ORDER BY k.name",
       )
     ).rows;
+    const counts = (
+      await pool.query(`SELECT
+      (SELECT count(*) FROM archive_work_heads)::int works,
+      (SELECT count(*) FROM archive_snapshots)::int snapshots,
+      (SELECT count(*) FROM archive_chapter_revisions)::int chapters,
+      (SELECT count(*) FROM archive_records)::int acquisitions,
+      (SELECT count(*) FROM catalog_tags)::int tags,
+      (SELECT count(*) FROM catalog_entities)::int entities,
+      (SELECT count(*) FROM catalog_work_tags)::int tag_associations,
+      (SELECT count(*) FROM catalog_work_filters)::int filter_associations,
+      (SELECT count(*) FROM catalog_entity_works)::int entity_associations`)
+    ).rows[0];
     fs.writeFileSync(
-      process.argv[2],
-      JSON.stringify({ tables, objects }, null, 2),
+      process.argv[2] ?? "/results/heterogeneous-components.json",
+      JSON.stringify({ tables, objects, counts }, null, 2),
     );
   })()
     .catch((e) => {

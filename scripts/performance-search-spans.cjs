@@ -129,20 +129,25 @@ if (
       new URL(process.env.OPENSEARCH_URL ?? "http://opensearch:9200").origin
     )
       return fetch(...args);
-    if (url.pathname.endsWith("/_search")) generationSpan();
+    if (url.pathname.endsWith("/_search") || url.pathname === "/_msearch")
+      generationSpan();
     const start = clock(),
       method = args[1]?.method ?? "GET";
-    const kind = url.pathname.endsWith("/_search")
-      ? "search"
-      : url.pathname.includes("/point_in_time")
-        ? method === "DELETE"
-          ? "pit.close"
-          : "pit.open"
-        : "index.state";
+    const kind =
+      url.pathname.endsWith("/_search") || url.pathname === "/_msearch"
+        ? "search"
+        : url.pathname.includes("/point_in_time")
+          ? method === "DELETE"
+            ? "pit.close"
+            : "pit.open"
+          : "index.state";
     try {
       const response = await fetch(...args);
       span("opensearch.headers", start, {
         operation: kind,
+        request_bytes: args[1]?.body
+          ? Buffer.byteLength(String(args[1].body))
+          : 0,
         status: response.status,
       });
       // Observe the body the application actually consumes, without cloning it.
@@ -154,6 +159,8 @@ if (
           span("opensearch.body", bodyStart, {
             operation: kind,
             took_ms: Number.isFinite(body.took) ? body.took : null,
+            subquery_took_ms: body.responses?.map((r) => r.took),
+            response_bytes: Buffer.byteLength(JSON.stringify(body)),
             hits: Array.isArray(body.hits?.hits) ? body.hits.hits.length : null,
           });
           return body;

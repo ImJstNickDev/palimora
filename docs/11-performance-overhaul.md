@@ -3268,3 +3268,179 @@ P2C_SOURCE=/mnt/sdb/palimora-p2c-b1-20261109 \
 # Ripetere in root nuove: no-aggs/EXTRA=1, no-aggs/EXTRA=0, full/EXTRA=overhead.
 python3 scripts/summarize-search-matched.py /root/full1 /root/noagg1 /root/noagg2 /root/full2
 ```
+
+## P2E.2 — Due subquery facet sul medesimo PIT
+
+Percorso sperimentale `SEARCH_PARALLEL_FACETS=1`, **disabilitato per default**
+(`0`, esposto nell'ambiente API di Compose). Nessun cambio di contratto,
+frontend, mapping, documento o motore di proiezione. Con flag spento resta
+la query singola. Nessun fallback o retry aggiuntivo.
+
+`POST /_msearch?max_concurrent_searches=2`, NDJSON con metadata vuoti e newline
+finale. A conserva hits, sort, total, search_after e generazioni, aggregando
+unclassified/rating/warnings/category. B usa la stessa query e PIT, `size:0`,
+`track_total_hits:false`, aggregando fandom/characters/relationships/freeform/
+media/language. Le definizioni originali `terms` con 15 bucket sono riutilizzate;
+filtri e sort non sono ricostruiti in un secondo builder. La ripartizione deriva
+dai profili P2E.1b, non dall'ipotesi di costi uguali per campo.
+
+Entrambe le risposte devono essere valide, senza timeout/shard failure, con tutti
+i facet attesi; niente risultati parziali. Un PIT nuovo viene chiuso su errore;
+un PIT ricevuto dal cursore resta del chiamante. La versione 2.19.4 verificata
+restituisce lo stesso identificativo PIT; un identificativo inatteso viene
+rifiutato, non adottato silenziosamente. Gli errori query restano 400 e i cursori
+scaduti 410. Nessuna modifica al formato dei cursori.
+
+### Confronto sul corpus reale
+
+Report: [`performance-p2e2.json`](performance-p2e2.json). Fixture nuove derivate
+dal medesimo indice/PG P2C B1, 11.032 opere; stesso build applicativo per entrambe
+le varianti, montato sopra l'immagine base `palimora-p2d-api`. L'ID dell'immagine
+identifica quindi la base, non il codice applicativo montato. Worker isolato
+16/1/1, PostgreSQL 17.6, OpenSearch 2.19.4 heap 1 GiB, Redis 7.4.6, niente quote,
+cache drop, cambio durability o benchmark/build concorrenti.
+
+Riutilizzati pacing e span P2E.1b: 80 richieste HTTP autenticate in 20 s,
+4 richieste/s, 3 warmup, PIT chiusi dal probe dopo ciascuna prima pagina.
+Ordine OFF→ON→ON→OFF su copie nuove. I test funzionali completi sono separati
+per non riscaldare soltanto una variante. Senza pacing si accodano tutte le
+11.032 opere; la finestra HTTP non pretende di essere un benchmark ingest.
+
+| Condizione | Flag | API media / P50 / P95 ms | OS client media / P50 / P95 ms | Documenti/s ACK |
+|---|---|---|---|---:|
+| Vuoto 1 | OFF | 75,70 / 71,61 / 116,73 | 46,33 / 41,99 / 73,50 | 0 |
+| Vuoto 1 | ON | 66,80 / 63,72 / 89,41 | 37,85 / 34,30 / 58,65 | 0 |
+| Vuoto 2 | OFF | 75,50 / 71,81 / 109,96 | 45,56 / 42,30 / 69,56 | 0 |
+| Vuoto 2 | ON | 65,20 / 62,38 / 87,98 | 36,32 / 33,10 / 55,11 | 0 |
+| Matched 1 | OFF | 80,77 / 74,79 / 120,63 | 52,42 / 46,93 / 83,96 | 16,80 |
+| Matched 1 | ON | 75,25 / 71,01 / 126,92 | 44,78 / 39,62 / 81,65 | 17,60 |
+| Matched 2 | OFF | 84,30 / 80,76 / 125,38 | 53,58 / 48,40 / 88,89 | 16,80 |
+| Matched 2 | ON | 73,75 / 66,73 / 122,06 | 45,30 / 40,64 / 82,22 | 17,60 |
+| Senza pacing | OFF | 103,71 / 97,22 / 144,65 | 68,47 / 58,91 / 110,58 | 92,80 |
+| Senza pacing | ON | 97,29 / 86,39 / 156,37 | 58,72 / 53,39 / 114,61 | 85,60 |
+
+ACK matched entro 4,8%; non perfettamente identici. `took` medio subquery A/B
+30,50/13,31 e 29,12/13,10 ms a vuoto; 37,49/18,16 e 38,45/18,80 ms matched;
+49,45/29,15 ms senza pacing. Non si sommano i due took concorrenti al wall-clock
+msearch. La parte con hits rimane più costosa: la ripartizione da profiler non
+implica un bilanciamento perfetto nella query normale.
+
+| Risorsa nella finestra backlog | OFF 1 | ON 1 | OFF 2 | ON 2 | OFF massimo | ON massimo |
+|---|---:|---:|---:|---:|---:|---:|
+| CPU OS, secondi | 28,42 | 29,65 | 24,53 | 28,27 | 49,52 | 52,28 |
+| Heap campionato max, MiB | 643,7 | 648,8 | 689,6 | 673,2 | 716,9 | 734,4 |
+| GC young, ms cumulativi | 75 | 88 | 103 | 92 | 164 | 147 |
+| Refresh, ms cumulativi | 2.673 | 2.348 | 2.123 | 2.725 | 4.571 | 5.030 |
+| Merge, ms cumulativi | 1.502 | 1.133 | 1.127 | 1.629 | 1.761 | 2.063 |
+| SQL client medio/richiesta, ms | 8,06 | 8,53 | 7,78 | 7,90 | 10,25 | 11,27 |
+
+Nove round-trip SQL e tre OpenSearch per prima pagina (HEAD/PIT/search o msearch),
+più chiusura PIT del probe esterna al timer API. Byte request/response, took di
+ciascuna subquery, risorse Docker/Node, thread pool, I/O, rete, code e bulk sono
+nel JSON. Byte risposta sono misurati riserializzando il JSON decodificato, non
+come byte TCP/compressi. Il tratto tra fine decodifica OS e avvio SQL documenti misura 0,044–0,049 ms
+medi con msearch (0,024–0,030 ms con query singola): include validazione,
+ricomposizione e dispatch SQL, non soltanto il merge. È derivato dagli span
+della stessa richiesta, senza sottrarre percentili indipendenti.
+
+### Decisione
+
+**Default OFF.** A vuoto il miglioramento è ripetibile; sotto backlog il P95 API
+non lo è, e senza pacing peggiora 144,65→156,37 ms mentre il ritmo ACK osservato
+scende 92,8→85,6 documenti/s (−7,8%). Una sola coppia senza pacing non consente
+un'attribuzione causale precisa dell'intero calo, ma non soddisfa i criteri di
+adozione. L'aumento CPU e il lavoro duplicato delle subquery sono costi reali
+possibili; non si forza un risultato positivo né si estende questa fase ad altre
+ottimizzazioni. La regressione di ricerca sotto backlog rimane aperta.
+
+Campionamento Docker/Node 1 Hz, statistiche OpenSearch ogni 2 s e ai confini;
+le code istantanee possono perdere picchi brevi. Host condiviso, cache/GC/merge
+non identici; pacing diagnostico e pieno throughput vanno tenuti distinti.
+Gli hash JSON grezzi del runner dipendono anche dall'ordine delle proprietà:
+non costituiscono da soli una prova di differenza semantica; l'equivalenza viene
+verificata strutturalmente, compreso l'ordine degli array bucket/hits.
+
+### Controllo end-to-end e verifica conclusiva
+
+Due esecuzioni B circoscritte OFF→ON, parser2/commit2, gruppi256, zstd3,
+seeding AO3 e durabilità invariati. Il probe originale verifica la ricerca al
+termine: **non genera richieste di ricerca continue durante l'ingest**. È un
+controllo d'integrazione/throughput, non sostituisce la misura di contesa sopra.
+
+| Metrica | OFF | ON |
+|---|---:|---:|
+| Accodamento → visibilità verificata, s | 160,572 | 164,620 |
+| Inizio effettivo ingest → visibilità, s | 160,321 | 163,487 |
+| Opere/s end-to-end | 68,704 | 67,015 |
+| Ingest, s | 53,095 | 53,116 |
+| Refresh e verifica finale, s | 9,308 | 8,628 |
+| WAL PostgreSQL, MiB | 688,11 | 691,15 |
+| CPU container API/ingest, s | 128,62 | 129,96 |
+| CPU PostgreSQL, s | 143,46 | 140,14 |
+| CPU OpenSearch, s | 160,67 | 164,12 |
+| CPU processo projection nella finestra, s | 115,37 | 116,37 |
+| Working set max OS, MiB | 1.717,41 | 1.706,33 |
+| I/O OS letti / scritti, MiB | 32,91 / 843,47 | 25,39 / 1.034,16 |
+
+CPU container dalla finestra del sampler, che include avvio/arresto; CPU projection
+dagli eventi Node entro il timer operativo. Il contatore Docker projection OFF
+si azzera allo shutdown producendo un delta negativo: marcato non disponibile,
+non presentato come consumo negativo. I/O projection container non disponibile;
+non è zero. Le differenze cache/host e l'assenza di ricerca continua impediscono
+di attribuire causalmente il +2,52% end-to-end al nuovo percorso.
+
+Entrambe le esecuzioni verificano 11.032 opere, snapshot, documenti catalogo,
+viste storiche e documenti OpenSearch, tutte le identità/generazioni, code vuote,
+ricerca e lettore funzionanti. Le proiezioni hanno 11.032 partenze per coda.
+
+Fixture funzionale separata: 29 combinazioni di query/filtri/direzioni, tre pagine
+con cursore preesistente per caso quando disponibili e scansione completa delle
+11.032 opere confrontata strutturalmente fra percorsi sul medesimo PIT. Confronto
+integrale di hits, sort, total, cursori e tutti i facet, inclusi bucket/count/order.
+PIT nuovi delle prime pagine sono normalizzati soltanto nel confronto del token;
+i cursori condivisi delle pagine successive coincidono esattamente.
+
+Verificate aggiunta/aggiornamento/eliminazione nell'indice, snapshot PIT precedente
+alle modifiche, autorità PostgreSQL con generazione non corrente/documento rimosso
+in transazione poi annullata, cursore scaduto e cleanup. I cambi indice avvengono
+soltanto nella fixture funzionale e sono ripristinati. Guasti iniettati intorno a
+risposte reali: errore individuale, timeout, shard failure, facet mancante e
+fallimento trasporto. Nessuna risposta parziale accettata. Compatibilità reale
+2.19.4: due subquery valide HTTP200/[200,200]; errore aggregazione individuale
+HTTP200/[200,400]; PIT scaduto HTTP200/[200,404]. La prima prova preliminare con
+sintassi volutamente malformata restituiva invece HTTP400 globale: è distinta
+dall'errore individuale di esecuzione, non una prova del secondo comportamento.
+
+Build completa, sintassi Node/Bash, configurazione flag Compose e controlli diff
+passati. I primi due tentativi del probe funzionale avevano assunzioni errate
+sul campo dell'eccezione NestJS e sulla presenza del primo bucket freeform:
+corretti, rieseguiti, esclusi dalle prestazioni. Il build finale aggiunge inoltre
+la traduzione HTTP400 globale nel codice di errore originale; il percorso di
+successo misurato non cambia. Gli hash dei due build sono nel report; ogni coppia
+OFF/ON usa rigorosamente lo stesso build.
+
+**P2E.2 implementata e valutata, senza adozione di default. P2 ancora aperta.**
+Nessuna ottimizzazione successiva avviata. La prova non dimostra la risoluzione
+della regressione interattiva; non dichiara un guadagno dell'intera pipeline.
+
+Riproduzione (una campagna alla volta, root nuove, dopo la build):
+
+```sh
+P2C_SOURCE=/mnt/sdb/palimora-p2c-b1-20261109 \
+ P2C_ROOT=/mnt/sdb/palimora-p2e2-new-off \
+ P2C_IMAGE=palimora-p2d-api BENCH_PROJECTION_MODE=isolated \
+ P2D_DIAGNOSTICS=1 P2C_EVENT_LOOP=1 SEARCH_PARALLEL_FACETS=0 P2E_EXTRA=0 \
+ ./scripts/benchmark-search-parallel.sh
+# Coppie: OFF, ON, ON, OFF. Poi OFF/ON con P2E_UNPACED=1.
+# Funzionale separata: P2E_EXTRA=1 P2E_CHECK_ONLY=1, root nuova.
+RELEASE_IMAGE=palimora-p2d-api \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p2e2-new-operational \
+ BENCH_NODE_OPTIONS=--require=/app/scripts/performance-p2d.cjs \
+ P2D_DIAGNOSTICS=1 P2C_EVENT_LOOP=1 SEARCH_PARALLEL_FACETS=0 \
+ ./scripts/benchmark-search-parallel-operational.sh
+# Ripetere con flag1 e root nuova; nessuna campagna sequenziale A.
+P2E_FUNCTIONAL_ROOT=/root/functional \
+ P2E_OPERATIONAL_ROOTS=/root/operational-off:/root/operational-on \
+ python3 scripts/summarize-search-parallel.py \
+ /root/off1 /root/on1 /root/on2 /root/off2 /root/offmax /root/onmax
+```

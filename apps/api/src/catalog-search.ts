@@ -89,6 +89,87 @@ export async function searchRequest(
   }
   return result;
 }
+// Keep hits on the lighter collector group; definitions and filters are shared.
+const parallelFacetGroup = new Set([
+  "unclassified",
+  "rating",
+  "warnings",
+  "category",
+]);
+async function searchWithFacets(body: any) {
+  if (process.env.SEARCH_PARALLEL_FACETS !== "1")
+    return searchRequest("/_search", body);
+  const first: any = {},
+    second: any = {};
+  for (const [key, value] of Object.entries(body.aggs))
+    (parallelFacetGroup.has(key) ? first : second)[key] = value;
+  const a = { ...body, aggs: first };
+  const b = {
+    pit: body.pit,
+    query: body.query,
+    size: 0,
+    track_total_hits: false,
+    aggs: second,
+  };
+  let response: Response;
+  try {
+    response = await fetch(
+      (process.env.OPENSEARCH_URL ?? "http://opensearch:9200") +
+        "/_msearch?max_concurrent_searches=2",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-ndjson" },
+        body: [{}, a, {}, b].map((x) => JSON.stringify(x)).join("\n") + "\n",
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+  } catch {
+    fail("SEARCH_UNAVAILABLE", 503);
+  }
+  let result: any;
+  try {
+    result = await response.json();
+  } catch {
+    fail("SEARCH_UNAVAILABLE", 503);
+  }
+  if (response.status === 400) fail("SEARCH_QUERY_INVALID", 400);
+  if (
+    !response.ok ||
+    !Array.isArray(result.responses) ||
+    result.responses.length !== 2
+  )
+    fail("SEARCH_UNAVAILABLE", 503);
+  for (const part of result.responses) {
+    if (!part || typeof part !== "object") fail("SEARCH_UNAVAILABLE", 503);
+    if (part.status === 400) fail("SEARCH_QUERY_INVALID", 400);
+    if (part.status === 404) fail("SEARCH_CURSOR_EXPIRED", 410);
+    if (
+      part.error ||
+      part.timed_out !== false ||
+      !part._shards ||
+      part._shards.failed !== 0
+    )
+      fail("SEARCH_UNAVAILABLE", 503);
+    // OpenSearch 2.19.4 preserves the PIT id; never mix a different snapshot.
+    if (part.pit_id !== undefined && part.pit_id !== body.pit.id)
+      fail("SEARCH_UNAVAILABLE", 503);
+  }
+  const [left, right] = result.responses;
+  const aggregations: any = {};
+  for (const key of Object.keys(body.aggs)) {
+    const value = (parallelFacetGroup.has(key) ? left : right).aggregations?.[
+      key
+    ];
+    if (!Array.isArray(value?.buckets)) fail("SEARCH_UNAVAILABLE", 503);
+    aggregations[key] = value;
+  }
+  if (
+    !Array.isArray(left.hits?.hits) ||
+    !Number.isFinite(left.hits?.total?.value)
+  )
+    fail("SEARCH_UNAVAILABLE", 503);
+  return { ...left, aggregations };
+}
 export async function ensureSearchIndex() {
   const head = await searchRequest(
     "/" + SEARCH_INDEX + "/_alias/" + SEARCH_WRITE_ALIAS,
@@ -660,34 +741,44 @@ export async function searchWorks(db: DB, x: any) {
     next: string | null = null;
   // Fill a page past stale derived documents without treating an older indexed
   // snapshot as current. PIT fixes order; PostgreSQL remains authoritative.
-  while (items.length < 21) {
-    result = await searchRequest("/_search", {
-      pit: { id: pit, keep_alive: "5m" },
-      size: 21 - items.length,
-      query: filtered,
-      sort,
-      search_after: after,
-      track_total_hits: true,
-      _source: false,
-      docvalue_fields: ["generation"],
-      aggs,
-    });
-    const hits = result.hits.hits;
-    if (!hits.length) break;
-    const docs = (
-      await db.query(
-        "SELECT work_id AS id,snapshot_id,metadata,bibliography,generation FROM catalog_documents WHERE work_id=ANY($1::uuid[])",
-        [hits.map((h: any) => h._id)],
-      )
-    ).rows;
-    const byId = new Map(docs.map((r) => [r.id, r]));
-    for (const h of hits) {
-      const doc = byId.get(h._id);
-      if (doc && doc.generation === h.fields?.generation?.[0])
-        items.push({ ...doc, sort: h.sort });
+  try {
+    while (items.length < 21) {
+      result = await searchWithFacets({
+        pit: { id: pit, keep_alive: "5m" },
+        size: 21 - items.length,
+        query: filtered,
+        sort,
+        search_after: after,
+        track_total_hits: true,
+        _source: false,
+        docvalue_fields: ["generation"],
+        aggs,
+      });
+      const hits = result.hits.hits;
+      if (!hits.length) break;
+      const docs = (
+        await db.query(
+          "SELECT work_id AS id,snapshot_id,metadata,bibliography,generation FROM catalog_documents WHERE work_id=ANY($1::uuid[])",
+          [hits.map((h: any) => h._id)],
+        )
+      ).rows;
+      const byId = new Map(docs.map((r) => [r.id, r]));
+      for (const h of hits) {
+        const doc = byId.get(h._id);
+        if (doc && doc.generation === h.fields?.generation?.[0])
+          items.push({ ...doc, sort: h.sort });
+      }
+      after = hits.at(-1).sort;
+      if (hits.length < 21 - items.length) break;
     }
-    after = hits.at(-1).sort;
-    if (hits.length < 21 - items.length) break;
+  } catch (error) {
+    if (!x.cursor)
+      await searchRequest(
+        "/_search/point_in_time",
+        { pit_id: [pit] },
+        "DELETE",
+      ).catch(() => {});
+    throw error;
   }
   if (items.length > 20)
     next = Buffer.from(

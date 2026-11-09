@@ -280,7 +280,8 @@ async function sample() {
     await finish(p, id);
     const canonical_seconds = (Date.now() - t) / 1000,
       after = await stats();
-    const projection = await drain(source);
+    const projection =
+      process.env.FINAL_CANONICAL_BATCHED === "1" ? null : await drain(source);
     report.categories.push({
       source,
       source_bytes: fs.statSync("/dumps/ao3_stories/" + source).size,
@@ -296,6 +297,10 @@ async function sample() {
         )
       ).rows,
     });
+    save();
+  }
+  if (process.env.FINAL_CANONICAL_BATCHED === "1") {
+    report.integrated_projection = await drain("complete-corpus");
     save();
   }
   // Replay an existing real stratum: report as repeated acquisition, never new-work throughput.

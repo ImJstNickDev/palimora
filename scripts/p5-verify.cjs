@@ -80,9 +80,27 @@ const {
     assert.deepEqual(digests[0], digests[1]);
     assert.deepEqual(digests[0], digests[2]);
     assert.notEqual(digests[0][0], digests[0][1]);
+    const textVersions = [];
+    const { loadSnapshot, chapterBytes } = require("../apps/api/dist/catalog");
+    const textRows = (
+      await pool.query(
+        "SELECT DISTINCT work_id,snapshot_id FROM archive_records WHERE source_path='txt.zip' ORDER BY snapshot_id LIMIT 8",
+      )
+    ).rows;
+    for (const row of textRows) {
+      const { manifest } = await loadSnapshot(
+        pool,
+        row.work_id,
+        row.snapshot_id,
+      );
+      const content = await chapterBytes(pool, manifest, manifest.chapters[0]);
+      textVersions.push(createHash("sha256").update(content).digest("hex"));
+    }
     fs.writeFileSync(
       process.argv[3],
       JSON.stringify({
+        text_versions: textVersions.length,
+        text_hashes: textVersions,
         clients: 3,
         requests: 6,
         historical_versions: 2,

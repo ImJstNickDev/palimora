@@ -41,6 +41,11 @@ function bytes(root) {
           )
         : x;
   const manifests = [];
+  const manifestHashes = new Set(
+    (
+      await pool.query("SELECT DISTINCT manifest_hash FROM archive_snapshots")
+    ).rows.map((r) => r.manifest_hash),
+  );
   const counts = (
     await pool.query(
       `SELECT (SELECT count(*) FROM archive_work_heads) works,(SELECT count(*) FROM archive_snapshots) snapshots,(SELECT count(*) FROM archive_chapter_revisions) revisions,(SELECT count(*) FROM archive_object_data) objects,(SELECT sum(size) FROM archive_object_data) raw_bytes,(SELECT sum(length) FROM archive_object_data) referenced_record_bytes,(SELECT count(*) FROM archive_packs) packs,pg_database_size(current_database()) database_bytes`,
@@ -66,7 +71,7 @@ function bytes(root) {
     );
     for (const [index, r] of rows.entries()) {
       const data = buffers[index];
-      if (r.kind === "manifest") {
+      if (manifestHashes.has(r.hash)) {
         const m = JSON.parse(data);
         delete m.work_id;
         for (const chapter of m.chapters ?? []) {

@@ -228,7 +228,10 @@ test(
         )
       ).rows[0];
       const manifest = await transaction(async (db) =>
-        JSON.parse((await readObject(db, historical.hash)).toString()),
+        (await import("../apps/api/src/canonical-manifest")).readManifest(
+          db,
+          historical.hash,
+        ),
       );
       assert.deepEqual(manifest.metadata.title, ["An observed work"]);
       await transaction((db) => recordAO3Open(db, head.id));
@@ -589,7 +592,10 @@ test(
         )
       ).rows[0];
       const deepManifest = await transaction(async (db) =>
-        JSON.parse((await readObject(db, deep.hash)).toString()),
+        (await import("../apps/api/src/canonical-manifest")).readManifest(
+          db,
+          deep.hash,
+        ),
       );
       assert.equal(deepManifest.metadata.ao3.comments.length, 2);
       assert.equal(deepManifest.metadata.ao3.comments_coverage, "complete");

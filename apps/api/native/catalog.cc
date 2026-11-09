@@ -603,6 +603,10 @@ napi_value compile(napi_env env, napi_callback_info info) {
     field.raw = quoted;
     field.key = u"metadata_hash";
     field.keyRaw = "\"metadata_hash\"";
+    if (auto *schema = tree.get(u"schema"); schema && schema->raw == "\"palimora-canonical-v2\"") {
+      tree.children.erase(std::remove_if(tree.children.begin(), tree.children.end(),
+        [](const Node &n) { return n.key == u"metadata"; }), tree.children.end());
+    }
     tree.children.push_back(std::move(field));
     std::vector<Document> docs;
     docs.push_back(std::move(md));

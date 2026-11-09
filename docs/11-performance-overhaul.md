@@ -4149,3 +4149,10 @@ storia e dizionari. Le invalidazioni globali del grafo non sono un costo di nuov
 opere attribuibile alle sole righe SQLite appena importate. Le nuove sensibilità
 restano condizionate alle identità nei nomi ZIP e alle densità del campione.
 Il primo ingest resta NO-GO, senza una nuova milestone o autorizzazione implicita.
+
+## Canonico compatto pre-ingest
+
+La successiva [ottimizzazione canonica finale](final-canonical-storage-optimization.md)
+misura separatamente TXT virtuali, metadata referenziati, riferimenti locali e
+metadata-only unificati. Mantiene PMPACK01 e il modello OpenSearch; i risultati
+P0–P5 di questo documento restano evidenze storiche immutate.

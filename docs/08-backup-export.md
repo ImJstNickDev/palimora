@@ -413,3 +413,26 @@ CLI `verify`/`import`/`list`/`read` eseguita sulla catena reale con tutti i serv
 Palimora spenti e senza variabili database: **107.187 oggetti estratti**, 11.032
 opere elencate, lettura confrontata con il file estratto. Nessun PostgreSQL o
 backend richiesto per questa estrazione standalone.
+
+### Risoluzione standalone dei nuovi canonici
+
+La libreria `archive-format` espone `canonicalManifest`, `resolveCanonical`,
+`textChapter` e `reconstructChapter`. Gli stessi renderer sono usati dall'API.
+La CLI aggiunge:
+
+```sh
+node packages/archive-cli/cli.cjs manifest HASH_MANIFEST /backup/base
+node packages/archive-cli/cli.cjs chapter HASH_MANIFEST ID_CAPITOLO /backup/base
+```
+
+Il primo comando risolve metadata e riferimenti locali; il secondo emette l'HTML
+ricostruito e verificato, anche per TXT virtuali, senza PostgreSQL o dump.
+`read` conserva la semantica precedente: restituisce i byte fisici originali.
+Export e backup includono il catalogo completo degli oggetti, quindi anche
+metadata referenziati e TXT originali. I riferimenti SQL rimangono sempre verso
+oggetti fisici. I documenti metadata-only unificati non hanno dipendenze esterne.
+
+Il matching dei riferimenti del backup piattaforma normalizza i manifest v2
+attraverso lo stesso resolver: la scelta fisica `object_ref` non cambia la firma
+logica dello snapshot. Le firme dei manifest v1 rimangono invariate. Un metadata
+referenziato mancante o corrotto interrompe anche questo percorso.

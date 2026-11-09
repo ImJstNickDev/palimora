@@ -39,7 +39,7 @@ const hash = (x) =>
   for (const kind of ["manifest", "observation"]) {
     const rows = (
       await pool.query(
-        "SELECT encode(o.hash,'hex') hash,p.name pack,o.byte_offset AS offset,o.length,o.size,k.name kind FROM archive_object_data o JOIN archive_packs p ON p.id=o.pack_id JOIN archive_kinds k ON k.id=o.kind_id WHERE k.name=$1 ORDER BY o.hash",
+        "SELECT encode(o.hash,'hex') hash,p.name pack,o.byte_offset AS offset,o.length,o.size,k.name kind FROM archive_object_data o JOIN archive_packs p ON p.id=o.pack_id JOIN archive_kinds k ON k.id=o.kind_id WHERE ($1='manifest' AND EXISTS (SELECT 1 FROM archive_snapshots s WHERE s.manifest_hash=encode(o.hash,'hex'))) OR ($1='observation' AND k.name='observation') ORDER BY o.hash",
         [kind],
       )
     ).rows;

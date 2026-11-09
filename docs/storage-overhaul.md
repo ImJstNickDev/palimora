@@ -502,3 +502,11 @@ layout aggregato viene assunto o applicato.
 - `summarize-storage-overhaul.py` aggrega i probe; `finalize-storage-overhaul.py`
   richiede campagne, equivalenze e restore riusciti prima di scrivere il report
   conclusivo e l'appendice al modello storico P5.
+
+## Misure canoniche successive
+
+[Final Canonical Storage Optimization](final-canonical-storage-optimization.md)
+implementa TXT virtuali, metadata referenziati, manifest compatti selezionati
+su byte Zstd e metadata-only unificati. Le misure di questo documento e del suo
+JSON rimangono storiche: i nuovi coefficienti PackStore sono nel report
+successivo. Nessuna modifica ulteriore a PostgreSQL o al modello OpenSearch.

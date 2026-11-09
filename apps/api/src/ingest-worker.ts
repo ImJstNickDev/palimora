@@ -31,7 +31,7 @@ import {
 function validateEnvelope(e: any) {
   if (
     e.schema !== "palimora.ingest.v1" ||
-    e.parser !== "ao3-dump-4" ||
+    e.parser !== "ao3-dump-5" ||
     !Number.isSafeInteger(e.cursor) ||
     e.cursor < 0 ||
     typeof e.locator !== "string"
@@ -177,7 +177,7 @@ export async function tick(
             : "";
           const old = (
             await pool.query(
-              "SELECT id,checkpoint FROM ingest_sources WHERE path=$1 AND fingerprint=$2 AND state='ingested' AND parser='ao3-dump-4' AND scope=$3 LIMIT 1",
+              "SELECT id,checkpoint FROM ingest_sources WHERE path=$1 AND fingerprint=$2 AND state='ingested' AND parser='ao3-dump-5' AND scope=$3 LIMIT 1",
               [entry.name, fp, scope],
             )
           ).rows[0];
@@ -188,7 +188,7 @@ export async function tick(
               : "discovered";
           await transaction(async (db) => {
             const discovered = await db.query(
-              "INSERT INTO ingest_sources(id,batch_id,path,fingerprint,state,checkpoint,gaps,parser,scope) VALUES($1,$2,$3,$4,$5,$6,$7,'ao3-dump-4',$8) ON CONFLICT(batch_id,path) DO UPDATE SET fingerprint=excluded.fingerprint,parser=excluded.parser,scope=excluded.scope,error=NULL,state=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.state ELSE excluded.state END,checkpoint=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.checkpoint ELSE excluded.checkpoint END,checkpoint_detail=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.checkpoint_detail ELSE excluded.checkpoint_detail END,imported=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.imported ELSE excluded.imported END,gaps=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.gaps ELSE excluded.gaps END,bytes=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.bytes ELSE excluded.bytes END,duplicates=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.duplicates ELSE excluded.duplicates END,attempts=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.attempts ELSE excluded.attempts END,next_retry_at=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.next_retry_at ELSE excluded.next_retry_at END WHERE ingest_sources.fingerprint<>excluded.fingerprint OR ingest_sources.parser<>excluded.parser OR ingest_sources.scope<>excluded.scope RETURNING id",
+              "INSERT INTO ingest_sources(id,batch_id,path,fingerprint,state,checkpoint,gaps,parser,scope) VALUES($1,$2,$3,$4,$5,$6,$7,'ao3-dump-5',$8) ON CONFLICT(batch_id,path) DO UPDATE SET fingerprint=excluded.fingerprint,parser=excluded.parser,scope=excluded.scope,error=NULL,state=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.state ELSE excluded.state END,checkpoint=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.checkpoint ELSE excluded.checkpoint END,checkpoint_detail=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.checkpoint_detail ELSE excluded.checkpoint_detail END,imported=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.imported ELSE excluded.imported END,gaps=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.gaps ELSE excluded.gaps END,bytes=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.bytes ELSE excluded.bytes END,duplicates=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.duplicates ELSE excluded.duplicates END,attempts=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.attempts ELSE excluded.attempts END,next_retry_at=CASE WHEN ingest_sources.fingerprint=excluded.fingerprint AND ingest_sources.scope=excluded.scope THEN ingest_sources.next_retry_at ELSE excluded.next_retry_at END WHERE ingest_sources.fingerprint<>excluded.fingerprint OR ingest_sources.parser<>excluded.parser OR ingest_sources.scope<>excluded.scope RETURNING id",
               [
                 randomUUID(),
                 batch.id,
@@ -481,7 +481,7 @@ export async function tick(
                   e = JSON.parse(line);
                   if (e.schema === "palimora.ingest.cache.v1") {
                     if (
-                      e.parser !== "ao3-dump-4" ||
+                      e.parser !== "ao3-dump-5" ||
                       !Array.isArray(e.hashes) ||
                       e.hashes.length > 1024 ||
                       e.hashes.some(
@@ -509,7 +509,7 @@ export async function tick(
                   }
                   if (e.schema === "palimora.ingest.group.v1") {
                     if (
-                      e.parser !== "ao3-dump-4" ||
+                      e.parser !== "ao3-dump-5" ||
                       !Array.isArray(e.records) ||
                       !e.records.length ||
                       e.records.length > 1024
@@ -798,7 +798,7 @@ export async function tick(
                 code: e.code ?? e.message,
                 locator: activeLocator,
                 source: activeSource.path,
-                parser: "ao3-dump-4",
+                parser: "ao3-dump-5",
                 trace: e.stack,
               };
               await transaction(async (db) => {

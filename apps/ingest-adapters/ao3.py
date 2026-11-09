@@ -10,7 +10,7 @@ if os.environ.get('PALIMORA_HTML_SCANNER') == 'python':
     from html_fragments import notes, notes_and_resources, resource_urls, chapters as html_chapters
 else:
     from native_fragments import notes, notes_and_resources, resource_urls, chapters as html_chapters
-VERSION='ao3-dump-4'
+VERSION='ao3-dump-5'
 CHUNK=8*1024*1024
 STAGING=os.environ.get('PALIMORA_ADAPTER_STAGING')
 active_dir=None
@@ -202,8 +202,15 @@ def text_record(data):
     author=re.search(r'^by (.+)$',header,re.M)
     if author:fields['Author']=author[1]
     # Preserve a full-work document when the lossy TXT format has no reliable chapter delimiters.
-    objects=[obj('original.txt','source_text',data),obj('work.html','chapter_html',('<pre>'+html.escape(body)+'</pre>').encode())]
-    return dict(external_id=identity(url[1]),metadata=fields,chapters=[dict(name='work.html',source_url=None,scope='entire_work',source_chapter_count=fields.get('Chapters'))],objects=objects,state='valid' if body else 'partial',observed_at=None)
+    objects=[obj('original.txt','source_text',data)]
+    # Freeze Python's header/strip decision as an exact byte interval, including BOM.
+    prefix=len(text[:header_end].encode())+(3 if data.startswith(b'\xef\xbb\xbf') else 0)
+    tail=text[header_end:]
+    offset=prefix+len(tail[:len(tail)-len(tail.lstrip())].encode())
+    rendered=('<pre>'+html.escape(body)+'</pre>').encode()
+    recipe=dict(schema='palimora-text-html-v1',offset=offset,length=len(body.encode()),size=len(data),output_size=len(rendered))
+    derived=hashlib.sha256(rendered).hexdigest()
+    return dict(external_id=identity(url[1]),metadata=fields,chapters=[dict(name='work.html',source_object='original.txt',transform=recipe,source_html_sha256=derived,source_url=None,scope='entire_work',source_chapter_count=fields.get('Chapters'))],objects=objects,state='valid' if body else 'partial',observed_at=None)
 def html_record(data):
     text=data.decode('utf-8');metadata={}
     for field,value in re.findall(r'<b>([^<]+):</b>\s*</td>\s*<td>(.*?)</td>\s*</tr>',text,re.S|re.I):

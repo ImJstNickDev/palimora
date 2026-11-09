@@ -1,3 +1,5 @@
+import { reconstructChapter as reconstructTextChapter } from "@palimora/archive-format";
+import { resolveManifests } from "./canonical-manifest";
 import { createHash } from "node:crypto";
 import { setImmediate as yieldToIo } from "node:timers/promises";
 import { DB } from "./db";
@@ -27,32 +29,7 @@ type Task = {
   ordinal: number;
 };
 
-/** Same offset and source checksum contract used by the reader. */
-export function reconstructTextChapter(
-  m: any,
-  c: any,
-  objects: Map<string, Buffer>,
-) {
-  let bytes = objects.get(c.hash);
-  if (!bytes) throw Error("OBJECT_MISSING");
-  for (const note of [...(c.notes ?? [])].sort((a, b) => a.offset - b.offset)) {
-    const ref = m.objects.find((o: any) => o.name === note.name);
-    if (!ref) throw Error("NOTE_MISSING");
-    const fragment = objects.get(ref.hash);
-    if (!fragment) throw Error("OBJECT_MISSING");
-    bytes = Buffer.concat([
-      bytes.subarray(0, note.offset),
-      fragment,
-      bytes.subarray(note.offset),
-    ]);
-  }
-  if (
-    c.source_html_sha256 &&
-    createHash("sha256").update(bytes).digest("hex") !== c.source_html_sha256
-  )
-    throw Error("CHAPTER_RECONSTRUCTION");
-  return bytes;
-}
+export { reconstructChapter as reconstructTextChapter } from "@palimora/archive-format";
 
 /** Retry exceptional failing subsets only. Healthy objects are never discarded
  * because another frame is missing/corrupt. No SQL lookup per chapter on success. */
@@ -240,6 +217,14 @@ export async function loadTextInputs(
     ...new Set(tasks.flatMap((t) => t.hashes)),
   ]);
   const sizes = new Map(locators.map((r) => [r.hash, Number(r.size)]));
+  for (const task of tasks) {
+    const c = task.chapter;
+    if (c?.transform)
+      sizes.set(
+        c.hash,
+        Math.max(sizes.get(c.hash) ?? 0, c.transform.output_size),
+      );
+  }
   const retained = new Map<string, number>();
   for (let start = 0; start < tasks.length; ) {
     let end = start,
@@ -329,7 +314,8 @@ async function loadManifests(db: DB, rows: any[], refs?: any[]) {
           manifest.chapters.some(
             (c: any) =>
               !c ||
-              typeof c.hash !== "string" ||
+              (typeof c.hash !== "string" &&
+                !Number.isSafeInteger(c.object_ref)) ||
               (c.notes !== undefined && !Array.isArray(c.notes)),
           ) ||
           manifest.objects.some((o: any) => !o || typeof o.hash !== "string"))
@@ -340,6 +326,7 @@ async function loadManifests(db: DB, rows: any[], refs?: any[]) {
       parsed.set(hash, e);
     }
   }
+  await resolveManifests(db, parsed);
   return new Map(
     rows.map((r) => [
       r.work_id,
@@ -435,6 +422,15 @@ export async function selectTextGroup(
       ])
     ).map((r) => [r.hash, Number(r.size)]),
   );
+  for (const m of manifests.values()) {
+    for (const c of m?.chapters ?? []) {
+      if (c.transform)
+        sizes.set(
+          c.hash,
+          Math.max(sizes.get(c.hash) ?? 0, c.transform.output_size),
+        );
+    }
+  }
   selected = prefix(
     selected,
     (id) =>

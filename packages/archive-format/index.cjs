@@ -398,3 +398,116 @@ module.exports = {
   extract,
   fileDigest,
 };
+
+// Resolve immutable metadata using the digest of the actual stored bytes.
+function resolveCanonical(manifest, objects) {
+  if (manifest.schema === "palimora-canonical-v1") return manifest;
+  if (manifest.schema === "palimora-canonical-metadata-v1") {
+    if (
+      manifest.state !== "metadata_only" ||
+      manifest.chapters?.length ||
+      manifest.objects?.length ||
+      !("metadata" in manifest)
+    )
+      throw Error("CANONICAL_METADATA_STATE");
+    return manifest;
+  }
+  if (manifest.schema !== "palimora-canonical-v2")
+    throw Error("CANONICAL_VERSION");
+  if (!hashPattern.test(manifest.metadata_hash) || "metadata" in manifest)
+    throw Error("CANONICAL_METADATA_REFERENCE");
+  const bytes = objects.get(manifest.metadata_hash);
+  if (!Buffer.isBuffer(bytes)) throw Error("METADATA_MISSING");
+  if (digest(bytes) !== manifest.metadata_hash) throw Error("METADATA_HASH");
+  const document = JSON.parse(bytes.toString("utf8"));
+  if (document.schema !== "palimora-metadata-v1" || !("metadata" in document))
+    throw Error("METADATA_SCHEMA");
+  const chapters = manifest.chapters.map((c) => {
+    if (!("object_ref" in c)) return c;
+    if (
+      !safeInteger(c.object_ref) ||
+      c.object_ref >= manifest.objects.length ||
+      "hash" in c ||
+      "name" in c
+    )
+      throw Error("CHAPTER_OBJECT_REFERENCE");
+    const { object_ref, ...rest } = c;
+    const ref = manifest.objects[object_ref];
+    return { ...rest, hash: ref.hash, name: ref.name };
+  });
+  return { ...manifest, chapters, metadata: document.metadata };
+}
+async function canonicalManifest(chain, hash) {
+  const manifest = JSON.parse(
+    (await objectBytes(chain, hash)).toString("utf8"),
+  );
+  const objects = new Map();
+  if (manifest.schema === "palimora-canonical-v2")
+    objects.set(
+      manifest.metadata_hash,
+      await objectBytes(chain, manifest.metadata_hash),
+    );
+  return resolveCanonical(manifest, objects);
+}
+module.exports.resolveCanonical = resolveCanonical;
+module.exports.canonicalManifest = canonicalManifest;
+
+function textChapter(source, chapter) {
+  const r = chapter.transform;
+  if (!r || r.schema !== "palimora-text-html-v1")
+    throw Error("TEXT_RECIPE_VERSION");
+  if (
+    !safeInteger(r.offset) ||
+    !safeInteger(r.length) ||
+    r.size !== source.length ||
+    r.offset + r.length > source.length ||
+    digest(source) !== chapter.hash
+  )
+    throw Error("TEXT_SOURCE_INTEGRITY");
+  // Fatal UTF-8 decoding; preserve an embedded BOM in the body.
+  const body = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: true,
+  }).decode(source.subarray(r.offset, r.offset + r.length));
+  const escaped = body.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#x27;",
+      })[c],
+  );
+  const bytes = Buffer.from("<pre>" + escaped + "</pre>");
+  if (
+    bytes.length !== r.output_size ||
+    digest(bytes) !== chapter.source_html_sha256
+  )
+    throw Error("CHAPTER_RECONSTRUCTION");
+  return bytes;
+}
+module.exports.textChapter = textChapter;
+
+function reconstructChapter(m, c, objects) {
+  let bytes = objects.get(c.hash);
+  if (!bytes) throw Error("OBJECT_MISSING");
+  if (c.transform) bytes = textChapter(bytes, c);
+  for (const note of [...(c.notes ?? [])].sort((a, b) => a.offset - b.offset)) {
+    const ref = m.objects.find((o) => o.name === note.name);
+    if (!ref) throw Error("NOTE_MISSING");
+    const fragment = objects.get(ref.hash);
+    if (!fragment) throw Error("OBJECT_MISSING");
+    bytes = Buffer.concat([
+      bytes.subarray(0, note.offset),
+      fragment,
+      bytes.subarray(note.offset),
+    ]);
+  }
+  if (c.source_html_sha256 && digest(bytes) !== c.source_html_sha256)
+    throw Error("CHAPTER_RECONSTRUCTION");
+  return bytes;
+}
+
+module.exports.reconstructChapter = reconstructChapter;

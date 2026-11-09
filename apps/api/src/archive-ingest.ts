@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { DB } from "./db";
 import { canonical, contentHash, rememberPrepared } from "./pack";
 import { objectBytes, preserve, afterArchiveSeal } from "./archive";
-import { compileManifest, prepareDocuments } from "./archive-native";
+import { compileStorageManifest, prepareDocuments } from "./archive-native";
 import {
   insertStageSQL,
   stageRows,
@@ -334,7 +334,7 @@ export async function prepareIngest(
           add("media", { work_id: w.id, url });
         const refsByName = new Map(refs.map((o) => [o.name, o]));
         const chapterRefs = r.chapters.map((c: any) => {
-          const object = refsByName.get(c.name);
+          const object = refsByName.get(c.source_object ?? c.name);
           if (!object) throw Error("CHAPTER_OBJECT_MISSING");
           const ao3 = c.source_url?.match(/\/chapters\/(\d+)/)?.[1];
           const source_key =
@@ -361,7 +361,7 @@ export async function prepareIngest(
           return { ...c, chapter_id, revision_id, hash: object.hash };
         });
         const manifest = {
-          schema: "palimora-canonical-v1",
+          schema: "palimora-canonical-v2",
           work_id: w.id,
           external_id: r.external_id,
           metadata,
@@ -370,15 +370,21 @@ export async function prepareIngest(
           objects: refs,
           state: r.state,
         };
-        const [metadataDocument, manifestDocument] = compileManifest(manifest);
+        const [metadataDocument, manifestDocument] =
+          await compileStorageManifest(manifest);
         rememberPrepared(metadataDocument);
         rememberPrepared(manifestDocument);
         const metadataHash = metadataDocument.hash,
           hash = manifestDocument.hash;
-        await preserve(db, [
-          { kind: "metadata", bytes: metadataDocument.bytes },
-          { kind: "manifest", bytes: manifestDocument.bytes },
-        ]);
+        await preserve(
+          db,
+          metadataHash === hash
+            ? [{ kind: "metadata", bytes: metadataDocument.bytes }]
+            : [
+                { kind: "metadata", bytes: metadataDocument.bytes },
+                { kind: "manifest", bytes: manifestDocument.bytes },
+              ],
+        );
         add("metadata", { hash: metadataHash });
         const lk = key(w.id, r.state),
           last = latest.get(lk);

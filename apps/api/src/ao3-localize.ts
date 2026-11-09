@@ -1,3 +1,4 @@
+import { readManifest } from "./canonical-manifest";
 import { randomUUID } from "node:crypto";
 import { pool, transaction } from "./db";
 import { ingestRecords, readObject } from "./archive";
@@ -30,7 +31,7 @@ export async function localizeMedia(url: string) {
           if (!row) return null;
           return {
             id: row.current_snapshot_id,
-            manifest: JSON.parse((await readObject(db, row.hash)).toString()),
+            manifest: await readManifest(db, row.hash),
           };
         });
         if (!current) break;

@@ -1,3 +1,4 @@
+import { readManifest, resolveManifests } from "./canonical-manifest";
 import { reconstructTextChapter } from "./catalog-text-preparation";
 import { mediaDescriptor, resourceRef, workStyles } from "./reader-media";
 import { safeInlineHtml } from "./reader-safety";
@@ -110,11 +111,6 @@ export async function materializeHistoricalViews(
   const byId = new Map(snapshots.map((s) => [s.snapshot_id, s]));
   const ordered = missing.map((id) => byId.get(id)!);
   const manifests = new Map<string, any>();
-  // Only reader-internal data already verified by loadSnapshot; never user JSON.
-  if (verified) {
-    const snapshot = byId.get(verified.snapshot);
-    if (snapshot) manifests.set(snapshot.manifest_hash, verified.manifest);
-  }
   for await (const { hash, bytes } of readObjectBatches(
     db,
     ordered
@@ -122,6 +118,7 @@ export async function materializeHistoricalViews(
       .map((s) => s.manifest_hash),
   ))
     manifests.set(hash, JSON.parse(bytes.toString()));
+  await resolveManifests(db, manifests);
   const raw = await enrichBibliographyBatch(
     db,
     ordered.map((s) => ({
@@ -178,6 +175,7 @@ export async function loadCurrentBibliographies(db: DB, works: any[]) {
     snapshots.map((s) => s.manifest_hash),
   ))
     manifests.set(hash, JSON.parse(bytes.toString()));
+  await resolveManifests(db, manifests);
   const byWork = new Map(
     snapshots.map((s) => [s.work_id, manifests.get(s.manifest_hash)]),
   );
@@ -249,7 +247,7 @@ export async function loadSnapshot(db: DB, id: string, snapshot?: string) {
   if (!s) fail("NOT_FOUND", 404);
   return {
     work: w,
-    manifest: JSON.parse((await readObject(db, s.manifest_hash)).toString()),
+    manifest: await readManifest(db, s.manifest_hash),
     snapshot: s.id,
   };
 }

@@ -1,3 +1,4 @@
+import { readManifest } from "./canonical-manifest";
 import {
   hydrateWorks,
   hydrateEvidence,
@@ -495,9 +496,7 @@ export async function archiveOperation(
         [x.id],
       );
       return {
-        manifest: JSON.parse(
-          (await readObject(db, s.manifest_hash)).toString(),
-        ),
+        manifest: await readManifest(db, s.manifest_hash),
       };
     }
     case "archiveObject": {

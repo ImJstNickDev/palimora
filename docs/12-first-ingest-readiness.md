@@ -498,3 +498,12 @@ l'inviluppo bounded dichiarato, non nuove milestone software. **Primo ingest:
 NO-GO per capacità sul layout configurato e gate operativi/backup/layout ancora
 pendenti.** La capacità fisica non è l'unica formalità mancante; le verifiche
 operatore sono obbligatorie anche dopo l'espansione. Nessun vero ingest avviato.
+
+## Aggiornamento del formato canonico
+
+Il [report finale canonico](final-canonical-storage-optimization.md) e il relativo
+[JSON](performance-final-canonical-storage.json) documentano i nuovi formati
+logici, la compatibilità storica e i coefficienti PackStore aggiornati. Il
+centrale condizionato passa da circa 1.305,38 a 1.126,94 GiB. Non cambia la
+configurazione definitiva, non riduce riserve di staging/manutenzione/backup e
+non autorizza l'ingest. Restano i gate operativi già indicati sopra.

@@ -133,11 +133,17 @@ for source in range(2):
             "-e",
             `require('./apps/api/dist/ingest-worker').tick('${crashId}').finally(()=>require('./apps/api/dist/db').pool.end())`,
           ],
-          { env: process.env, stdio: "ignore" },
+          { env: process.env, stdio: ["ignore", "pipe", "pipe"] },
         );
+        let diagnostics = "";
+        child.stderr?.on("data", (b) => {
+          diagnostics = (diagnostics + b).slice(-8192);
+        });
+        child.stdout?.resume();
         const closed = new Promise((resolve) => child.on("exit", resolve));
         let prefix = 0;
-        for (let i = 0; i < 300; i++) {
+        // Wait for the actual crash barrier, allowing cold worker startup on a loaded host.
+        for (const deadline = Date.now() + 60000; Date.now() < deadline; ) {
           prefix = Number(
             (
               await pool.query(
@@ -149,7 +155,10 @@ for source in range(2):
           if (prefix > 0) break;
           await new Promise((r) => setTimeout(r, 20));
         }
-        assert.ok(prefix > 0 && prefix < 320);
+        assert.ok(
+          prefix > 0 && prefix < 320,
+          `durable prefix=${prefix}, child exit=${child.exitCode}: ${diagnostics}`,
+        );
         const { archiveOperation } = await import(
           "../apps/api/src/archive-admin"
         );

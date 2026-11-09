@@ -25,6 +25,7 @@ import {
   verify,
   fileDigest,
   digest,
+  resolveCanonical,
   readObject as portableObject,
 } from "@palimora/archive-format";
 
@@ -1164,7 +1165,7 @@ async function snapshotSignature(
 ) {
   const r = (await findObjects(db, [hash]))[0];
   if (!r) throw Error("BACKUP_REFERENCE_MISSING");
-  const doc = JSON.parse(
+  let doc = JSON.parse(
     (
       await store.read({
         ...r,
@@ -1174,6 +1175,19 @@ async function snapshotSignature(
       })
     ).toString(),
   );
+  if (doc.schema === "palimora-canonical-v2") {
+    const metadata = (await findObjects(db, [doc.metadata_hash]))[0];
+    if (!metadata) throw Error("BACKUP_REFERENCE_MISSING");
+    const bytes = await store.read({
+      ...metadata,
+      offset: Number(metadata.byte_offset),
+      length: Number(metadata.length),
+      size: Number(metadata.size),
+    });
+    // Platform reference matching must not depend on the optional object_ref
+    // encoding chosen by compression. Legacy signatures remain unchanged.
+    doc = resolveCanonical(doc, new Map([[doc.metadata_hash, bytes]]));
+  }
   delete doc.work_id;
   for (const chapter of doc.chapters ?? []) {
     delete chapter.chapter_id;

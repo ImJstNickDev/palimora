@@ -58,6 +58,21 @@ const {
   await pool.query(
     "INSERT INTO catalog_pending(work_id) SELECT id FROM archive_work_heads LIMIT 10 ON CONFLICT DO NOTHING",
   );
+  const concurrentReaders =
+    process.env.FINAL_CANONICAL_VALIDATION === "1"
+      ? new Promise((resolve) => {
+          require("node:child_process").execFile(
+            process.execPath,
+            [
+              "scripts/p5-verify.cjs",
+              "readers",
+              "/results/backup-concurrent-readers.json",
+            ],
+            { timeout: 180000 },
+            (error) => resolve(error),
+          );
+        })
+      : Promise.resolve(null);
   const backup = await createBackup({
     database: pool,
     storage: process.env.ARCHIVE_ROOT,
@@ -67,6 +82,8 @@ const {
     kind: "full",
     volumeBytes: 64 * 1024 ** 2,
   });
+  const readerError = await concurrentReaders;
+  if (readerError) throw readerError;
   const backupSeconds = (Date.now() - t) / 1000;
   const meta = await inspectBackup(target, backup.id);
   await pool.query("CREATE DATABASE palimora_p5_restore_test");

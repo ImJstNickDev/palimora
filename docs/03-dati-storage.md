@@ -411,3 +411,40 @@ Pack v1, default Zstd 3, TXT, cache parser e bibliografie immutabili non cambian
 Misure, candidati non adottati e limiti della campagna sono in
 [storage-overhaul](storage-overhaul.md) e
 [performance-storage-overhaul.json](performance-storage-overhaul.json).
+
+## Formati canonici compatti (pre-ingest)
+
+I nuovi snapshot completi usano `palimora-canonical-v2`. `metadata_hash`
+identifica i byte immutabili di `palimora-metadata-v1`; il manifest non contiene
+anche `metadata`. Il resolver condiviso verifica SHA-256 e schema e restituisce
+la vista logica con metadata, senza consultare la head corrente. Le letture batch
+caricano le dipendenze metadata insieme. I manifest v1 restano leggibili senza
+riscrittura né modifica del loro hash.
+
+Un capitolo v2 può usare `object_ref`, indice zero-based nella tabella `objects`,
+al posto di `name` e `hash`. Il resolver ripristina entrambi; identità, revisione,
+note, offset e checksum sorgente rimangono invariati. Il writer confronta le due
+codifiche con Zstd al livello configurato e adotta gli indici solo con oltre
+32 byte di risparmio di payload per manifest. La tabella conserva percorsi,
+tipi e hash completi degli oggetti. Nessuna modifica a PMPACK01.
+
+I TXT nuovi conservano solo `source_text`. La revisione SQL punta al suo hash
+fisico: nessun oggetto HTML fittizio. Il capitolo conserva nome logico,
+`source_object`, `source_html_sha256` e `transform` con schema
+`palimora-text-html-v1`, `size` originale, `output_size` HTML e intervallo UTF-8 `offset`,`length`.
+L'adapter Python congela nell'intervallo la separazione header/corpo e `strip()`;
+il renderer condiviso verifica dimensione/hash del sorgente, decodifica UTF-8
+rigorosamente, applica gli escape Python (`'` → `&#x27;`) e avvolge in `<pre>`.
+Verifica infine l'hash HTML. Non scrive il risultato nel PackStore. I vecchi
+capitoli HTML persistenti usano il percorso precedente. Una ricetta sconosciuta
+è un errore, non un invito a reinterpretare lo snapshot.
+
+Per snapshot `metadata_only` senza oggetti o layout, il documento
+`palimora-canonical-metadata-v1` unifica metadata e manifest: lo stesso oggetto
+fisico di tipo `metadata` soddisfa entrambi i riferimenti SQL. Include identità,
+stato e metadata riconciliati; acquisizioni identiche possono condividerlo.
+L'osservazione separata conserva integralmente metadata originali, fonte,
+locator, parser, timestamp e identità dell'acquisizione. Non cambia la retention,
+la precedenza della copia completa o la gestione dei conflitti. Nessuna
+conversione di archivi popolati è necessaria. La migrazione additiva `041`
+aggiorna solo il default del parser per le nuove sorgenti.

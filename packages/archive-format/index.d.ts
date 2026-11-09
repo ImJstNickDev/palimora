@@ -59,3 +59,20 @@ export function writeArchive(options: {
   check?: () => Promise<void>;
   stopped?: () => boolean;
 }): Promise<Archive>;
+
+export function resolveCanonical(
+  manifest: any,
+  objects: Map<string, Buffer>,
+): any;
+export function canonicalManifest(
+  chain: ArchiveChain,
+  hash: string,
+): Promise<any>;
+
+export function textChapter(source: Buffer, chapter: any): Buffer;
+
+export function reconstructChapter(
+  manifest: any,
+  chapter: any,
+  objects: Map<string, Buffer>,
+): Buffer;

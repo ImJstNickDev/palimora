@@ -12,6 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  digest,
+  resolveCanonical,
+  reconstructChapter,
+} from "@palimora/archive-format";
 
 test(
   "full and platform backups restore real PostgreSQL, immutable histories and user references; retries and faults are safe",
@@ -66,12 +71,29 @@ test(
             metadata: { title: ["Backup fixture"] },
             state: "valid",
             observed_at: null,
-            chapters: [{ name: "chapter" }],
+            chapters: [
+              text === "new"
+                ? {
+                    name: "chapter",
+                    source_object: "chapter",
+                    source_html_sha256: digest("<pre>new</pre>"),
+                    transform: {
+                      schema: "palimora-text-html-v1",
+                      offset: 0,
+                      length: 3,
+                      size: 3,
+                      output_size: 14,
+                    },
+                  }
+                : { name: "chapter" },
+            ],
             objects: [
               {
                 name: "chapter",
-                kind: "chapter_html",
-                data: Buffer.from("<p>" + text + "</p>").toString("base64"),
+                kind: text === "new" ? "source_text" : "chapter_html",
+                data: Buffer.from(
+                  text === "new" ? text : "<p>" + text + "</p>",
+                ).toString("base64"),
               },
               {
                 name: "image",
@@ -323,6 +345,43 @@ test(
           table,
         );
       }
+      // Verify actual historical rendering, not only SQL/pack equality.
+      async function historicalBytes(database: Pool, storage: string) {
+        const { PackStore } = await import("../apps/api/src/pack");
+        const { findObjects } = await import("../apps/api/src/archive-catalog");
+        const reader = new PackStore(storage);
+        async function read(hash: string) {
+          const r = (await findObjects(database, [hash]))[0];
+          assert.ok(r);
+          return reader.read({
+            ...r,
+            offset: Number(r.byte_offset),
+            length: Number(r.length),
+            size: Number(r.size),
+          });
+        }
+        const rendered: string[] = [];
+        for (const row of (
+          await database.query(
+            "SELECT manifest_hash FROM archive_snapshots ORDER BY id",
+          )
+        ).rows) {
+          const raw = JSON.parse((await read(row.manifest_hash)).toString());
+          const dependencies = new Map<string, Buffer>();
+          if (raw.metadata_hash)
+            dependencies.set(raw.metadata_hash, await read(raw.metadata_hash));
+          const m = resolveCanonical(raw, dependencies);
+          for (const ref of m.objects)
+            dependencies.set(ref.hash, await read(ref.hash));
+          for (const c of m.chapters)
+            rendered.push(reconstructChapter(m, c, dependencies).toString());
+        }
+        return rendered;
+      }
+      const before = await historicalBytes(pool, common.storage);
+      assert.ok(before.includes("<pre>new</pre>"));
+      assert.ok(before.includes("<p>old</p>"));
+      assert.deepEqual(await historicalBytes(restored, restoredRoot), before);
       assert.deepEqual(
         await restoreBackup({
           database: restored,
@@ -384,6 +443,48 @@ test(
         storage: platformRoot,
         confirmation: "RESTORE " + corpus.hash,
       });
+      // Re-encode only the disposable restored fixture with the other valid
+      // chapter representation. Platform references must match logical content.
+      execFileSync(
+        join(process.cwd(), "node_modules/.bin/tsx"),
+        [
+          "-e",
+          `(async()=>{
+          const {pool,transaction}=require('./apps/api/src/db');
+          const {readObject,preserve}=require('./apps/api/src/archive');
+          const {canonical,contentHash}=require('./apps/api/src/pack');
+          try {
+            const rows=(await pool.query('SELECT id,manifest_hash FROM archive_snapshots')).rows;
+            for(const row of rows){
+              const m=JSON.parse((await readObject(pool,row.manifest_hash)).toString());
+              if(m.schema!=='palimora-canonical-v2'||!m.chapters.length)continue;
+              m.chapters=m.chapters.map(c=>{
+                if(c.object_ref!==undefined){const {object_ref,...rest}=c;const o=m.objects[object_ref];return {...rest,name:o.name,hash:o.hash};}
+                const index=m.objects.findIndex(o=>o.name===c.name&&o.hash===c.hash);
+                if(index<0)throw Error('Fixture chapter missing');
+                const {name,hash,...rest}=c;return {...rest,object_ref:index};
+              });
+              const bytes=canonical(m);
+              await transaction(async db=>{
+                await preserve(db,[{kind:'manifest',bytes}]);
+                await db.query('ALTER TABLE archive_snapshot_data DISABLE TRIGGER USER');
+                await db.query('UPDATE archive_snapshot_data SET manifest_hash=$1 WHERE id=$2',[Buffer.from(contentHash(bytes),'hex'),row.id]);
+                await db.query('SET CONSTRAINTS ALL IMMEDIATE');
+                await db.query('ALTER TABLE archive_snapshot_data ENABLE TRIGGER USER');
+              });
+            }
+          } finally {await pool.end();}
+        })().catch(e=>{console.error(e);process.exitCode=1;})`,
+        ],
+        {
+          env: {
+            ...process.env,
+            DATABASE_URL: (platformDb as any).options.connectionString,
+            ARCHIVE_ROOT: platformRoot,
+          },
+          stdio: "pipe",
+        },
+      );
       const mappedWork = randomUUID();
       const remap = await platformDb.connect();
       try {

@@ -63,7 +63,7 @@ Analizzare **schemi**, primo/ultimo record e un campione casuale di entry e ZIP,
 
 ## Adapter e contratto esecutivo
 
-Adapter `ao3-dump-4`, record NDJSON `palimora.ingest.v1`, raggruppati dal worker
+Adapter `ao3-dump-5`, record NDJSON `palimora.ingest.v1`, raggruppati dal worker
 tramite il trasporto `palimora.ingest.group.v1`. Predefinito 256 record per gruppo,
 con soglia di 16 MiB di dati sorgente/metadati, controllata dopo ogni record:
 il record che supera la soglia resta intero. Si scarica anche dopo 500 ms
@@ -417,3 +417,13 @@ throughput-first, Zstd 3, backlog 8 GiB, staging 4 GiB, riserva 8 GiB per device
 I default conservativi restano invariati: nessun override di produzione viene
 applicato automaticamente. Eseguire il preflight per componenti e completare i
 gate capacità/layout/backup e i controlli operatore prima di selezionare il dump.
+
+### Adapter TXT e canonico compatto
+
+`ao3-dump-5` invalida la cache di parsing precedente e conserva il TXT originale
+come unico contenuto fisico. La ricetta `palimora-text-html-v1` descritta in 03
+congela gli offset calcolati da Python e l'hash dell'HTML precedente. Lettura,
+indicizzazione e download condividono la ricostruzione in `archive-format`.
+Il compilatore produce manifest v2 con metadata referenziati; per record
+metadata-only senza contenuti produce il documento unificato descritto in 03.
+Le osservazioni individuali e il protocollo seal/commit/checkpoint restano intatti.

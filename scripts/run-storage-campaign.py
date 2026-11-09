@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run the bounded P5 heterogeneous portion on owned disposable containers."""
-import json,pathlib,subprocess,sys,time
+import json,pathlib,subprocess,sys,time,os
 root=pathlib.Path(sys.argv[1]);assert 'storage-overhaul' in str(root)
 name=(root/'name').read_text().strip();assert name.startswith('palimora-release-test-')
 def docker(*args,**kwargs):return subprocess.run(['docker',*args],check=True,text=True,**kwargs)
@@ -13,7 +13,7 @@ for _ in range(90):
  time.sleep(1)
 else:raise RuntimeError('Search readiness timeout')
 sampler=subprocess.Popen(['python3','scripts/benchmark-resources.py',str(results/('collection-resources.jsonl' if collect_only else 'storage-resources.jsonl')),*[name+'-'+r for r in ['worker','pg','search','redis','projection']]])
-child=subprocess.Popen(['true'] if '--collect-only' in sys.argv else ['docker','exec','-e','STORAGE_OVERHAUL_ONLY=1',name+'-worker','node','scripts/p5-campaign.cjs'],stdout=log,stderr=subprocess.STDOUT)
+child=subprocess.Popen(['true'] if '--collect-only' in sys.argv else ['docker','exec','-e','STORAGE_OVERHAUL_ONLY=1','-e','FINAL_CANONICAL_BATCHED='+os.environ.get('FINAL_CANONICAL_BATCHED','0'),name+'-worker','node','scripts/p5-campaign.cjs'],stdout=log,stderr=subprocess.STDOUT)
 try:
  start=time.monotonic()
  while child.poll() is None:
@@ -26,13 +26,17 @@ try:
   last=r['id'];temp=results/'control-ack.tmp';temp.write_text(json.dumps({'id':last,'ok':True}));temp.replace(results/'control-ack.json')
  assert child.returncode==0,'See private campaign.log'
  for script in ['collect-p3a-storage','normalize-p3a-observations','normalize-p3a-catalog']:
-  with (results/(script+'.log')).open('w') as f:docker('exec','-e','STORAGE_OMIT_SEARCH_TEXT=1',name+'-worker','node','scripts/'+script+'.cjs',stdout=f,stderr=subprocess.STDOUT)
+  with (results/(script+'.log')).open('w') as f:docker('exec','-e','STORAGE_OMIT_SEARCH_TEXT='+('0' if os.environ.get('FINAL_CANONICAL_BATCHED')=='1' else '1'),name+'-worker','node','scripts/'+script+'.cjs',stdout=f,stderr=subprocess.STDOUT)
  with (results/'components.log').open('w') as f:
   docker('exec',name+'-worker','node','scripts/p5-components.cjs',stdout=f,stderr=subprocess.STDOUT)
- with (results/'category-search.log').open('w') as f:
-  docker('exec',name+'-worker','node','scripts/p5-components.cjs','storage-search',stdout=f,stderr=subprocess.STDOUT)
+ if os.environ.get('FINAL_CANONICAL_BATCHED')!='1':
+  with (results/'category-search.log').open('w') as f:
+   docker('exec',name+'-worker','node','scripts/p5-components.cjs','storage-search',stdout=f,stderr=subprocess.STDOUT)
  with (results/'post-analysis.log').open('w') as f:
   docker('exec','-e','OPENSEARCH_URL=http://opensearch:9200',name+'-worker','node','scripts/storage-post-analysis.cjs',stdout=f,stderr=subprocess.STDOUT)
+ if os.environ.get('FINAL_CANONICAL_BATCHED')=='1':
+  with (results/'maintenance.log').open('w') as f:
+   docker('exec',name+'-worker','node','scripts/storage-maintenance.cjs',stdout=f,stderr=subprocess.STDOUT)
  physical_code="import os,json; out={};\nfor root in ['/postgres','/search']:\n apparent=allocated=0\n for base,dirs,files in os.walk(root):\n  allocated+=os.stat(base).st_blocks*512\n  for name in files:\n   try:s=os.stat(os.path.join(base,name));apparent+=s.st_size;allocated+=s.st_blocks*512\n   except FileNotFoundError:pass\n out[root[1:]]=dict(apparent=apparent,allocated=allocated)\nprint(json.dumps(out))"
  sizes=docker('run','--rm','--network','none','--memory','128m','--mount',f'type=bind,source={root}/postgres,destination=/postgres,readonly','--mount',f'type=bind,source={root}/search,destination=/search,readonly','python:3.12-slim','python','-c',physical_code,capture_output=True)
  (results/'physical-services.json').write_text(sizes.stdout)

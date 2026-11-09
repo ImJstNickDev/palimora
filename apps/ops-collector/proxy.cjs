@@ -7,6 +7,7 @@ const services = new Set([
   "web",
   "api",
   "ingest",
+  "projection",
   "postgres",
   "redis",
   "opensearch",

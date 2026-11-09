@@ -48,6 +48,8 @@ services:
     <<: *dev-resources
     profiles: !reset []
     command: [redis-server, --appendonly, "yes", --appendfsync, everysec, --maxmemory, "0", --maxmemory-policy, noeviction]
+  projection:
+    <<: *dev-resources
   ingest:
     <<: *dev-resources
     environment:

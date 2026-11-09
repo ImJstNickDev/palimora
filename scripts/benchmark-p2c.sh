@@ -11,12 +11,12 @@ cleanup() {
  local name
  name=$(cat "$RELEASE_BENCH_ROOT/name")
  [[ "$name" == palimora-release-test-* ]] || return 1
- docker stop -t 30 "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
- docker rm "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
+ docker stop -t 30 "$name-projection" "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
+ docker rm "$name-projection" "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
  docker network rm "$name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-export RELEASE_KEEP=1 BENCH_NODE_OPTIONS=--require=/app/scripts/performance-p2c.cjs
+export RELEASE_KEEP=1 BENCH_NODE_OPTIONS="${BENCH_NODE_OPTIONS:---require=/app/scripts/performance-p2c.cjs}"
 ./scripts/benchmark-p0.sh
 name=$(cat "$RELEASE_BENCH_ROOT/name")
 # A retains its verifier API; B shuts down its two real processes itself.

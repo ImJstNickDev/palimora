@@ -5,7 +5,8 @@
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
 le implementazioni P1A/P1B.1/P2A/P2B.1/P2B.2 e le misure P2C sono documentate in fondo.
-P2C completa le campagne A/B/C; P2 resta aperta per la regressione interattiva sotto backlog.
+P2C completa le campagne A/B/C. P2D isola le proiezioni e verifica throughput,
+recovery e latenze; P2 resta aperta per la regressione residua della ricerca sotto backlog.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -2637,3 +2638,253 @@ P2C_SOURCE=/mnt/sdb/palimora-p2c-new-b1 P2C_ROOT=/mnt/sdb/palimora-p2c-new-c \
 
 Le directory private e gli ID immagine sono nel JSON; container/reti temporanei
 rimossi, fixture conservate. Nessun contenuto delle opere o dato account pubblicato.
+
+## P2D — Isolamento delle proiezioni e latenza interattiva (2026-11-09)
+
+Implementato il ruolo Node `projection-worker.ts`, senza server HTTP, sulla stessa
+immagine API. Riusa `startProjections(projectCatalog, projectText)` e quindi
+`runProjection`, scheduler P1A, motori P1B.1/P2B.1/P2B.2 e protocollo P2A. Nessun
+cambiamento a contenuti, mapping, code, parser o PackStore. API e worker hanno event
+loop e pool PostgreSQL distinti. In modalità `isolated` l’API non avvia lo scheduler;
+tutti i probe confermano zero chiamate di proiezione nel processo HTTP.
+
+Compose configura API isolata e ruolo `projection`, con bind PackStore/secret read-only,
+sola rete interna, nessuna porta, protezioni Docker esistenti, restart e grazia di 60 s.
+L’avvio attende API/schema, PostgreSQL e OpenSearch; il worker verifica anche schema e
+disponibilità search. `.env.example` espone modalità e risorse; override dev senza
+quote. Modalità inline compatibile e rollback documentati in
+[02](02-architettura.md#motore-di-consultazione). Il collector osserva il nuovo ruolo;
+amministrazione, pause e manutenzione restano nell’API.
+
+### Metodo e perimetro
+
+Stessa immagine aggiornata per controllo inline B1, isolato B1 (16/1/1) e isolato B2
+(64/1/2). Corpus reale di 11.032 opere, parser 2/commit 2, gruppi 256, Zstd 3 e seeding
+AO3; PostgreSQL 17.6, Redis 7.4.6, OpenSearch 2.19.4/heap 1 GiB. Nessuna quota CPU/RAM,
+build o benchmark concorrente; host condiviso. Il processo aggiuntivo ha heap/pool
+propri: il suo costo è incluso. Le quote Compose di produzione (projection 2 CPU/1536m)
+non sono applicate nelle prove e non sono una redistribuzione delle quote API. Non
+ripetuta A, non avviato ingest massivo.
+
+Il timer B include accodamento, ingest, catalogo, testo, refresh e verifica della
+visibilità con code vuote. Anche il tempo dall’inizio effettivo ingest è riportato. Il
+confronto completo col vecchio builder segue il timer. Le risorse container includono
+avvio/arresto; il JSON contiene anche la finestra limitata al timer. Tempi attivi
+sovrapposti non vengono sommati per derivare il wall-clock.
+
+### End-to-end e risorse
+
+| Metrica | Inline B1 | Isolato B1 | Isolato B2 |
+|---|---:|---:|---:|
+| Accodamento → visibilità s | 209.446 | 191.227 | 193.010 |
+| Inizio ingest → visibilità s | 208.960 | 190.545 | 192.633 |
+| Opere/s end-to-end | 52.672 | 57.691 | 57.158 |
+| Ingest s | 65.710 | 62.796 | 71.616 |
+| Catalogo attivo s | 179.586 | 165.428 | 167.079 |
+| Corrente attivo s | 108.895 | 100.029 | 100.039 |
+| Storico attivo s | 69.236 | 63.928 | 65.106 |
+| Full-text attivo s | 186.221 | 169.411 | 169.936 |
+| Preparazione s cumulativi | 118.438 | 106.319 | 89.782 |
+| HTTP bulk s cumulativi | 125.992 | 114.917 | 121.204 |
+| ACK s cumulativi | 5.550 | 5.695 | 3.069 |
+| Bulk | 770 | 802 | 376 |
+| CPU totale s (inviluppo container) | 676.359 | 660.075 | 662.900 |
+| Picco working set aggregato MiB | 3247.641 | 3281.055 | 3248.246 |
+| WAL MiB | 690.949 | 688.425 | 692.515 |
+| I/O lettura MiB (timer) | 111.531 | 65.574 | 53.859 |
+| I/O scrittura MiB (timer) | 4217.957 | 3684.129 | 3724.270 |
+| Rete RX MiB (somma interfacce) | 1184.553 | 1184.027 | 1178.980 |
+| Rete TX MiB (somma interfacce) | 1184.552 | 1184.025 | 1178.976 |
+| Memoria applicativa prenotata massima MiB | 379.956 | 372.871 | 405.752 |
+| NDJSON buffered massimo MiB | 14.446 | 11.573 | 25.772 |
+| Documenti buffered massimi | 64 | 64 | 180 |
+
+Budget applicativi invariati: 384 MiB NDJSON e 448 MiB complessivi; non sono limiti RSS.
+I/O usa la finestra end-to-end, dove tutti i contatori sono disponibili: il primo
+campione prima dell’avvio projection nell’inviluppo generale è nullo. I/O cgroup misura
+operazioni fisiche osservate, non tutte le letture logiche dei pack in cache; sommare
+RX/TX fra container conta entrambe le estremità. Dettagli CPU media/massima, RSS e
+working set per processo/container, SQL, code, residenza, overlap, refresh/merge/flush e
+concorrenza nel [JSON aggregato](performance-p2d.json).
+
+| Profilo | CPU API / projection s¹ | RSS API / projection picco MiB¹ | CPU PG / OpenSearch s² |
+|---|---:|---:|---:|
+| inline-b1 | 149.53 / 0.00 | 394.49 / 0.00 | 179.46 / 204.18 |
+| isolated-b1 | 13.07 / 136.72 | 168.28 / 287.93 | 173.37 / 194.35 |
+| isolated-b2 | 14.48 / 131.94 | 208.46 / 289.90 | 171.37 / 197.50 |
+
+¹ Campioni Node nella finestra end-to-end; zero projection separato nel controllo
+inline. ² Inviluppo container, inclusi avvio/arresto. Non sommare campioni con perimetri
+differenti.
+
+### Latenze autenticate ed event loop
+
+Clone della stessa fixture P2C B1, 5.000 lavori corrente+storico oppure 5.000 full-text,
+tre warmup e 100 richieste sequenziali per endpoint, senza gateway. La seconda coppia
+full-text inverte l’ordine isolato/inline. Nessun rallentamento artificiale. Ogni
+finestra registra code iniziali/finali e lavoro drenato: percentili sotto quantità
+diverse di lavoro non sono esperimenti a contesa identica.
+
+Valori P50/P95 in ms. `work` è il dettaglio opera.
+
+| Prova | Condizione | Ricerca | Dettaglio | Lettore |
+|---|---|---:|---:|---:|
+| inline-b1-bibliography | code vuote | 78.85/118.92 | 17.20/27.15 | 30.28/42.84 |
+| inline-b1-bibliography | backlog | 121.09/192.86 | 33.81/70.88 | 49.86/138.18 |
+| isolated-b1-bibliography | code vuote | 80.38/137.74 | 15.58/22.65 | 27.88/50.29 |
+| isolated-b1-bibliography | backlog | 147.40/264.82 | 23.01/35.23 | 35.37/59.37 |
+| inline-b1-text | code vuote | 80.18/126.26 | 15.55/22.39 | 22.79/37.59 |
+| inline-b1-text | backlog | 126.47/207.99 | 26.41/87.11 | 40.98/117.60 |
+| isolated-b1-text | code vuote | 85.17/137.49 | 13.61/21.21 | 17.55/26.10 |
+| isolated-b1-text | backlog | 125.10/215.10 | 23.89/37.69 | 32.01/53.69 |
+| isolated-b1-text-repeat | code vuote | 81.04/119.01 | 13.40/19.40 | 24.65/39.76 |
+| isolated-b1-text-repeat | backlog | 127.19/222.11 | 21.27/36.92 | 31.78/48.21 |
+| inline-b1-text-repeat | code vuote | 85.21/151.12 | 9.97/17.41 | 25.06/35.59 |
+| inline-b1-text-repeat | backlog | 157.67/255.00 | 25.43/67.25 | 43.76/137.35 |
+| isolated-b2-bibliography | code vuote | 88.82/166.67 | 14.02/20.95 | 22.94/35.55 |
+| isolated-b2-bibliography | backlog | 126.24/218.19 | 21.68/36.38 | 29.19/44.34 |
+| isolated-b2-text | code vuote | 72.47/120.88 | 13.98/20.53 | 30.03/45.51 |
+| isolated-b2-text | backlog | 128.25/233.59 | 18.03/29.73 | 36.36/60.70 |
+
+| Prova backlog | Drenati corrente / storico / testo | API event loop max ricerca / dettaglio / lettore ms | OS ricerca P95 client ms |
+|---|---:|---:|---:|
+| inline-b1-bibliography | 1100 / 1100 / 1080 | 50.89 / 40.80 / 42.76 | 125.86 |
+| isolated-b1-bibliography | 1160 / 1160 / 1140 | 48.04 / 18.19 / 20.32 | 186.18 |
+| inline-b1-text | 0 / 0 / 1712 | 39.06 / 60.19 / 39.98 | 129.30 |
+| isolated-b1-text | 0 / 0 / 1424 | 23.79 / 16.78 / 20.15 | 164.09 |
+| isolated-b1-text-repeat | 0 / 0 / 1312 | 38.99 / 30.67 / 14.65 | 172.53 |
+| inline-b1-text-repeat | 0 / 0 / 1840 | 66.39 / 38.90 / 39.49 | 163.23 |
+| isolated-b2-bibliography | 1140 / 1140 / 1080 | 27.43 / 32.29 / 14.69 | 160.57 |
+| isolated-b2-text | 0 / 0 / 2112 | 32.46 / 17.91 / 30.24 | 176.14 |
+
+Event-loop: campionamento a risoluzione 10 ms, statistiche per secondo; mediana/massimo
+dei P95 delle finestre nel JSON, non un percentile globale ricostruito. SQL e attesa
+pool sono durate client cumulative anche sovrapposte. Le classi di attesa PostgreSQL
+sono campionate a 1 Hz: l’assenza di blocchi osservati non esclude attese brevi. HTTP
+OpenSearch misura fino agli header, include scheduling/network e non equivale al solo
+tempo server.
+
+### Integrità e recovery
+
+Tutte le tre B verificano 11.032 opere, snapshot, documenti catalogo, viste storiche e
+documenti OpenSearch, identità/generazioni e hash completi del vecchio builder sul
+medesimo database. Le nuove importazioni hanno UUID/timestamp propri: non si confrontano
+digest fra identità differenti. La fixture C dopo i guasti coincide anche col digest P2C
+salvato. Cinque ricerche di riferimento, otto campioni del lettore storico e code vuote
+verificati. Il verificatore canonico conferma 107.054 oggetti in 54 pack.
+
+Passano: API-only con lavori pendenti e letture disponibili; due worker; SIGTERM/SIGINT;
+attesa del batch SQL atomico; pause/manutenzione; SIGKILL dopo HTTP accettato prima ACK;
+perdita leader con vecchia risposta trattenuta e nuovo proprietario; transizioni
+inline↔isolato; riavvio reale container projection e PostgreSQL. Suite P2B.2/P2A riusate
+per invalidazioni, lease, risposte parziali, 429/503, crash producer/HTTP/pre-ACK, retry
+e fencing. Nessuna modifica ai motori relativi.
+
+Recupero del nuovo processo dopo expiry forzata: SIGKILL 1,165 s; PostgreSQL dopo ready 2,014 s. Non includono il lease naturale di cinque minuti. Build completa e sei test mirati passati; Compose base/dev verificati.
+
+
+### Diagnosi, limiti residui e configurazione
+
+Il controllo usa lo stesso codice e la stessa diagnostica dell'isolato: **209,446 s**
+contro **191,227 s** per B1 isolato, −8,70% wall-clock e +9,53% opere/s.
+P2C B1 aveva misurato 205,916 s senza la diagnostica P2D aggiuntiva: è un riferimento
+storico, non il controllo causale di questa prova. B2 isolato richiede 193,010 s,
++0,93% rispetto a B1: una singola passata non dimostra una differenza statisticamente
+significativa, né giustifica cambiare il default. Rispetto ai 434,043 s P1B.1,
+B1 isolato misura 2,270× il throughput end-to-end, sul solo corpus di riferimento.
+
+La normalizzazione e l'assemblaggio bibliografico, l'estrazione HTML e la
+serializzazione NDJSON sono lavoro sincrono nel processo che ospita le proiezioni.
+Nella prima finestra di ricerca con backlog testo, l'API inline registra
+**1,199 s HTML + 0,760 s NDJSON**, contro zero nell'API isolata; questi contatori
+non rappresentano tutta la CPU delle proiezioni. La CPU API nell'intera B scende
+149,53 → 13,07 s, mentre il nuovo worker ne usa 136,72. Il massimo RSS di processo
+rilevato con `resourceUsage`, inclusa la fase iniziale, è API/projection:
+**414,98/— MiB** inline, **224,53/299,89 MiB** isolato B1,
+**226,51/300,97 MiB** isolato B2. I picchi campionati nella tabella precedente
+hanno un perimetro diverso e possono essere inferiori.
+
+A code vuote il worker projection consuma circa **2,81% B1 / 2,80% B2 di un core**
+nelle finestre di 30 s delle prove testo; mantiene il polling P1A a un secondo,
+senza un nuovo busy-loop. La duplicazione di heap/pool ha un costo reale,
+non mascherato dai budget NDJSON; la finestra generale dei container misura
++33,41 MiB di working set massimo B1 isolato rispetto al controllo.
+
+**A — Effetto sul thread HTTP:** la riduzione P95 di dettaglio e lettore è
+riproducibile. Prima coppia full-text: 87,11 → 37,69 ms e 117,60 → 53,69 ms;
+ripetizione: 67,25 → 36,92 ms e 137,35 → 48,21 ms. Nella prima coppia,
+event-loop API massimo ricerca/dettaglio/lettore passa da
+39,06/60,19/39,98 a 23,79/16,78/20,15 ms. Il worker isolato registra invece
+51,35/44,07/68,88 ms: il lavoro resta misurabile sul suo event loop.
+Nella ripetizione la mediana dei P95 per secondo dell'API durante ricerca scende
+22,34 → 12,77 ms; non è un P95 globale.
+
+**B — Regressione rispetto a P1B.1:** la ricerca resta aperta. P95 full-text
+inline/isolato: 207,99/215,10 ms, poi 255,00/222,11 ms. Non c'è una riduzione
+riproducibile in entrambe le coppie. Il riferimento P1B.1 raccolto in P2C è
+180,41 ms sul testo e 194,06 ms sul bibliografico; B1 isolato bibliografico
+registra 264,82 ms. Sono carichi drenati differenti: P1B.1 indicizzava 330 documenti
+durante il probe testo, contro 1.424 e 1.312 nei due probe B1 isolati. La parità
+sotto contesa equivalente non è dimostrata; non si dichiarano percentili storici
+causalmente equivalenti né una regressione interamente imputabile al thread HTTP.
+
+Nella prima coppia bibliografica la CPU API durante ricerca scende dal 92,84%
+al 28,52% di un core, ma la media HTTP OpenSearch sale 75,74 → 105,10 ms;
+indicizzazione/refresh/merge osservati nella finestra OpenSearch passano da
+4,323/2,897/0 s a 9,040/5,175/2,760 s, su finestre di 13,142 e 16,242 s e lavoro
+differente. Nella coppia testo ripetuta OpenSearch usa circa quattro core medi
+in entrambe le prove e la media HTTP passa 93,33 → 88,00 ms, mentre CPU API
+81,29% → 30,60%. Il campionamento PG non osserva connessioni bloccate in queste
+finestre. L'evidenza indica la latenza esterna OpenSearch come limite residuo
+rilevante; non prova saturazione dell'intero host, né esclude attese PG brevi,
+GC o altri effetti condivisi.
+
+Il percorso critico end-to-end rimane catalogo corrente/storico con full-text:
+ultimo commit canonico / fine corrente / fine storico / fine testo, in secondi
+dall'accodamento:
+
+| Profilo | Canonico | Corrente | Storico | Testo |
+|---|---:|---:|---:|---:|
+| inline-b1 | 65.640 | 192.357 | 192.426 | 196.885 |
+| isolated-b1 | 63.003 | 178.517 | 178.610 | 179.385 |
+| isolated-b2 | 71.536 | 180.309 | 180.370 | 182.326 |
+
+B2 dimezza i bulk senza accorciare questo percorso nella prova operativa.
+La configurazione raccomandata è **API isolata, batch 16, preparazione 1,
+pubblicazione 1**, con budget invariati. B2 resta un'opzione esplicita per contesti
+senza priorità interattiva; questa campagna non giustifica promuoverlo a default.
+Il prossimo approfondimento è profilare la contesa search/indexing OpenSearch e
+il costo SQL delle richieste a carico osservato, prima di proporre tuning.
+Nessun intervento ulteriore è implementato; nessuna evidenza autorizza anticipare
+parallelismo fra ZIP o riscrittura canonica.
+
+**P2D completata, con regressione residua della ricerca. P2 complessiva aperta.**
+L'isolamento del ruolo, il recupero, l'integrità e il costo end-to-end sono verificati;
+non è attestata la risoluzione di tutte le latenze interattive rispetto a P1B.1.
+
+### Riproduzione P2D
+
+```sh
+# Una sola build prima dei benchmark; conservare il dist P2A di riferimento.
+docker build -f infra/Dockerfile --target api -t palimora-p2d-api .
+RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p2d-new-b1 \
+ RELEASE_IMAGE=palimora-p2d-api P0_SCENARIO=B \
+ BENCH_PROJECTION_MODE=isolated \
+ BENCH_NODE_OPTIONS=--require=/app/scripts/performance-p2d.cjs \
+ P2D_DIAGNOSTICS=1 P2C_EVENT_LOOP=1 \
+ P2C_REFERENCE_DIST=/percorso/privato/p2a/apps/api/dist \
+ PROJECTION_TEXT_BATCH=16 PROJECTION_TEXT_PUBLISH_LANES=1 \
+ ./scripts/benchmark-p2c.sh
+# Controllo: BENCH_PROJECTION_MODE=inline. B2: batch 64 / publish 2.
+python3 scripts/summarize-p2d.py /mnt/sdb/palimora-p2d-new-b1
+# C riusa benchmark-p2c-latency.sh, con fixture P2C B1 fermata e root nuova.
+# Stessi flag di modalità/strumentazione sopra; impostare P2C_SOURCE/P2C_ROOT/P2C_IMAGE.
+# Bibliografia: BENCH_LATENCY_TEXT_ONLY=0, BENCH_REGENERATE_HISTORY=1,
+# BENCH_REQUIRE_BIBLIOGRAPHY_BACKLOG=1. Testo: rispettivamente 1, 0, 0.
+# P2D_ROLE_TESTS=1 e P2C_RECOVERY=1 aggiungono le regressioni dopo il timer,
+# con P2C_REFERENCE_DIST impostato; mai contro dati o container di produzione.
+```
+
+Il report JSON conserva configurazioni, immagine, checksum dei sorgenti runtime,
+radici delle evidenze, code per endpoint e limiti della strumentazione. Le fixture
+private restano sul disco; tutti i container e le reti temporanee sono rimossi.

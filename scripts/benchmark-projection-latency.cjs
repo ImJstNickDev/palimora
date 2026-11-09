@@ -21,14 +21,21 @@ const queues = async () =>
       "SELECT (SELECT count(*)::int FROM catalog_pending) catalog,(SELECT count(*)::int FROM catalog_snapshot_pending) historical,(SELECT count(*)::int FROM catalog_text_pending) text",
     )
   ).rows[0];
-let child;
+let child, postgresSampler;
 (async () => {
   assert.ok(Object.values(await queues()).every((n) => n === 0));
+  if (process.env.P2D_DIAGNOSTICS === "1")
+    postgresSampler = spawn(
+      process.execPath,
+      ["scripts/performance-postgres.cjs"],
+      { stdio: "ignore" },
+    );
   const fd = fs.openSync("/results/latency-api.log", "w");
   child = spawn(process.execPath, ["apps/api/dist/main.js"], {
     stdio: ["ignore", fd, fd],
     env: {
       ...process.env,
+      PGAPPNAME: "palimora-api",
       ...(process.env.P2C_LATENCY_PROFILE
         ? { P0_PROFILE: process.env.P2C_LATENCY_PROFILE }
         : {}),
@@ -126,6 +133,14 @@ let child;
     process.exitCode = 1;
   })
   .finally(async () => {
+    if (
+      postgresSampler &&
+      postgresSampler.exitCode === null &&
+      postgresSampler.signalCode === null
+    ) {
+      postgresSampler.kill("SIGTERM");
+      await once(postgresSampler, "exit");
+    }
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
       const timeout = setTimeout(() => child.kill("SIGKILL"), 15000);

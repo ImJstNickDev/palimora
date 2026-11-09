@@ -15,7 +15,11 @@ function launch(name, file) {
     process.execPath,
     ["--require", "/app/scripts/performance-profiler.cjs", file],
     {
-      env: { ...process.env, P0_PROFILE: "/results/" + name + "-profile.json" },
+      env: {
+        ...process.env,
+        P0_PROFILE: "/results/" + name + "-profile.json",
+        PGAPPNAME: name === "worker" ? "palimora-ingest" : "palimora-api",
+      },
       stdio: ["ignore", fd, fd],
     },
   );
@@ -45,6 +49,12 @@ function launch(name, file) {
     stdio: "ignore",
   });
   children.push(sampler);
+  if (process.env.P2D_DIAGNOSTICS === "1")
+    children.push(
+      spawn(process.execPath, ["scripts/performance-postgres.cjs"], {
+        stdio: "ignore",
+      }),
+    );
   launch("api", "apps/api/dist/main.js");
   launch("worker", "apps/api/dist/ingest-worker.js");
   let ready = false;
@@ -112,6 +122,7 @@ function launch(name, file) {
         works_per_second: 11032 / seconds,
         last: timeline.at(-1),
         configuration: {
+          projection_mode: process.env.PROJECTION_MODE ?? "inline",
           parsers: process.env.INGEST_PARSER_WORKERS,
           commits: process.env.INGEST_COMMIT_CONCURRENCY,
         },

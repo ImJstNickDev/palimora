@@ -1,5 +1,6 @@
 import { recordRequest, startOperations } from "./operations-metrics";
 import { startProjections } from "./operations-index";
+import { projectionMode } from "./projection-mode";
 import { backupDownload } from "./backup-download";
 import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { closePdf } from "./reader-pdf";
@@ -218,6 +219,7 @@ const projectionLifecycle = { beforeApplicationShutdown: async () => {} };
 })
 class AppModule {}
 export async function start() {
+  const projections = projectionMode();
   validateConfig();
   await migrate();
   const app = await NestFactory.create(AppModule, {
@@ -291,7 +293,10 @@ export async function start() {
   startPersonalWorker();
   const stopOperations = startOperations();
   app.enableShutdownHooks();
-  const stopProjections = startProjections(projectCatalog, projectText);
+  const stopProjections =
+    projections === "inline"
+      ? startProjections(projectCatalog, projectText)
+      : async () => {};
   projectionLifecycle.beforeApplicationShutdown = stopProjections;
   const cleanup = setInterval(() => {
     void pool

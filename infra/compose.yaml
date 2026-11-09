@@ -73,6 +73,8 @@ services:
       DB_HOST: postgres
       DB_PASSWORD_FILE: /run/secrets/database
       AUTH_KEY_FILE: /run/secrets/auth
+      PROJECTION_MODE: ${API_PROJECTION_MODE:-isolated}
+      PGAPPNAME: palimora-api
       PROJECTION_CATALOG_BATCH: ${PROJECTION_CATALOG_BATCH:-20}
       PROJECTION_HISTORICAL_BATCH: ${PROJECTION_HISTORICAL_BATCH:-20}
       PROJECTION_TEXT_BATCH: ${PROJECTION_TEXT_BATCH:-16}
@@ -128,6 +130,63 @@ services:
     stop_grace_period: 30s
     mem_limit: ${API_MEMORY:-1536m}
     cpus: ${API_CPUS:-2}
+    logging: *logging
+  projection:
+    build: { context: .., dockerfile: infra/Dockerfile, target: api }
+    command: [node, apps/api/dist/projection-worker.js]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?Set HTTPS origin}
+      DB_HOST: postgres
+      DB_PASSWORD_FILE: /run/secrets/database
+      AUTH_KEY_FILE: /run/secrets/auth
+      PROJECTION_MODE: isolated
+      PGAPPNAME: palimora-projection
+      PROJECTION_CATALOG_BATCH: ${PROJECTION_CATALOG_BATCH:-20}
+      PROJECTION_HISTORICAL_BATCH: ${PROJECTION_HISTORICAL_BATCH:-20}
+      PROJECTION_TEXT_BATCH: ${PROJECTION_TEXT_BATCH:-16}
+      PROJECTION_TEXT_PREPARE_LANES: ${PROJECTION_TEXT_PREPARE_LANES:-1}
+      PROJECTION_TEXT_PUBLISH_LANES: ${PROJECTION_TEXT_PUBLISH_LANES:-1}
+      PROJECTION_TEXT_GROUPS: ${PROJECTION_TEXT_GROUPS:-8}
+      PROJECTION_TEXT_DOCUMENTS: ${PROJECTION_TEXT_DOCUMENTS:-256}
+      PROJECTION_TEXT_NDJSON_MIB: ${PROJECTION_TEXT_NDJSON_MIB:-384}
+      PROJECTION_TEXT_MEMORY_MIB: ${PROJECTION_TEXT_MEMORY_MIB:-448}
+      PROJECTION_TEXT_RENEW_MS: ${PROJECTION_TEXT_RENEW_MS:-60000}
+      PROJECTION_TEXT_OVERLAP: ${PROJECTION_TEXT_OVERLAP:-1}
+      PROJECTION_CONCURRENCY: ${PROJECTION_CONCURRENCY:-2}
+      PROJECTION_BUDGET_MS: ${PROJECTION_BUDGET_MS:-100}
+      PROJECTION_IDLE_MS: ${PROJECTION_IDLE_MS:-1000}
+      PROJECTION_TEXT_HIGH_WATER: ${PROJECTION_TEXT_HIGH_WATER:-2048}
+    volumes:
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/database
+        target: /run/secrets/database
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/auth
+        target: /run/secrets/auth
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/storage
+        target: /storage
+        read_only: true
+        bind: { create_host_path: false }
+    networks: [app]
+    depends_on:
+      api: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: ${PROJECTION_STOP_GRACE:-60s}
+    mem_limit: ${PROJECTION_MEMORY:-1536m}
+    cpus: ${PROJECTION_CPUS:-2}
     logging: *logging
   ingest:
     build: { context: .., dockerfile: infra/Dockerfile, target: api }

@@ -17,8 +17,8 @@ chmod 777 "$root/results"
 sampler=''
 cleanup() {
  if [[ -n "$sampler" ]]; then kill "$sampler" 2>/dev/null || true; wait "$sampler" || true; fi
- docker stop -t 30 "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
- docker rm -f "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
+ docker stop -t 30 "$name-projection" "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
+ docker rm -f "$name-projection" "$name-worker" "$name-pg" "$name-search" "$name-redis" >/dev/null 2>&1 || true
  docker network rm "$name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -52,7 +52,8 @@ docker run -d --name "$name-worker" --network "$name" --label palimora.test=true
  -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e UV_THREADPOOL_SIZE=8 \
  -e PROJECTION_TEXT_BATCH=${PROJECTION_TEXT_BATCH:-16} \
  -e PROJECTION_TEXT_PREPARE_LANES=1 -e PROJECTION_TEXT_PUBLISH_LANES=${PROJECTION_TEXT_PUBLISH_LANES:-1} \
- -e NODE_OPTIONS=--require=/app/scripts/performance-p2c.cjs \
+ -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:---require=/app/scripts/performance-p2c.cjs}" \
+ -e PROJECTION_MODE=${BENCH_PROJECTION_MODE:-inline} -e P2D_DIAGNOSTICS=${P2D_DIAGNOSTICS:-0} \
  -e P2C_EVENT_LOOP=${P2C_EVENT_LOOP:-0} \
  -e P2C_LATENCY_PROFILE=/results/latency-api-profile.json -e P2C_HTTP_QUEUES=1 -e P2C_IDLE_SECONDS=30 \
  -e BENCH_LATENCY_WORKS=${BENCH_LATENCY_WORKS:-5000} \
@@ -62,10 +63,18 @@ docker run -d --name "$name-worker" --network "$name" --label palimora.test=true
  "$image" sleep infinity >/dev/null
 printf '%s\n' "$name" > "$root/name"
 docker image inspect --format '{{.Id}}' "$image" > "$root/results/image-id.txt"
-python3 scripts/benchmark-resources.py "$root/results/latency-resources.jsonl" "$name-worker" "$name-pg" "$name-search" "$name-redis" & sampler=$!
+projection_containers=()
+if [[ "${BENCH_PROJECTION_MODE:-inline}" == isolated ]]; then
+ python3 scripts/p2d-projection-container.py "$root" create latency-projection-profile
+ projection_containers+=("$name-projection")
+fi
+python3 scripts/benchmark-resources.py "$root/results/latency-resources.jsonl" "$name-worker" "$name-pg" "$name-search" "$name-redis" "${projection_containers[@]}" & sampler=$!
+if [[ "${#projection_containers[@]}" != 0 ]]; then python3 scripts/p2d-projection-container.py "$root" start; fi
 docker exec "$name-worker" node scripts/benchmark-projection-latency.cjs > "$root/results/latency.log" 2>&1
+if [[ "${#projection_containers[@]}" != 0 ]]; then python3 scripts/p2d-projection-container.py "$root" stop; fi
 kill "$sampler"; wait "$sampler"; sampler=''
 python3 scripts/summarize-resources.py "$root/results"
+if [[ "${P2D_ROLE_TESTS:-0}" == 1 ]]; then ./scripts/verify-projection-role.sh "$root"; fi
 # Optional critical regressions, strictly after the timed latency/resource probe.
 if [[ "${P2C_RECOVERY:-0}" == 1 ]]; then
  : "${P2C_REFERENCE_DIST:?Set the compiled P2A reference for final equivalence}"

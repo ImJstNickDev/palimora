@@ -51,10 +51,10 @@ def intervals(events, kinds):
         state[k]+=delta;previous=t
     return dict(durations)
 
-def campaign(root):
+def campaign(root, projection_label=None, extra_profiles=()):
     result={'timing':read(root,'end-to-end.json'), 'verification':read(root,'verification.json'),
         'equivalence':read(root,'p2c-equivalence.json'), 'integration':read(root,'integration.json')}
-    scenario=result['timing']['scenario']; label='api-profile' if scenario=='B' else 'projection-profile'
+    scenario=result['timing']['scenario']; label=projection_label or ('api-profile' if scenario=='B' else 'projection-profile')
     profile=read(root,label+'.json')['totals']; bib=read(root,label+'-bibliography.json')
     events=lines(root/(label+'-p2c-events.jsonl'))
     text=[e for e in events if e['kind']=='bulk_pass']
@@ -78,6 +78,10 @@ def campaign(root):
     result['client_queries_api_and_worker']=sum(v['calls'] for k,v in profile.items() if '.sql.' in k)+(sum(v['calls'] for k,v in worker['totals'].items() if '.sql.' in k) if worker else 0)
     result['profile_process_cpu_seconds']={label:sum(read(root,label+'.json')['cpu'].values())/1e6}
     if worker: result['profile_process_cpu_seconds']['worker-profile']=sum(worker['cpu'].values())/1e6
+    for extra in extra_profiles:
+        item=read(root,extra+'.json')
+        result['client_queries_api_and_worker']+=sum(v['calls'] for k,v in item['totals'].items() if '.sql.' in k)
+        result['profile_process_cpu_seconds'][extra]=sum(item['cpu'].values())/1e6
     all_events=events+lines(root/'worker-profile-p2c-events.jsonl')
     result['productive_stage_overlap_seconds']=intervals(all_events, {'current','historical','text','canonical_commit'})
     result['productive_stage_spans']={}

@@ -230,8 +230,45 @@ da lock condiviso e lease persistenti impediscono la rimozione dei pack in uso.
 
 ### Motore di consultazione
 
-L'API proietta in batch le code catalogo/full-text PostgreSQL; non richiede un
-nuovo servizio. OpenSearch è una dipendenza healthy dell'API, con heap 1 GiB e
+Il ruolo `projection` usa la stessa immagine API con comando
+`node apps/api/dist/projection-worker.js`: esegue soltanto i motori esistenti di
+catalogo corrente, viste storiche e full-text. Non ascolta HTTP e non possiede
+nuove code. PostgreSQL resta l'autorità; scheduler, advisory lock, claim/lease,
+revisioni esterne e ACK sono condivisi con il percorso inline.
+
+`PROJECTION_MODE` ammette soltanto `inline` e `isolated`; senza variabile il
+processo API mantiene il comportamento inline dei deployment precedenti.
+Compose imposta esplicitamente `isolated` nell'API tramite `API_PROJECTION_MODE`
+e nel worker. Il worker dedicato rifiuta una modalità diversa da `isolated`.
+L'API isolata conserva endpoint amministrativi, metriche e operazioni di lettura,
+ma non avvia lo scheduler. Le notifiche e gli altri compiti API/ingest non vengono
+spostati. Il collector include il servizio `projection` nella propria allowlist.
+
+Il worker dipende da API healthy (migrazioni completate), PostgreSQL e OpenSearch
+healthy; verifica inoltre schema/checksum e disponibilità OpenSearch al proprio
+avvio, anche se lanciato senza API. Usa solo la rete interna `app`, nessuna porta,
+PackStore e secret in sola lettura, root filesystem read-only, `/tmp` temporaneo,
+capability rimosse e no-new-privileges. `PROJECTION_CPUS` e `PROJECTION_MEMORY`
+(default 2 CPU e 1536m) sono quote del nuovo container; non riducono automaticamente
+quelle API. Le prove P2D non applicano quote a nessun container.
+
+SIGTERM/SIGINT fermano nuovi batch, attendono la transazione catalogo in corso e
+la chiusura controllata del full-text, poi chiudono il pool. Compose concede
+`PROJECTION_STOP_GRACE` (default 60s), con restart `unless-stopped`; SIGKILL
+recupera attraverso le code e i lease esistenti. Errori transitori PostgreSQL
+sono gestiti dallo scheduler esistente; perdita del leader interrompe il passaggio
+e impedisce al vecchio proprietario di aggiornare lo stato operativo del nuovo.
+Due worker accidentali contendono gli stessi lock, non creano nuove lane logiche.
+
+Passaggio operativo: riavviare l'API con `API_PROJECTION_MODE=isolated`, attendere
+la salute, quindi avviare `projection`. Per rollback fermare prima `projection`
+e ricreare soltanto l'API con `API_PROJECTION_MODE=inline`; mantenere fermo il
+servizio dedicato durante il rollback. Una breve sovrapposizione durante il
+passaggio resta protetta dai lock. Nessuna cancellazione/reinizializzazione delle
+code è necessaria. L'indisponibilità del worker ritarda le nuove proiezioni senza
+fermare l'API o invalidare le letture già disponibili.
+
+OpenSearch è una dipendenza healthy dell'API, con heap 1 GiB e
 limite container 3 GiB nel Compose principale. Conserva esclusivamente indici
 ricostruibili nel bind mount dedicato. Chromium e font DejaVu/Noto (anche CJK) nell'immagine API
 servono alla stampa PDF senza rete. Config/cache Chromium usano directory temporanee
@@ -252,10 +289,10 @@ in pausa, in retry o con lock occupato. `PROJECTION_TEXT_HIGH_WATER`
 accumulato raggiunge la soglia; lo storico continua. Possibile superamento di
 al massimo un batch corrente; la coda canonica resta persistita. La concorrenza
 limitata riserva connessioni del pool alle richieste interattive.
-SIGTERM e chiusura API fermano nuovi batch e attendono quelli in corso; un kill
-forzato recupera dalle code SQL. Il confine transazionale PUT/ACK e la verifica generation
-restano invariati; enqueue da head/disponibilità e da catalogo a full-text
-attendono il lock pending del consumatore prima di coalescere una modifica. Valori non validi impediscono l'avvio dello scheduler.
+SIGTERM e chiusura del processo che ospita le proiezioni fermano nuovi batch e
+attendono quelli in corso. Il full-text usa claim persistenti e HTTP bulk fuori
+dalla propria transazione SQL; lease, fencing e ACK condizionati preservano le
+invalidazioni concorrenti. Valori non validi impediscono l'avvio dello scheduler.
 Misure e limiti P1A in [11](11-performance-overhaul.md); corpus di release in 09.
 
 Il container API include [Typst 0.15.1](https://github.com/typst/typst/releases/tag/v0.15.1)
@@ -273,7 +310,7 @@ Gli altri endpoint mantengono il limite di 32 KiB.
 
 ### Web Push e consegne personali
 
-Il consumatore delle notifiche gira con le proiezioni API; la consegna Web Push
+Il consumatore delle notifiche rimane nel processo API; la consegna Web Push
 gira nel worker ingest/sync esistente, unico dei due con rete `egress`.
 `push_deliveries` conserva generazione, tentativi e prossima esecuzione in
 PostgreSQL; advisory lock coordinano repliche e revoche. Backoff e `Retry-After`,

@@ -4075,28 +4075,56 @@ principale; per il dettaglio SQL avviare soltanto il PostgreSQL della fixture.
 Evidenze private `/mnt/sdb/palimora-p3-final-p4-*-final/results/`; immagini e
 hash del codice runtime registrati nel JSON.
 
-## P5 — valutazione di scala e readiness (9 novembre 2026)
+## P5 — conclusione tecnica e readiness (9 novembre 2026)
 
-**NO-GO, P5 incompleta.** La valutazione e i criteri operativi sono in
-[12-first-ingest-readiness](12-first-ingest-readiness.md); inventario, quote e
-risultati puntuali in [performance-p5-final.json](performance-p5-final.json).
-Non è stato avviato alcun ingest massivo o deployment.
+**P5 tecnicamente conclusa; primo ingest reale NO-GO.** Le prove e il piano
+operativo sono in [12-first-ingest-readiness](12-first-ingest-readiness.md);
+[performance-p5-final.json](performance-p5-final.json) conserva la prima
+valutazione incompleta e aggiunge le evidenze conclusive. Nessun ingest massivo
+o deployment è stato avviato.
 
-Il campione P4 era il più piccolo dei 139 ZIP. Il campionamento di sei central
-directory rivela anche 2,3 milioni di TXT/HTML in un solo ZIP; cardinalità globale,
-sovrapposizioni e costo degli SQLite non sono ancora sufficientemente misurati.
-Il modello di sensibilità separa pack, snapshot, capitoli, testo indicizzato,
-WAL, code, cache SQLite, manutenzione e backup. Il volume dati disponibile non
-copre gli scenari proposti. I deficit sono condizionati alle ipotesi, non misure
-dello spazio esatto richiesto dall'archivio.
+L'inventario dei soli metadati copre 139 ZIP e 30.408.133 membri. La nuova fixture
+contiene 968 membri reali da sette archivi, 240 righe SQLite e 60 tag, più casi
+sintetici di revisione/media; un controllo supplementare importa 64 righe CSV.
+Non si confondono membri, revisioni, metadati e identità uniche.
 
-Il controllo con quote aggiunge evidenza sul piccolo corpus ma non dimostra
-throughput sostenuto, recovery con backlog prolungato o correttezza dell'ingest
-eterogeneo. Le prove precedenti non vengono riclassificate come P5. Non si
-promuove una configurazione definitiva né si dichiara raggiunto il target 2.000/s.
+Il rischio RAM è corretto con admission prima dell'apertura e barriera esclusiva
+per ZIP oltre 100.000 membri/16 MiB di directory. Sul massimo reale da 2.308.264
+membri, il vero adapter definitivo misura 2.286.088 KiB RSS con quota 6 GiB;
+quota 3 GiB rifiutata prima dell'allocazione. Restano il parser ZIP standard,
+ZIP64/CRC/resume e lo stesso formato canonico/Zstd 3. Nessun membro saltato.
 
-Riepilogo: **P0** diagnosi/baseline completata; **P1** storage e ingest completati;
-**P2** proiezioni/ricerca completate, facet paralleli sempre 0; **P3** indipendenza
-e backpressure completate; **P4** percorso canonico completato con confronto
-alternato; **P5** verifica di scala ancora incompleta, decisione operativa NO-GO.
-Il Performance Overhaul P0–P5 non è dichiarato concluso.
+Il profilo quattro sorgenti, sei parser, quattro commit, pool 12, gruppi 256,
+I/O 8, throughput-first è confermato con worker 4 CPU/6 GiB, PostgreSQL 2 CPU/2 GiB,
+OpenSearch 2 CPU/3 GiB e projection 2 CPU/1,5 GiB. Una campagna bounded acquisisce
+70.000 identità sintetiche distinte in 135,352 s: **517,17 opere/s, 4,740 GiB/h**,
+comprese le interruzioni. Sono misure del sintetico, non una promessa per il dump.
+La mediana degli intervalli attivi scende da 870 a 717 opere/s: non si estrapola
+il picco iniziale. Il target 2.000 opere/s non è raggiunto.
+
+OpenSearch e projection fermi: 70.010 job correnti e 70.000 storici durevoli;
+SIGTERM, SIGKILL nella transazione e pausa disco simulata superati. Drenaggio
+314,311 s senza nuovo ingest, code vuote. Verificati 379.320 oggetti dopo
+decompressione, tutte le identità sintetiche/contenuti e 71.207 documenti con
+generazioni corrispondenti. Backup full e restore separato riusciti: oggetti,
+versioni, provenienza, segreto cifrato, derivati e lettura da tre client.
+Test mirato multisorgente sul codice finale include crash nel seal dei pack.
+
+Il modello ricalibrato separa formati, costi fissi, SQL/associazioni/capitoli,
+media, indici, cache metadata, WAL, backlog, manutenzione e backup. Il nucleo
+persistente condizionato ai campioni è circa 4,1–7,1 TiB, già oltre il volume
+configurato. I budget con manutenzione e margine restano scenari, non fabbisogni
+fisici esatti; le cardinalità SQLite e le sovrapposizioni restano incerte. Le
+previsioni temporali sono sensibilità esplicite, non rate minimi garantiti.
+
+Il preflight distingue esito statico da autorizzazione, budget per componente,
+device condivisi e blocker di memoria/capacità/configurazione. Restano necessari
+espansione/layout approvato, quote applicate dall'operatore, destinazione backup
+e restore sul supporto definitivo, verifiche sanità/connessioni e autorizzazione
+esplicita all'avvio. Il NO-GO operativo non riapre una milestone software.
+
+Riepilogo: **P0** diagnosi/baseline; **P1** storage e ingest; **P2** proiezioni e
+ricerca, facet paralleli 0; **P3** indipendenza e backpressure; **P4** percorso
+canonico con confronto alternato; **P5** scala bounded, recovery, restore e
+readiness: tutte tecnicamente concluse. **Performance Overhaul P0–P5 concluso.**
+Nessun vero ingest viene avviato automaticamente, indipendentemente dalle prove.

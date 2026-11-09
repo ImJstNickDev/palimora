@@ -18,6 +18,7 @@ export async function scheduleSources<T extends { path: string }>(
     source: T,
     budget: ReturnType<typeof sourceBudgets>[number],
   ) => Promise<void>,
+  exclusive: (source: T) => boolean = () => false,
 ) {
   async function zipGroup(group: T[]) {
     let next = 0;
@@ -43,7 +44,7 @@ export async function scheduleSources<T extends { path: string }>(
   }
   let group: T[] = [];
   for (const source of sources) {
-    if (source.path.endsWith(".zip")) group.push(source);
+    if (source.path.endsWith(".zip") && !exclusive(source)) group.push(source);
     else {
       await zipGroup(group);
       group = [];

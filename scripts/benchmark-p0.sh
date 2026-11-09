@@ -24,7 +24,7 @@ trap cleanup EXIT
 # Optional P5 quotas apply only to these newly created fixture containers.
 quota_pg=(); quota_worker=(); quota_search=(); quota_redis=()
 if [[ "${BENCH_QUOTAS:-0}" == 1 ]]; then
- quota_pg=(--cpus 2 --memory 2g); quota_worker=(--cpus 4 --memory 3g)
+ quota_pg=(--cpus 2 --memory 2g); quota_worker=(--cpus 4 --memory "${BENCH_WORKER_MEMORY:-3g}")
  quota_search=(--cpus 2 --memory 3g); quota_redis=(--cpus 0.5 --memory 256m)
 fi
 network_args=()
@@ -70,6 +70,11 @@ run_measure() {
 docker exec "$release_name-pg" psql -U postgres -d palimora_release_test -c 'CREATE EXTENSION pg_stat_statements' >/dev/null
 docker exec "$release_name-worker" node -e 'require("./apps/api/dist/db").migrate().then(()=>require("./apps/api/dist/db").pool.end())'
 docker exec "$release_name-worker" node scripts/performance-snapshot.cjs before
+if [[ "${BENCH_SETUP_ONLY:-0}" == 1 ]]; then
+ python3 scripts/p2d-projection-container.py "$release_root" create projection-profile
+ docker update --cpus 2 --memory 1536m --memory-swap 1536m "$release_name-projection" >/dev/null
+ exit 0
+fi
 if [[ "${P0_SCENARIO:-A}" == B ]]; then
  projection_containers=()
  if [[ "${BENCH_PROJECTION_MODE:-inline}" == isolated ]]; then

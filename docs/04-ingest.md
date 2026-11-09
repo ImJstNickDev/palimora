@@ -361,7 +361,7 @@ delle scritture PackStore, SHA-256, compressione, fsync e ACK dopo commit. Lo
 staging PackStore dei gruppi già ammessi può aggiungersi alle prenotazioni adapter:
 la soglia osservata arresta la produzione, non interrompe una transazione già
 in corso. Dimensionare quindi la riserva con margine per questi gruppi e per gli
-altri processi; P5 deve validare il margine sul carico sostenuto.
+altri processi; la verifica P5 con quote e i suoi limiti sono documentati in [12](12-first-ingest-readiness.md).
 
 ### Percorso canonico P4
 
@@ -393,11 +393,27 @@ del lease. I commit usano ancora client indipendenti e il controllo periodico
 di cancellazione resta separato. Questo evita di chiedere un secondo client
 al pool da 12 per letture che la connessione della corsia può già eseguire.
 
-### Gate prima dell'importazione massiva
+### ZIP grandi e gate prima dell'importazione massiva
 
-La [valutazione P5](12-first-ingest-readiness.md) è **NO-GO**: i parametri P4
-non costituiscono ancora un profilo definitivo per tutti i ZIP. Eseguire il
-preflight documentato, dimensionare volume di lavoro e backup separatamente,
-verificare le central directory dei ZIP grandi rispetto alla memoria aggregata.
-Il campione di 11.032 opere non valida throughput sostenuto o costo globale degli
-indici SQLite. Le modalità e i budget predefiniti non sono modificati da P5.
+P5 introduce admission sulla central directory prima di aprire i contenuti.
+Il probe CPython legge gli end record ZIP/ZIP64: oltre 100.000 membri o 16 MiB
+di directory, la sorgente è una barriera esclusiva nello scheduler, come SQLite.
+Conserva tutti i parser/commit del profilo, ma nessun altro ZIP rimane aperto.
+Oltre 3 milioni di membri, 512 MiB di directory o con quota cgroup inferiore a
+6 GiB per un ZIP grande, il batch si sospende per capacità. Non è una lacuna
+`corrupt_source` e non viene avanzato il checkpoint per saltare membri.
+
+L'allocazione di `ZipFile` è protetta temporaneamente da `RLIMIT_AS`: 384 MiB
+per directory piccole, 3 GiB per grandi; il limite precedente viene ripristinato.
+MemoryError/errno 12 diventa `INGEST_CAPACITY`. Il parser standard continua a
+verificare ZIP64, nomi, duplicati, offset e CRC. Directory sconosciute o corrotte
+sono ammesse esclusivamente al parser standard per la normale classificazione.
+Il resume riparte dai checkpoint durabili, senza cambiare formato canonico.
+
+La [valutazione P5](12-first-ingest-readiness.md) è tecnicamente conclusa, ma
+l'ingest reale resta **NO-GO** sul layout attuale. Profilo verificato: quattro
+sorgenti piccole concorrenti, sei parser, quattro commit, worker 4 CPU/6 GiB,
+throughput-first, Zstd 3, backlog 8 GiB, staging 4 GiB, riserva 8 GiB per device.
+I default conservativi restano invariati: nessun override di produzione viene
+applicato automaticamente. Eseguire il preflight per componenti e completare i
+gate capacità/layout/backup e i controlli operatore prima di selezionare il dump.

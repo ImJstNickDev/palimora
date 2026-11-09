@@ -15,7 +15,7 @@ with open('/results/processes.jsonl', 'w') as out:
             try:
                 command = open(directory+'/cmdline', 'rb').read().replace(b'\0', b' ')
                 kind = ('api' if b'apps/api/dist/main.js' in command else
-                        'ingest' if b'apps/api/dist/ingest-worker.js' in command else
+                        'ingest' if b'apps/api/dist/ingest-worker.js' in command or b'scripts/p5-ingest-child.cjs' in command else
                         'python' if b'ao3.py' in command or b'multiprocessing.spawn' in command else None)
                 if kind is None:
                     continue

@@ -1,240 +1,482 @@
 # 12 — Readiness della prima acquisizione massiva
 
-Valutazione P5 del 9 novembre 2026, riferimento `7f0f41f02cf6833b6886d7637896069231437504`.
-**NO-GO. P5 non completata; Performance Overhaul P0–P5 non dichiarato concluso.**
-Non è stato effettuato deployment né ingest massivo. Il report macchina è
-[performance-p5-final.json](performance-p5-final.json). Un NO-GO di capacità
-non costituisce una verifica positiva dei criteri di stabilità ancora mancanti.
+Valutazione conclusiva P5, 9 novembre 2026; base `a6a07d2d918a89ab5a4a6a56764c93827712cf15`.
+**P5 tecnicamente conclusa. Primo ingest reale: NO-GO.** Le prove isolate sono
+concluse; capacità, layout, configurazione definitiva e destinazione backup
+richiedono ancora l'intervento dell'operatore. Nessun deployment o ingest massivo
+è stato eseguito. Il [report macchina](performance-p5-final.json) conserva
+integralmente la prima valutazione in `previous_assessment`; `completion` contiene
+le nuove evidenze. I vecchi 2.865 / 5.637 / 12.205 GiB erano sensibilità ipotetiche,
+non requisiti fisici dimostrati, e non sono il modello operativo corrente.
 
-## Workload verificato
+## Sorgenti e rappresentatività
 
-Inventario tramite stat, senza scansione dei contenuti: 139 ZIP, 853,081 GiB;
-3 SQLite, 53,770 GiB; 10 `.part`, 16,820 GiB. Presenti anche sidecar SQLite.
-Gli incompleti restano esclusi; gli SQLite rappresentano metadati, dipendenze e
-possibili sovrapposizioni, non altri 54 GiB di nuovi testi.
+Inventario: 139 ZIP, **853,081 GiB**, tre SQLite **53,770 GiB**, dieci `.part`
+esclusi. Letti gli end record ZIP/ZIP64 e le central directory dei 139 ZIP,
+**30.408.133 membri**, senza decomprimere il dump. Questa scansione dei soli
+metadati serve a pesare i formati; non è una verifica CRC di tutti i contenuti.
 
-Dimensioni ZIP min/p25/mediana/p75/p90/max: 0,213 / 1,997 / 4,075 / 8,662 /
-15,781 / 34,775 GiB. Letta la central directory di sei ZIP a questi quantili.
-Il riferimento P4 è **il più piccolo**. I quattro campioni intermedi contengono
-77.364–429.980 EPUB; il maggiore contiene 2.097.044 TXT e 211.219 HTML,
-89,666 GiB decompressi esterni. Questi byte non equivalgono ai byte interni EPUB.
+| Formato / dimensione esterna del membro | Membri | GiB compressi nei ZIP |
+|---|---:|---:|
+| EPUB <16 KiB | 13.821.360 | 106,113 |
+| EPUB 16–128 KiB | 7.539.151 | 297,020 |
+| EPUB 128 KiB–1 MiB | 1.158.651 | 287,877 |
+| EPUB ≥1 MiB | 24.754 | 39,987 |
+| TXT | 7.633.006 | 109,475 |
+| HTML | 230.791 | 3,694 |
+| CSV | 5 | 0,287 |
 
-`sample-p5-zip.py` legge al massimo dieci membri e 64 MiB per ZIP, verifica CRC
-ed esamina le directory interne EPUB. Si esegue con sorgente montata `readonly`,
-rete disabilitata, 1 CPU / 3 GiB RAM; non importa né estrae permanentemente opere.
-La selezione primi/ultimi/più grandi è intenzionale, non casuale né pesata.
-Non determina cardinalità globale, dedup, distribuzione dei capitoli, conflitti,
-CRC dei membri non letti o copertura CSV. Lo schema dei tre SQLite è riconosciuto;
-non è stato misurato il costo di costruzione dei loro indici derivati.
+Directory, log, TSV e altri membri spiegano la parte restante; la dimensione
+fisica ZIP include anche directory e framing. **Membri ≠ opere uniche.** I GiB
+esterni EPUB non sono i GiB del testo decompresso all'interno degli EPUB.
 
-**Rischio memoria:** `run_zip` usa `ZipFile.infolist()`: la memoria della central
-directory cresce col numero di membri, prima delle finestre bounded di parsing.
-Il maggiore ZIP ha 2.308.264 membri. Non trasferire automaticamente la quota del
-piccolo campione a quattro ZIP grandi contemporanei. Occorre misurare il massimo
-aggregato e imporre un budget compatibile prima di promuovere il profilo.
+Campionati sette archivi: `queue73`, `queue100`, `queue03`, `queue22`,
+`ao3_old_files_part17`, `pic_stories`, `login`. Reservoir per classe di dimensione
+con seed fisso, più quattro EPUB estremi per sorgente. Totale **968 membri reali,
+250.372.738 byte decompressi esterni**, importati solo da ZIP ricostruiti nella
+fixture privata. I due campionamenti hanno limiti individuali di 1 GiB, 1.800
+membri, 900 s; escludono dal campione membri oltre 24 MiB e non estraggono ZIP
+completi. I loro manifest con locator e hash restano privati.
 
-## Configurazione candidata, non definitiva
+Dai tre SQLite: 240 righe metadata/stories e 60 tag, selezionate in cinque finestre
+bounded di rowid. Dipendenze assenti nella fixture restano lacune esplicite;
+nessun ZIP originale è montato nel worker di benchmark. Il limite superiore
+osservato dei rowid è 22.249.303 / 17.656.566 per le due `ao3_metadata`, 7.973.784
+per `metadata_full_old`, 357.812 per `stories`. Sono **limiti di righe**, non
+conteggi esatti o opere uniche. Il planner della deduped riporta 16.390.750 righe,
+ma la statistica può essere vecchia. Il massimo ID dei tag è sparso e non viene
+usato come cardinalità.
 
-P4: throughput-first, 4 sorgenti, 6 parser totali, 4 commit, pool PostgreSQL 12,
-gruppi 256, I/O 8, Zstd 3, projection isolata, facet paralleli 0. Confronto P5
-limitato: A quattro sorgenti; B due sorgenti con gli altri parametri invariati;
-C ripetizione a due sorgenti. Nessuna ricerca esaustiva o tuning P95/PIT/facet.
+Un caso sintetico aggiuntivo contiene un'opera, due versioni, 256 capitoli per
+versione e un media da 1 MiB. Le fixture reali comprendono media, metadati incompleti,
+14.102 revisioni di capitolo oltre alle 512 del caso sintetico e sovrapposizioni:
+968 membri producono 966 identità reali. Il totale prima del carico sostenuto è
+**1.207 opere, 1.210 snapshot, 29.320 oggetti**.
 
-Quote della fixture: worker (include API di prova) 4 CPU / 3 GiB; PostgreSQL
-2 CPU / 2 GiB; OpenSearch 2 CPU / 3 GiB, heap 1 GiB; projection 2 CPU /
-1,5 GiB; Redis 0,5 CPU / 256 MiB. Limiti CPU condivisi, non core riservati.
-Host KVM, 14 CPU logiche, 62 GiB RAM; inizialmente circa 24 GiB disponibili.
-Non sono state modificate quote o configurazioni di altri servizi.
+Supplemento CSV: 64 righe complete riserializzate da un prefisso bounded di 2 MiB
+in `gap_filled.zip`, 53.166 byte di CSV nella fixture. Import canonico in un terzo
+database isolato: 64 opere/snapshot, 193 oggetti verificati, staging vuoto e 64 documenti derivati con ID/generazioni
+corrispondenti e code drenate.
+Non verifica il CRC dell'intero membro originale. Il pack e la dimensione per
+riga entrano soltanto nella sensibilità CSV; nessun throughput sostenuto è dedotto. L'opera reale più lunga campionata ha 1.630 capitoli.
 
-Backlog 8 GiB, staging adapter 4 GiB e riserve per mount 8 GiB restano attivi.
-La riserva di arresto di 8 GiB **non** sostituisce il dimensionamento completo.
-Non applicare questi valori in produzione come configurazione P5 approvata.
+Il campione non è un campione probabilistico dell'intero dump: solo sette archivi
+forniscono contenuti, gli estremi sono sovracampionati, i TXT/HTML provengono da
+un archivio, i media da due sorgenti mirate, i tag e i metadati SQLite da poche
+finestre. Non misura dedup globale, ogni conflitto possibile, ogni dipendenza,
+né la coda oltre 24 MiB. I risultati non sono intervalli statistici.
 
-## Capacità: scenari di sensibilità
+## Memoria dei grandi ZIP e configurazione verificata
 
-Il conteggio globale di identità, revisioni e capitoli è ignoto. Le seguenti sono
-**ipotesi di pianificazione**, non intervalli statistici o una previsione validata.
-La quantità aggiuntiva dipende da queste ipotesi. Non si usa il rapporto fra
-filesystem inizializzato e ZIP P4.
+Tre processi freschi, sul ZIP da **2.308.264 membri**, con memoria campionata:
 
-Modello: pack = 853,081 GiB × rapporto; PostgreSQL = 16 GiB fissi + 12.000 byte
-per snapshot + 8.000 per capitolo; ricerca = 16 GiB + byte testo × amplificazione.
-Il costo SQL P4 è circa 39 kB/opera con 2,08 capitoli/opera: la separazione dei
-coefficienti non è identificabile con quel solo campione; quelli qui scelti sono
-assunzioni, da ricalibrare su scala. Media pesanti possono aumentare pack senza
-far crescere proporzionalmente SQL. Revisioni ripetute aumentano provenienza e
-snapshot, ma non necessariamente tutti i contenuti. Nessuno sconto dedup globale
-viene assunto sul volume pack.
+| Percorso | RSS massimo KiB | Tempo s |
+|---|---:|---:|
+| Apertura `ZipFile`, nessun campionamento | 2.271.744 | 23,376 |
+| Adapter precedente, solo inventory e EOF sull'ACK | 2.292.488 | 24,076 |
+| Adapter definitivo, quota 6 GiB, stesso percorso | 2.286.088 | 24,240 |
 
-| Componente GiB | Favorevole | Centrale | Prudente |
+Il vecchio picco del sampler, circa 2,49 GiB, includeva più archivi e strutture
+aggiuntive. Quattro directory del massimo osservato richiederebbero già circa
+**8,7 GiB RSS**, prima di Node e parser: la quota da 3 GiB non era sicura.
+
+La correzione conserva il parser ZIP standard. Il probe legge soltanto gli end
+record CPython, compreso ZIP64. Oltre **100.000 membri o 16 MiB di central
+directory**, una sorgente diventa una barriera esclusiva: nessun altro ZIP è
+aperto contemporaneamente; i sei parser e quattro commit restano disponibili.
+Oltre 3 milioni di membri o 512 MiB di directory, oppure con quota cgroup sotto
+6 GiB per un ZIP grande, l'ingest si sospende per capacità. Non salta membri.
+Durante l'allocazione della directory `RLIMIT_AS` limita il processo a 384 MiB
+per un ZIP piccolo o 3 GiB per uno grande; poi viene ripristinato. MemoryError
+è pressione di capacità, non una sorgente corrotta. Il massimo reale passa con
+6 GiB; con 3 GiB il nuovo adapter rifiuta prima dell'allocazione, senza OOM.
+
+Quattro directory piccole hanno dunque un tetto aggregato di allocazione di
+1,5 GiB; una grande di 3 GiB. I parser usano `spawn` e non ereditano la directory.
+Il working set massimo della fixture eterogenea è 1.447 MiB per il worker:
+la quota 6 GiB lascia margine per la directory esclusiva, Node e finestre bounded.
+Questo non garantisce l'elaborazione di qualunque ZIP ostile o opera arbitraria:
+fuori dall'inviluppo validato la risposta è pausa/errore esplicito, mai perdita
+silenziosa. La prova sul ZIP da 2,3 milioni è di inventory, non il suo ingest.
+
+Profilo candidato definitivo **verificato in isolamento**, da applicare solo
+dopo i gate operativi:
+
+```dotenv
+INGEST_PRESSURE_MODE=throughput-first
+INGEST_SOURCE_CONCURRENCY=4
+INGEST_PARSER_WORKERS=6
+INGEST_COMMIT_CONCURRENCY=4
+INGEST_GROUP_RECORDS=256
+INGEST_IO_THREADS=8
+INGEST_CPUS=4
+INGEST_MEMORY=6g
+POSTGRES_CPUS=2
+POSTGRES_MEMORY=2g
+SEARCH_CPUS=2
+SEARCH_MEMORY=3g
+SEARCH_HEAP=1g
+API_PROJECTION_MODE=isolated
+PROJECTION_CPUS=2
+PROJECTION_MEMORY=1536m
+ARCHIVE_ZSTD_LEVEL=3
+INGEST_BACKLOG_GIB=8
+INGEST_STAGING_GIB=4
+INGEST_DISK_RESERVE_GIB=8
+```
+
+Pool PostgreSQL 12 per processo; `UV_THREADPOOL_SIZE=8` deriva da
+`INGEST_IO_THREADS` nell'avvio Compose. `SEARCH_PARALLEL_FACETS=0` invariato.
+Nessun tuning PostgreSQL globale: fsync/checksum/conservazione intatti. La fixture
+abilita soltanto statistiche PostgreSQL pertinenti. Redis: 0,5 CPU / 256 MiB.
+Host rilevato: 14 CPU logiche, circa 62 GiB RAM, circa 24 GiB disponibili all'avvio.
+Le quote CPU sono limiti condivisi, non core riservati; lasciare margine agli altri
+servizi e all'API. Nessuna quota di altri progetti è stata modificata.
+
+Il confronto breve precedente rimane valido e non è stato ripetuto: quattro
+sorgenti **227,83 opere/s**, due **219,81**, ripetizione a due **215,90**. Si conserva
+il profilo a quattro sorgenti; l'esclusività dei ZIP grandi è una protezione di
+memoria. I risultati P4 senza quote e quelli P5 non sono una nuova campagna A/B.
+
+## Throughput, stabilità e recovery
+
+Una campagna bounded, con database, rete e storage privati: **70.000 identità e
+contenuti TXT sintetici distinti**, 688.498.798 byte raw, ZIP per 191.357.584 byte.
+Quattro sorgenti, quote sopra, projection e OpenSearch fermi durante il canonico.
+Il contenuto sintetico non è una replica deduplicata dei testi del campione.
+
+Canonico **135,352 s**, inclusi arresti/riprese e pausa disco: **517,17 opere/s e
+capitoli/s**, **4,740 GiB sorgenti/ora**. Campionamento SQL ogni 5 s per **500,23 s**,
+risorse ogni secondo anche durante verifica. Non è una prova di ore o un rate
+garantito del dump. Il target 2.000/s non è raggiunto.
+
+Intervalli attivi iniziali 15–35 s: mediana 870,23 opere/s; ultimi 105–130 s:
+716,94 opere/s, circa **18% meno**. Non si afferma assenza di degrado né si usa il
+picco iniziale per la previsione. Circa 185,43 CPU-s worker nella finestra canonica
+campionata, 2,65 ms/opera; le pause sono incluse nel tempo wall. Attesa pool osservata
+1.929,8 ms su 874 acquisizioni, massimo 137,1 ms e tre client in attesa; l'ultimo
+intervallo del processo ucciso può mancare. Nessuna crescita RAM monotona o OOM
+osservata; la durata limitata non prova assenza di leak su giorni.
+
+| Picchi campionati della campagna sostenuta | Worker | PostgreSQL | OpenSearch | Projection |
+|---|---:|---:|---:|---:|
+| CPU, % di una CPU | 391,4 | 204,0 | 201,8 | 133,9 |
+| Working set MiB | 778,8 | 768,6 | 1.767,7 | 355,0 |
+| Memoria inclusa cache MiB | 1.202,5 | 1.688,5 | 2.358,2 | 367,5 |
+| Scritture massime MiB/s, intervalli 1 s | 44,6 | 144,0 | 110,8 | 0,06 |
+
+I picchi per servizio non sono necessariamente simultanei. Nella fixture reale
+il worker raggiunge 1.447 MiB working set. Lo staging sintetico nominato raggiunge
+**42.692.290 byte**, poi torna vuoto; la quota resta 4 GiB. Il pack finale contiene
+763.999.190 byte di oggetti compressi, oltre al framing dei pack.
+
+Recovery effettivi: SIGTERM dopo 6.144 nuove opere; SIGKILL dentro una transazione
+SQL dopo 28.416; pressione disco iniettata dopo 47.872, 17 s di pausa, conteggio
+canonico fermo per dieci secondi dopo l'assestamento, arresto durante la pausa e
+ripresa dopo rimozione dell'iniezione. Non è stato riempito alcun filesystem.
+Il test mirato multisorgente sul codice finale verifica inoltre crash nel seal,
+versioni sovrapposte, dedup e checkpoint; le suite P0–P4 non sono state ripetute.
+
+Il canonico completa con OpenSearch spento e **70.010 job correnti + 70.000
+storici**, superando la vecchia soglia di 65.536. Backlog mantenuto ulteriori
+30 s dopo il canonico. L'indisponibilità copre almeno **165,35 s**, più arresto e
+riavvio del servizio. Code fisiche 14.139.392 byte alla fine del canonico;
+massimo osservato durante drenaggio **17.907.712 byte**, full-text fino a 480 job.
+Non è una prova di occupazione effettiva di 8 GiB: quello è il limite operativo.
+
+Ripristino OpenSearch e projection: drenaggio **314,311 s**, senza nuovo ingest,
+code finali zero. WAL generato circa **826 MiB** durante il canonico, **1.277 MiB**
+fino al drenaggio; massimo WAL trattenuto **1.008 MiB**. Non sono byte equivalenti.
+La campagna/cluster registra due checkpoint temporizzati e sei richiesti; il
+contatore include le precedenti fixture e il restore e non è attribuito tutto
+al sintetico. Le tre code registrano 10–11 autovacuum. `VACUUM (ANALYZE)` impiega
+0,031 s e riduce le loro relazioni da 17.907.712 a 8.159.232 byte, zero tuple morte
+stimate. Non è un `VACUUM FULL`, né una misura esatta del bloat interno.
+
+## Integrità, backup e lettura
+
+Verifica finale: **379.320 oggetti**, decompressione e SHA-256; 70.000 manifest
+sintetici confrontati con il contenuto della propria identità originale;
+**71.207 opere, 71.210 snapshot, 84.614 revisioni di capitolo**. Tutti gli ID e le
+generazioni SQL corrispondono ai 71.207 documenti OpenSearch, code vuote.
+Replay del campione EPUB piccolo: zero nuove opere/snapshot/oggetti. Seconda
+versione del caso da 256 capitoli: quattro nuovi oggetti, contro 262 iniziali.
+Nessuno sconto di dedup globale viene dedotto da questi casi.
+
+Backup **full reale**, manifest e checksum verificati, 300.142.995 byte;
+57,57 s per la fase che comprende anche la verifica preventiva degli oggetti.
+Restore in database e storage nuovi: **47,61 s**, più circa **81,08 s** per
+ricostruire i derivati. Ripristinati 29.320 oggetti, 1.207 opere e 1.210 snapshot;
+firme delle tabelle canoniche identiche e segreto cifrato decifrabile con la
+chiave conservata nella configurazione del backup. Dieci job pendenti prima del
+backup diventano 1.207 lavori di ricostruzione; tutti drenati su OpenSearch separato.
+Tutti i **968 hash delle sorgenti reali** sono verificati nella provenienza
+anche dopo restore. Manifest e contenuti privati non sono pubblicati.
+
+Tre client concorrenti, ciascuno legge entrambe le versioni storiche: sei letture
+sull'originale e sei sul restore, zero errori, contenuti identici tra client e tra
+istanze. È il percorso reale `readerContent` con tre connessioni; non una nuova
+misura HTTP/P95. La prova HTTP precedente rimane nel report storico.
+
+## Modello di capacità ricalibrato
+
+Il report conserva per categoria byte sorgente compressi e decompressi, opere,
+snapshot, capitoli, oggetti, pack, crescita SQL, CPU e durata. I costi fissi sono
+separati: database iniziale 12.659.859 byte. Il rapporto tra filesystem totale e
+ZIP di una fixture non viene utilizzato.
+
+Formula: pack e ricerca pesati per **byte compressi del rispettivo formato**;
+PostgreSQL per **membro/record** della medesima classe. Gli EPUB usano min / campione
+principale / max dei due gruppi osservati. TXT e HTML hanno coefficienti propri.
+La classe ≥1 MiB usa il campione estremo: non è una stima senza bias della sua media.
+Gli indici OpenSearch sono stati ricostruiti separatamente per categoria, con
+refresh/flush, stessi mapping e una replica zero. Le differenze fra successive
+misure di un indice in merge possono essere negative e **non** sono coefficienti.
+
+Coefficienti pack/compressed osservati: EPUB piccoli 1,659–1,717; medi
+1,235–1,245; grandi 1,097–1,115; estremi 0,931–1,055; TXT 2,296; HTML 1,484.
+Crescita SQL completa per record: EPUB piccoli 24–37 kB, medi 33–51 kB,
+grandi 95–125 kB, estremi 193–374 kB; TXT 30 kB, HTML 37 kB.
+I piccoli indici di categoria includono overhead di segmenti: non si assume che
+questa amplificazione resti identica su milioni di documenti.
+
+La decomposizione SQL misurata è nel JSON: heap/indici/TOAST per tabella e oggetti
+per tipo. Tra i costi dominanti: documenti 11,0 MB, filtri e associazioni tag
+8,83 MB ciascuno, registro oggetti 5,62 MB; capitoli, revisioni e collegamenti agli
+snapshot sono contabilizzati separatamente. Media: 52,16 MB raw / 50,56 MB pack;
+HTML dei capitoli: 481,98 MB raw / 185,48 MB pack. Non si inventa una regressione
+indipendente per opera, snapshot, capitolo e byte: i coefficienti sono correlati
+in questo campione. I conteggi e i costi delle relative tabelle restano verificabili.
+
+Per SQLite si usa il limite di **48.237.465 righe** (non identità) ricavato dai
+rowid. Scenario favorevole: metadati su identità già presenti, solo crescita SQL
+canonica e nessun nuovo documento corrente. Centrale/prudente: crescita completa
+misurata per record, come se ogni riga aggiungesse anche una nuova proiezione;
+questa è un'assunzione conservativa, **non** una previsione di unicità. Nessuno
+sconto sui pack per sovrapposizioni ignote. Il costo molto alto delle associazioni
+bibliografiche nel piccolo campione deduped può sovrastimare la crescita a regime.
+
+Cache SQLite derivata: misurata con `metadata_index.indexed_rows` su fixture,
+1,05–1,37 kB logici/record metadata, 1,64–2,18 kB fisici nei piccoli file;
+`stories` 57/341 byte. Ne derivano 59–91 GiB, con overhead delle pagine dichiarato,
+anziché il precedente budget arbitrario di 128 GiB. La cache non sostituisce la
+provenienza canonica e non richiede modifiche agli SQLite originali.
+
+CSV: 53.166 byte / 64 righe nel prefisso campionato suggeriscono circa 1,04 milioni
+di righe se la stessa dimensione media valesse per i cinque CSV: **non è un
+conteggio**. Pack misurato 216.193 byte; proiezioni stimate con i coefficienti
+metadata SQLite min / principale / max come proxy esplicito: circa 3,3 GiB pack,
+13–94 GiB SQL e 2–8 GiB ricerca, già inclusi nella tabella. I log/altri artefatti
+non tipizzati hanno invece riserva pari ai byte raw (7,7 GiB), senza assumere
+compressione. La precisione di questi formati resta inferiore a quella degli EPUB.
+
+| Componente, GiB aggiuntivi | Favorevole | Centrale | Prudente |
 |---|---:|---:|---:|
-| Snapshot ipotizzati (milioni) | 15 | 30 | 50 |
-| Capitoli ipotizzati (milioni) | 25 | 60 | 150 |
-| PackStore (rapporto 1,2 / 1,8 / 3) | 1.024 | 1.536 | 2.559 |
-| PostgreSQL heap/indici/TOAST | 370 | 798 | 1.692 |
-| OpenSearch e translog | 466 | 1.456 | 4.216 |
-| WAL trattenuto, budget | 32 | 64 | 128 |
-| Code durevoli | 8 | 8 | 8 |
+| PackStore | 1.297 | 1.305 | 1.316 |
+| PostgreSQL heap/indici/TOAST | 1.172 | 3.546 | 3.643 |
+| OpenSearch store, replica zero | 1.737 | 2.193 | 2.278 |
+| Translog, budget operativo | 8 | 8 | 8 |
+| Cache metadata derivata | 59 | 91 | 91 |
+| WAL trattenuto, budget operativo | 16 | 16 | 16 |
+| Backlog | 8 | 8 | 8 |
 | Staging e temporanei | 8 | 8 | 8 |
-| Cache derivata SQLite, budget | 128 | 128 | 128 |
-| Manutenzione/merge/compattazione | 256 | 512 | 1.024 |
-| **Totale con margine 25%** | **2.865** | **5.637** | **12.205** |
+| Artefatti minori non tipizzati: byte raw | 8 | 8 | 8 |
+| Manutenzione: una riscrittura del componente maggiore | 1.737 | 3.546 | 3.643 |
+| Margine operativo 25% | 1.512 | 2.682 | 2.754 |
+| **Budget di lavoro** | 7.561 | 13.411 | 13.772 |
+| Una copia full di backup, ulteriore destinazione | 2.776 | 5.454 | 5.575 |
+| Restore simultaneo su destinazione separata | 7.561 | 13.411 | 13.772 |
 
-Spazio disponibile rilevato su `/mnt/sdb`: circa **1.552 GiB**. Deficit nei tre
-scenari: **1.312 / 4.085 / 10.652 GiB**. Per coprire lo scenario prudente servono
-quindi circa **10,4 TiB aggiuntivi** sul volume di lavoro, esclusi backup/restore.
-Non è una misura della necessità effettiva; nessuno dei tre scenari giustifica GO
-sul disco attuale. Non si assume cleanup di directory preesistenti per colmare il
-deficit. Il dump originale occupa altri 923,67 GiB su filesystem separato e resta
-read-only; non va ricopiato nel volume di lavoro.
+Questi sono **scenari condizionati**, non intervalli statistici, minimi fisici o
+una richiesta di acquisto già dimostrata. Il nucleo pack+SQL+search è circa
+**4,1–7,1 TiB**. Il totale prudente 13,45 TiB include una riscrittura integrale del
+componente maggiore e margine; la manutenzione globale simultanea di tutti i
+componenti non è coperta. Una procedura di manutenzione più limitata può cambiare
+quel budget, ma deve essere dichiarata prima dell'avvio, senza affidarsi a cleanup
+futuri per far entrare il nucleo dei dati.
 
-WAL generato cumulativo non è WAL trattenuto: slot, archiviazione bloccata e
-transazioni lunghe possono superare qualunque budget qui indicato. Monitorare
-entrambi e fermare l'acquisizione se la retention cresce senza limite.
+I 16 GiB WAL e 8 GiB translog sono **budget operativi**, non limiti imposti dal
+motore. Slot/archiviazione fermi o transazioni lunghe richiedono pausa prima di
+superarli e controllo della retention. Il backlog fisico non comprende tutti i
+byte dei pack già canonici: quelli sono già nella riga PackStore.
+Backup: rapporto full misurato 0,899 circa rispetto a pack+DB, poi margine 25%;
+la distribuzione SQL globale può cambiarlo. Export canonico non compresso è
+un'altra operazione e va dimensionato sui byte raw, non sui pack. Originali,
+backup e restore non sono spazio riutilizzabile del volume attivo.
 
-Backup completo e restore vanno su destinazioni separate: prenotare provvisoriamente
-almeno un ulteriore totale di lavoro per ciascuna destinazione e misurare cattura,
-volumi e restore prima di approvare. Gli export canonici possono contenere byte
-non compressi: il peso dei pack da solo non dimensiona un export. Verificare marker,
-device, permessi, chiave auth e leggibilità dei volumi come in [08](08-backup-export.md).
-Nessuna destinazione o prova restore definitiva viene attestata da questa valutazione.
+### Filesystem e layout proposti
 
-## Tempo
+I valori aggiornati dopo cleanup e i deficit esatti sono nel JSON. Ordini di
+grandezza: `/mnt/sdb` **1.547,78 GiB (1,512 TiB)**, `/mnt/teratron_data`
+**2.822,46 GiB (2,756 TiB)** liberi;
+`/` circa **264 GiB**, separato e non destinato all'archivio. Il dump e sidecar
+preesistenti occupano circa 923,67 GiB sul volume sorgenti e restano read-only.
 
-Non esiste ancora una misura sostenuta rappresentativa dell'intero dump.
-Sensibilità esplicita del **solo canonico ZIP**: 20 / 12 / 6 GiB sorgenti/ora
-implicherebbero circa **43 / 71 / 142 ore** per 853 GiB. Sono rate ipotizzati,
-non rate P5 garantiti. Non applicarli ai 54 GiB SQLite o ai `.part`.
+1. **Layout attuale, tutti i dati su `/mnt/sdb`: NO-GO.** Mancano circa
+   **6.021 / 11.871 / 12.232 GiB** rispetto ai tre budget di lavoro più riserva di arresto, oltre alle
+   destinazioni backup/restore. Anche il nucleo persistente favorevole non entra.
+2. **Proposta separata, da approvare:** PackStore, staging e cache su
+   `/mnt/teratron_data`; PostgreSQL, WAL, code e OpenSearch su `/mnt/sdb`.
+   Pack+cache+temporanei con margine 25% e riserva 8 GiB richiedono circa
+   **1.713 / 1.763 / 1.777 GiB** sul primo volume, compatibili con il libero
+   misurato. Il resto richiede ancora circa **5.864 / 11.664 / 12.011 GiB** sul
+   volume SQL/search, quindi un'espansione di circa **4.316–10.463 GiB** lì.
+   Non si somma il libero dei due device. Condividere il dispositivo dei dump
+   introduce contesa I/O non misurata e richiede mount/permessi corretti.
+3. **Espansione/storage dedicato:** pianificare il budget scelto per ogni device,
+   più una destinazione backup e spazio restore approvati. Nessuno spostamento,
+   nuovo bind o modifica del layout di produzione è stato eseguito.
 
-Per il downstream, ipotizzare rispettivamente 10 / 20 / 35 milioni di opere
-uniche a 70 / 50 / 25 opere/s dà circa **40 / 111 / 389 ore**. I processi si
-sovrappongono: non sommare automaticamente tempi canonico, catalogo e full-text.
-Aggiungendo contesa, SQLite, versioni e recuperi, finestre esplorative end-to-end
-sono **2–4 / 5–10 / 17–30 giorni**, non una previsione operativa validata.
-Catalogazione storica e indicizzazione di testi lunghi richiedono misure separate:
-questi intervalli non attestano il loro throughput a decine di milioni di record.
+## Tempo: misure e limiti della previsione
 
-## Preflight e avvio riservato all'operatore
+| Categoria reale | GiB sorgenti/ora misurati | Note |
+|---|---:|---|
+| EPUB piccoli | 2,39 principale; 0,27 media | 192 / 16 membri |
+| EPUB medi | 8,63; 1,46 | 192 / 16 |
+| EPUB grandi | 37,60; 10,65 | 192 / 16 |
+| EPUB estremi | 47,55; 52,55 | 16 / 8, selezione intenzionale |
+| TXT | 3,52 | 160 membri |
+| HTML | 3,75 | 160 membri |
+| SQLite metadata-only | 57–115 righe/s | 60 / 120 righe, startup incluso |
+
+Sono piccoli ingest reali seriali con quote, non rate sostenuti per classe.
+Il sintetico sostenuto misura 4,740 GiB/h e non sostituisce questi formati.
+Il replay reale piccolo dura 1,127 s e crea zero snapshot: non è throughput di
+nuove acquisizioni. Su grandi ZIP l'apertura aggiunge fino a 24 s misurati e la
+barriera esclusiva riduce il parallelismo tra sorgenti; resta il parallelismo
+interno. I testi lunghi rallentano soprattutto la proiezione.
+
+Applicare letteralmente i costi seriali per byte alle distribuzioni dà, nei tre
+scenari, circa **119 / 119 / 660 ore canoniche ZIP** e **299 / 300 / 1.785 ore
+per le proiezioni ZIP**. SQLite, al limite di righe assunto e ai piccoli rate
+misurati, aggiungerebbe circa **213 ore canoniche**. La scansione/costruzione della
+cache su 54 GiB, l'overlap tra identità e il costo a regime dei tag non sono
+misurati integralmente: **questi valori sono sensitività, non una previsione
+attendibile di durata totale**. In particolare, estrapolare lo startup di 16
+opere a milioni di opere rende lo scenario prudente temporale molto largo.
+
+Le finestre condizionate sono quindi dell'ordine di **due settimane** nel caso
+favorevole, **più settimane** nel centrale e **oltre due mesi** nella sensibilità
+prudente; non costituiscono una scadenza o un minimo garantito di throughput.
+Non c'è un tasso minimo del dump sostenuto dalle prove. Canonico, catalogo e
+full-text lavorano in parallelo: il tempo fino al drenaggio dipende dal massimo
+del lavoro residuo dei due stadi e dalle dipendenze, non dalla somma ingenua delle
+ore sopra. Il rate downstream sintetico osservato è circa **223 opere/s**;
+il corpus lungo reale è molto più costoso. Non si promette quel rate sul dump.
+
+## Preflight, backup e avvio dell'operatore
+
+`preflight-first-ingest.py` v2 legge Compose e filesystem senza mutazioni. Ogni
+componente dichiara GiB aggiuntivi e bind effettivo; percorsi sullo stesso
+`st_dev` sommano i budget una sola volta e usano una sola riserva, pari al massimo
+dichiarato su quel device. Non somma filesystem indipendenti. Servono componenti
+`pack`, `postgres`, `search`, `wal`, `backlog`, `staging`, `metadata_cache`,
+`maintenance`, `backup`, `restore`. Un componente può avere budget zero solo se
+la sua assenza/condivisione è motivata nel piano operativo.
+
+Esempio della struttura del piano, da completare con **tutti** i componenti e
+percorsi approvati (non è un piano eseguibile completo):
+
+```json
+{
+  "components": [
+    {"component":"pack","service":"ingest","target":"/storage","required_gib":1313.2},
+    {"component":"postgres","service":"postgres","target":"/var/lib/postgresql/data","required_gib":3548.6},
+    {"component":"backup","path":"/destinazione-backup-approvata","required_gib":5466}
+  ],
+  "reserves":[{"path":"/volume-dati-approvato","gib":8}]
+}
+```
+
+Budget di manutenzione e margine vanno allocati ai device interessati, non persi
+nel totale. Componenti core devono riferire il servizio corretto e un bind
+scrivibile realmente presente in Compose; backup/restore possono indicare
+percorsi esterni esistenti. Il preflight non crea directory.
 
 ```sh
 python3 scripts/preflight-first-ingest.py --env-file .env \
-  --compose infra/compose.yaml --required-gib 12205
+  --compose infra/compose.yaml --capacity-plan /percorso/plan.json \
+  --technical-evidence docs/performance-p5-final.json
 ```
 
-Output JSON, exit 2 per NO-GO. Il comando legge Compose senza stampare segreti,
-controlla bind, sorgenti read-only, quote, budget e spazio per device (non somma
-due volte lo stesso filesystem). Non crea directory, utenti, backup o batch.
-È un gate statico: le verifiche manuali obbligatorie restano elencate e non
-vengono trasformate in PASS. Un esito NO-GO non deve essere ignorato perché
-Compose è sintatticamente valido. Il modello assume un volume dati condiviso;
-con filesystem separati serve un budget per ciascun componente.
+`static_result=GO` ed exit 0 significano soltanto controlli statici superati.
+`decision=NO-GO`, `operational_authorized=false` e controlli manuali obbligatori
+rimangono finché l'operatore non li completa. Exit 2 segnala fallimento statico.
+I blocker sono separati in software, memoria, capacità, configurazione/backup.
+Il vecchio `--required-gib` non può più attestare un layout multivolume. Nessun
+segreto viene letto o stampato: si controllano mount, presenza e leggibilità.
 
-Prima di ogni avvio: completare prove P5 mancanti; ricalibrare capacità e quote;
-verificare mount effettivi/UID, PG/Redis/OpenSearch sani, heartbeat projection,
-assenza ingest concorrenti o selezioni automatiche, connessioni disponibili,
-WAL/slot e restore su fixture. Eseguire backup completo verificato dello stato
-iniziale; solo l'operatore autorizza e avvia il batch dal pannello `/admin/ingest`.
-Selezionare esplicitamente sorgenti e dipendenze; conservare report lacune.
+Nel checkout di questa valutazione `.env` non è presente: la prova CLI effettiva
+restituisce NO-GO di configurazione, senza esporre segreti. Non si dichiara
+validata una configurazione definitiva assente. I test isolati verificano anche
+il caso `static_result=GO`, che mantiene l'autorizzazione operativa negata.
 
-Durante l'import registrare throughput per intervallo, opere/capitoli, checkpoint,
-byte code correnti/storiche/testo, età del più vecchio job, WAL generato/trattenuto,
-spazio e inode per mount, staging/prenotazioni, RSS/OOM, I/O, checkpoint PG,
-autovacuum e dimensioni heap/indici/TOAST. Il campionamento non deve esporre testi.
+Prima dell'avvio, l'operatore deve:
 
-Pausa tramite gestione ingest; attendere commit/checkpoint. Per arresto servizi
-usare SIGTERM e periodo di grazia, evitando SIGKILL operativo. Riprendere lo stesso
-batch dopo aver verificato dipendenze e capacità; non resettare checkpoint/code.
-Un OpenSearch indisponibile non richiede fermare immediatamente il canonico se i
-budget sono sicuri, ma richiede controllo della crescita delle code. Dopo il
-ripristino verificare code vuote, documenti/generazioni e lettura dei contenuti.
+1. Preparare la configurazione definitiva, scegliere capacità e layout, approvarli e predisporre i bind senza modificare
+   gli originali. Ricontrollare identità dei device, UID, inode, quote filesystem,
+   read-only dei dump e i mount `/capacity/*`, inclusi eventuali WAL/tablespace.
+2. Applicare il profilo 6 GiB solo dopo verifica del margine RAM/CPU dell'host;
+   controllare PostgreSQL/Redis/OpenSearch, connessioni disponibili rispetto ai
+   pool dei processi, heartbeat projection, assenza di altri batch ingest e di
+   selezioni automatiche concorrenti.
+3. Approvare destinazione backup, device/marker, capacità e credenziali; conservare
+   la chiave auth con permessi corretti. Eseguire backup iniziale e restore di
+   una fixture sulla **destinazione definitiva**, seguendo [08](08-backup-export.md).
+   La prova isolata qui riuscita non attesta il supporto fisico definitivo.
+4. Archiviare preflight, piano e verbale dei controlli manuali. Solo l'operatore
+   autorizza e seleziona il batch in `/admin/ingest`, con dipendenze esplicite,
+   `.part` esclusi e report lacune conservato. Il preflight non avvia nulla.
 
-Abort/pausa obbligatoria: checksum o riferimenti incoerenti, parser_blocked,
-OOM ripetuto, mount sparito, riserva raggiunta, staging saturo, WAL non bounded,
-backlog oltre budget o crescita incompatibile con lo spazio residuo. Conservare
-log e fixture; nessuna cancellazione automatica di storico o sorgenti per ripartire.
+Durante l'import: registrare intervalli di opere/capitoli/s e GiB sorgenti/h,
+RSS/working set/OOM, staging, byte ed età delle tre code, WAL generato e trattenuto,
+heap/indici/TOAST, checkpoint/autovacuum, translog/merge, spazio e inode per device.
+Usare SIGTERM e grace period; attendere commit/checkpoint, riprendere lo stesso
+batch. Non resettare checkpoint o code. OpenSearch assente consente il canonico
+entro budget; al ripristino controllare code, ID/generazioni e lettura storica.
 
-## Evidenze ancora necessarie
+Pausa/abort: hash incoerenti, riferimenti mancanti, parser bloccato, OOM, mount
+sparito, capacità non leggibile, riserva raggiunta, staging saturo, WAL/translog
+oltre budget o crescita del backlog incompatibile con il libero. Conservare i
+log e ripristinare capacità/servizi prima del resume; nessuna cancellazione di
+versioni, fsync o controlli per guadagnare velocità.
 
-La prova breve con quote non sostituisce una prova sostenuta: mancano una campagna
-lunga con identità distinte, indisponibilità prolungata OpenSearch, recovery con
-backlog grande e pausa disco, misure di autovacuum/bloat, ingest delle fixture
-eterogenee con conflitti e verifica del backup/restore sul profilo definitivo.
-Le prove P3/P4 restano evidenze storiche, non vengono ribattezzate come prove P5.
-Fino alla loro chiusura, P5 resta incompleta anche con più disco disponibile.
+## Riproduzione e stato finale
 
-Il campionamento bounded ha effettivamente letto **60 membri / circa 106 MiB**
-(vedere byte esatti nel JSON). Il processo ha raggiunto **2.611.612 KiB di RSS**
-nel campione con 2,3 milioni di membri, con quota 3 GiB. È un picco del sampler
-sequenziale, non una misura del worker: include strutture di selezione e memoria
-trattenuta dai campioni precedenti. Conferma comunque che 3 GiB non sono un
-budget validato per quattro central directory grandi più parser/Node. Il conteggio
-per filename `chapter` non misura i capitoli FanFicFare, riconosciuti anche dalla
-classe HTML: i conteggi reali restano da rilevare con l'adapter.
+Le fixture sono private sotto una root nuova `palimora-p5-completion-*`;
+`p5-workload.py` misura end record, directory e adapter in processi freschi;
+`prepare-p5-fixture.py` e `prepare-p5-synthetic.py` preparano i soli campioni.
+Per l'inventory montare gli originali `readonly`, rete disabilitata, quota 6 GiB;
+nel worker montare **solo** la fixture. Il launcher `benchmark-p0.sh` con
+`BENCH_SETUP_ONLY=1`, `BENCH_QUOTAS=1`, `BENCH_WORKER_MEMORY=6g`, `RELEASE_KEEP=1`,
+`P0_PARSERS=6`, `P0_COMMITS=4`, modalità throughput-first e quattro sorgenti crea
+soltanto l'ambiente isolato. Richiede ancora il riferimento P4 per la propria
+guardia: può essere un symlink read-only al campione preesistente; il controller
+P5 lo esclude dalla selezione. Scegliere una subnet libera della sola fixture.
 
-Riproduzione del confronto breve con directory nuove e tre subnet libere:
+`run-p5-campaign.py ROOT/run` orchestra campagne, outage e restore; i comandi
+`p5-verify.cjs`, `p5-components.cjs` e `summarize-p5-completion.py ROOT` producono
+le verifiche e gli aggregati. Limiti: un'ora di campagna e 12 GiB per
+DB+pack+staging, oltre ai temporanei backup/search monitorati separatamente.
+Il controller iniziale aveva timeout troppo corto per la verifica backup: corretto
+il timeout e ripresa la stessa campagna, senza ripetere le categorie. Un errore nella diagnostica CSV (campo `kind` omesso nella lettura degli oggetti)
+è stato corretto e la sola verifica ripetuta, senza reingest. Il suo handler ha
+sovrascritto il report dettagliato del controller: l'aggregato completo già
+salvato, i log temporali e le verifiche immutabili conservano le misure; ora i
+report CSV sono separati. Non era corruzione dei pack. La misura
+separata degli indici ha ridotto le richieste a un documento e gestito i 429 del
+circuit breaker; questa diagnostica non è una misura di throughput del worker.
 
-```sh
-AO3_DUMP_ROOT=/mnt/sdb/palimora-p3a-fixture \
- RELEASE_IMAGE=palimora-p4-promote \
- P5_BENCH_PREFIX=/mnt/sdb/palimora-p3-final-p5-nuovo \
- P5_SUBNET_OCTET=80 ./scripts/benchmark-p5-quotas.sh
-```
+Build completa, nove test scheduling/pressione, tre test ZIP admission, tre test
+preflight e il test integrazione multisorgente/crash sul codice finale riusciti.
+Le prove precedenti su `.part`, sorgenti mancanti/corrotte e checksum pack restano
+valide; il parser ZIP standard e il formato canonico non sono stati sostituiti.
+Cleanup limitato alle fixture create da questo incarico; evidenze aggregate e
+manifest privati conservati, nessun file o servizio preesistente rimosso.
 
-Le fixture restano private, con container fermati al termine; nessun contenuto
-archiviato viene committato. Le due preparazioni non avviate della campagna sono
-rimaste isolate (pool subnet automatico esaurito; aggiornamento quota swap Docker
-rifiutato). Il launcher ora imposta memoria e swap insieme per la projection.
-I tentativi falliti non sono inclusi nelle misure. Nessun test distruttivo è stato
-eseguito sul filesystem di produzione.
-
-## Misure brevi con quote e integrità
-
-Intervallo canonico dall'avvio persistito all'ultimo commit; end-to-end include
-verifica della visibilità. Cache filesystem non svuotata, host condiviso.
-
-| Prova | Sorgenti | Canonico s | Opere/s | GiB sorgenti/ora | End-to-end s | Drenaggio/verifica s |
-|---|---:|---:|---:|---:|---:|---:|
-| A | 4 | 48,423 | 227,83 | 15,837 | 176,938 | 128,515 |
-| B | 2 | 50,188 | 219,81 | 15,280 | 180,072 | 129,884 |
-| C | 2 | 51,098 | 215,90 | 15,008 | 177,364 | 126,266 |
-
-C ripete B per verificare il costo della minore concorrenza; **non è una
-validazione di un nuovo profilo migliore**. A rimane la più veloce di queste tre
-prove. Nessun numero in tabella è dichiarato throughput sostenibile del dump.
-Rispetto a P4 senza quote, il canonico è più lento; non si attribuisce tutto il
-delta alle quote perché manca un controllo contemporaneo senza limiti.
-
-Ogni prova verifica **107.054 oggetti** (decompressione e SHA-256), 11.032 opere,
-11.032 snapshot, 22.928 revisioni/capitoli e tutti i documenti/generazioni di
-OpenSearch. Manifest normalizzato uguale nelle tre prove e a P4. Staging finale
-vuoto. Pack circa 291 MB, senza cambio di formato o compressione.
-
-Massimi osservati: worker circa **407% CPU**, working set **1.104 MiB**, memoria
-cgroup con cache **1.813 MiB**; OpenSearch **2.257 MiB** con cache. Sono picchi di
-container distinti, non vanno sommati come se simultanei. Staging nominato
-**860.202.904 byte** in A; B/C circa 585/611 MB. I/O PostgreSQL scritto per prova
-circa 2.297–2.393 MiB, OpenSearch 1.108–1.185 MiB. Non è un picco di bandwidth:
-il picco I/O non è stato calcolato; i contatori worker di A/projection risultano
-indisponibili e sono `null`, non zero.
-
-Code massime: **8.952 correnti, 8.952 storiche, 904 full-text** (picchi non
-necessariamente simultanei); occupazione fisica combinata massima **3.588.096
-byte**. Code finali vuote. WAL generato **721–727 MB** per pipeline; picco WAL
-trattenuto non rilevato. Questi numeri non validano un backlog da 8 GiB o la
-retention prolungata. Nessun outage OpenSearch è stato iniettato nelle tre
-misure temporizzate.
-
-Build completa riuscita; **8 test** pressione/scheduling, **2 test** preflight e
-**2 test** integrazione recovery passati, zero skip/fallimenti. I recovery coprono
-sorgenti sovrapposte, dedup/provenienza, SIGTERM/SIGKILL, barriera dentro transazione
-SQL e seal pack, pausa disco simulata e URL OpenSearch irraggiungibile. Il caso
-backlog è di **160 opere**; non è una sospensione prolungata del servizio reale.
-Tre lettori concorrenti dopo il drenaggio: **30 richieste, zero errori**, p95
-700,9 ms, massimo 721,4 ms; è un controllo di leggibilità, non una nuova campagna
-P95. Nessun bug del motore è stato corretto o mascherato; il cambiamento esecutivo
-è limitato al supporto delle quote nel launcher dei benchmark.
-
-Misura aggiuntiva a container fermati: directory `pg_wal` B/C **754.987.008
-byte** ciascuna; A **738.209.792 byte**, dopo i successivi test di recovery.
-Sono occupazioni finali, non picchi né WAL cumulativo generato. La retention sotto
-backlog prolungato resta non verificata.
+**P0–P5: Performance Overhaul tecnicamente concluso.** Non sono emersi blocker
+software residui nelle prove eseguite. Restano incertezze di estrapolazione e
+l'inviluppo bounded dichiarato, non nuove milestone software. **Primo ingest:
+NO-GO per capacità sul layout configurato e gate operativi/backup/layout ancora
+pendenti.** La capacità fisica non è l'unica formalità mancante; le verifiche
+operatore sono obbligatorie anche dopo l'espansione. Nessun vero ingest avviato.

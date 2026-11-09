@@ -62,3 +62,24 @@ test("fatal lane failure waits for already admitted work and prevents more admis
   await assert.rejects(task, /fatal/);
   assert.equal(drained, true);
 });
+
+test("large ZIP admission is an exclusive barrier without losing parser/commit budgets", async () => {
+  let active = 0;
+  const seen: string[] = [];
+  await scheduleSources(
+    ["a.zip", "b.zip", "large.zip", "c.zip"].map((path) => ({ path })),
+    sourceBudgets(4, 6, 4),
+    async (s, budget) => {
+      if (s.path === "large.zip") {
+        assert.equal(active, 0);
+        assert.deepEqual(budget, { parsers: 6, commits: 4 });
+      }
+      active++;
+      await immediate();
+      active--;
+      seen.push(s.path);
+    },
+    (s) => s.path === "large.zip",
+  );
+  assert.deepEqual(seen, ["a.zip", "b.zip", "large.zip", "c.zip"]);
+});

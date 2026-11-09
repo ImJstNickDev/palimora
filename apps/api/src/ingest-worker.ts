@@ -16,7 +16,8 @@ import {
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 import { pool, migrate, transaction } from "./db";
 import {
@@ -225,6 +226,23 @@ export async function tick(
           [batch.id],
         )
       ).rows;
+      const zipSources = sources.filter((s) => s.path.endsWith(".zip"));
+      if (zipSources.length) {
+        const { stdout } = await promisify(execFile)(
+          "python3",
+          [
+            resolve(__dirname, "../../ingest-adapters/zip_admission.py"),
+            ...zipSources.map((s) => join(root, s.path)),
+          ],
+          { timeout: 30000, maxBuffer: 1024 * 1024 },
+        );
+        const admission = JSON.parse(stdout);
+        if (!Array.isArray(admission) || admission.length !== zipSources.length)
+          throw Error("ZIP admission probe failed");
+        zipSources.forEach((s, i) => {
+          s.zipAdmission = admission[i];
+        });
+      }
       const pressure =
         pressureOverride ?? createIngestPressure(pool, store.root);
       const slots = new IngestSlots(commitConcurrency);
@@ -242,6 +260,13 @@ export async function tick(
             "source-" + source.id,
           );
           try {
+            if (source.zipAdmission?.allowed === false)
+              throw Object.assign(
+                new Error(
+                  "ZIP central directory exceeds validated memory envelope",
+                ),
+                { code: "INGEST_CAPACITY" },
+              );
             sourceLock = await pool.connect();
             if (
               stopping ||
@@ -606,7 +631,12 @@ export async function tick(
                   }
                   if (e.io_error)
                     throw Object.assign(Error(e.message), {
-                      code: e.io_error === 28 ? "ENOSPC" : "SOURCE_IO",
+                      code:
+                        e.io_error === 28
+                          ? "ENOSPC"
+                          : e.io_error === 12
+                            ? "INGEST_CAPACITY"
+                            : "SOURCE_IO",
                     });
                   if (e.total !== undefined) {
                     await pool.query(
@@ -826,6 +856,7 @@ export async function tick(
               await rm(sourceStaging, { recursive: true, force: true });
           }
         },
+        (source) => source.zipAdmission?.exclusive === true,
       );
       console.log(
         JSON.stringify({

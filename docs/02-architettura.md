@@ -409,5 +409,17 @@ nessuna migrazione viene applicata alla produzione durante le prove.
 
 Prima di selezionare il dump completo applicare la procedura di
 [readiness](12-first-ingest-readiness.md), incluso il preflight read-only.
-Lo stato attuale è **NO-GO**; la build riuscita e i benchmark brevi non autorizzano
-il primo ingest. Nessun override di produzione viene applicato automaticamente.
+P5 è tecnicamente conclusa; la readiness resta **NO-GO** per capacità sul layout
+configurato e verifiche operative pendenti. Il profilo validato richiede worker
+4 CPU/6 GiB (ZIP grandi esclusivi), PostgreSQL 2 CPU/2 GiB, OpenSearch 2 CPU/3 GiB
+con heap 1 GiB, projection isolata 2 CPU/1,5 GiB. I default del Compose non vengono
+promossi automaticamente. Non modificare bind o quote di altri progetti.
+
+Il preflight `--capacity-plan` associa ogni budget al bind/device effettivo;
+`static_result=GO` non autorizza l'avvio. Prima del primo batch l'operatore deve
+approvare layout/capacità, verificare i mount read-only e `/capacity/*`, la sanità
+dei servizi e l'assenza di ingest concorrenti, e provare backup/restore sulla
+destinazione definitiva. Il restore della fixture P5 è riuscito e non sostituisce
+la verifica del supporto definitivo. Seguire avvio, monitoraggio, pausa/resume e
+abort in [12](12-first-ingest-readiness.md). Nessun deployment o override di
+produzione è eseguito dalla campagna P5.

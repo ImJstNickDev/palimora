@@ -334,10 +334,11 @@ def stream_asset(data,name):
 
 def run_zip(path,start):
     global active_dir
+    from zip_admission import open_zip
     workers=max(1,min(16,int(os.environ.get('INGEST_PARSER_WORKERS','2'))))
     # The parent reads outer ZIP entries sequentially; processes parse bounded
     # windows concurrently. Results are emitted in source order, never completion order.
-    with zipfile.ZipFile(path) as z, ProcessPoolExecutor(max_workers=workers,mp_context=multiprocessing.get_context('spawn')) as executor:
+    with open_zip(path) as z, ProcessPoolExecutor(max_workers=workers,mp_context=multiprocessing.get_context('spawn')) as executor:
         entries=z.infolist()
         emit(dict(total=None if any(e.filename.lower().endswith('.csv') for e in entries) else len(entries),cursor=start,locator='inventory'))
         window=[];window_bytes=0;window_directory=None

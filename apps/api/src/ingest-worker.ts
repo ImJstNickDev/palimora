@@ -438,7 +438,7 @@ export async function tick(
                 if (
                   stopping ||
                   (
-                    await pool.query(
+                    await sourceLock!.query(
                       "SELECT state FROM ingest_batches WHERE id=$1",
                       [batch.id],
                     )
@@ -465,17 +465,14 @@ export async function tick(
                       )
                     )
                       throw Error("Invalid cache request");
-                    const cacheDb = await pool.connect();
-                    let cached;
-                    try {
-                      cached = await readParseCache(
-                        cacheDb,
-                        e.parser,
-                        e.hashes,
-                      );
-                    } finally {
-                      cacheDb.release();
-                    }
+                    // Reuse this source's autocommit lease connection. The
+                    // coordinator consumes envelopes serially; commit clients
+                    // remain independent and the lease stays held.
+                    const cached = await readParseCache(
+                      sourceLock!,
+                      e.parser,
+                      e.hashes,
+                    );
                     (p.stdio[3] as import("node:stream").Writable).write(
                       JSON.stringify(
                         Object.fromEntries(
@@ -524,7 +521,7 @@ export async function tick(
                       : []),
                   ]);
                   // Resolve both direct and linked identities through indexed keys.
-                  const identities = await pool.query(
+                  const identities = await sourceLock!.query(
                     `SELECT w.id,l.canonical_work_id FROM archive_work_heads w
                 LEFT JOIN archive_identity_links l ON l.work_id=w.id
                 WHERE w.external_id=ANY($1::text[]) OR w.provisional_entry_id IN (
@@ -647,7 +644,10 @@ export async function tick(
                         "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}',bytes=bytes+$3 WHERE id=$1",
                         [source.id, e.cursor, e.bytes ?? 0],
                       );
-                    });
+                      // Auxiliary bytes have no identity state to merge. Retain
+                      // the shared archive lock against GC/compaction, but do not
+                      // serialize unrelated canonical commits.
+                    }, []);
                     p.stdin!.write("\n");
                     continue;
                   }

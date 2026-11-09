@@ -26,7 +26,7 @@ completo prima della conclusione di P3, P4 e P5.
 **P3 finale:** completata sul corpus isolato da 11.032 opere (risultati in fondo e
 in `performance-p3-final.json`). Il canonico può avanzare senza attendere
 catalogo/full-text finché i budget durevoli lo consentono. Il completamento
-canonico rimane distinto dalla ricercabilità. P4 e P5 restano da svolgere;
+canonico rimane distinto dalla ricercabilità. P4 è completata come documentato in fondo; P5 resta da svolgere;
 nessuna importazione definitiva è autorizzata da queste prove.
 
 ## Stato e perimetro
@@ -3891,3 +3891,186 @@ risultati principali. L'ultima guardia di cleanup in caso di cancellazione prima
 dello spawn è verificata separatamente; non modifica il percorso produttivo
 misurato. Non si è riempito il disco host per simulare pressione e non si è
 modificato alcun servizio o dato di produzione.
+
+## P4 finale — Archive Engine, 2026-11-09
+
+**P4 completata sulla fixture isolata; percorso ottimizzato promosso. P5 non
+iniziata.** Riferimento codice P3:
+`b23b9e0a3a96169873b4f06f1a079381855f60df`. Evidenze aggregate, immagini,
+fingerprint, risorse, code e storage in `performance-p4-final.json`.
+Nessun dump originale o dato produttivo modificato.
+
+### Decisione e implementazione
+
+Il profiling esistente indica lavoro CPU nel worker, attese SQL/client e
+contesa di ammissione al pool, oltre a compressione/append/seal. I campioni
+PostgreSQL distinguono attività, ClientRead, advisory/transaction lock e I/O;
+ClientRead durante una transazione non equivale a CPU SQL. Il pool raggiunge
+12 connessioni: richieste in attesa campionate 3/3 nelle baseline, 5/4 nel
+finale. Il riuso delle connessioni riduce acquisizioni, ma **non** si dichiara
+ridotto quel massimo né una durata di attesa non misurata. Il profiler aggiunge
+solo campioni pool/event loop; non nasce un secondo framework.
+
+Interventi integrati:
+- PackStore scrive header e payload con writev, gestendo scritture parziali;
+  elimina le due copie per concatenazione dei payload. Compressione fino a
+  256 oggetti / 16 MiB per finestra, con percorso per il singolo oggetto grande.
+- Precompressione condivisa per hash verificato nel gruppo limitato di staging,
+  senza cache permanente. Zstd resta 3 e i contesti nativi sono quelli esistenti.
+- Lookup SQL dipendenti omessi solo quando non esistono identità precedenti
+  sotto lock; DDL della tabella COPY e del suo indice temporaneo nello stesso
+  round-trip. Nessun nuovo indice persistente.
+- Artefatti ausiliari senza mutazioni di identità usano il lock archivistico
+  condiviso contro GC/compattazione, evitando un blocco esclusivo superfluo.
+- Stato per envelope, cache parser e lookup identità riusano il client
+  autocommit già assegnato alla sorgente. Commit e controllo periodico di
+  cancellazione restano separati.
+
+Il parser C++17, pool Python, formato NDJSON, CRC/hash dei membri, staging
+aggregato, modello canonico e precedenze del merge restano invariati. La
+serializzazione del padre ZIP e le finestre ordinate esistono ancora: i campioni
+CPU di processo non isolano una durata wall-clock di parsing/decompressione,
+quindi non si attribuisce loro un guadagno. Nessuna modifica ai moduli nativi:
+ASan/UBSan non rieseguiti; passano i test del codec/preparazione esistenti.
+
+### Confronti e variabilità
+
+Stesso corpus P3: quattro ZIP, 11.032 opere. Configurazione invariata:
+throughput-first, **4 sorgenti / 6 parser / 4 commit / pool 12**, gruppi 256,
+I/O 8, Zstd 3, projection worker isolato, facet paralleli disabilitati.
+Nessun aumento dei budget adottato, nessun tuning della ricerca.
+
+Una prima candidata (copie/batch pack e SQL) migliorava append ma non il
+canonico: 43,684 e 44,151 s contro baseline 43,316 e 42,764 s; non promossa
+come soluzione sufficiente. L'aggiunta di dedup della precompressione e lock
+artefatti ha dato 41,452 s in una prova esplorativa, insufficiente da sola.
+La versione finale include anche il riuso delle connessioni. La campagna finale
+è **baseline → ottimizzato → ottimizzato → baseline**, senza build/test in
+concorrenza con gli intervalli misurati:
+
+| Esecuzione | Canonico s | Opere/s | GiB sorgenti/ora | End-to-end s | Opere/s end-to-end |
+|---|---:|---:|---:|---:|---:|
+| Baseline A3 | 41,261 | 267,37 | 18,586 | 169,770 | 64,98 |
+| Ottimizzato D1 | 39,862 | 276,75 | 19,239 | 164,611 | 67,02 |
+| Ottimizzato D2 | 40,192 | 274,49 | 19,081 | 164,845 | 66,92 |
+| Baseline A4 | 45,637 | 241,73 | 16,804 | 169,699 | 65,01 |
+
+Medie delle esecuzioni: **43,449 → 40,027 s**, **254,55 → 275,62 opere/s**,
+**17,695 → 19,160 GiB/ora**; capitoli/s **529,04 → 572,83**,
+oggetti/s **2.470,14 → 2.674,61**. Le medie dei rate non sono il reciproco
+della media dei tempi. Riduzione tempo nelle coppie: **3,39% e 11,93%**.
+La dispersione della baseline è rilevante: due coppie non stabiliscono un
+intervallo di confidenza né eliminano gli effetti dell'host condiviso.
+Non attribuire automaticamente l'intero delta medio al solo codice.
+
+La baseline storica P3 **39,204 s / 281,40 opere/s / 19,561 GiB/ora** è
+addirittura più veloce della media finale corrente: non è un controllo
+contemporaneo. Non si dichiara un miglioramento rispetto a quel singolo numero.
+Cache filesystem non svuotata, corpus riutilizzato, nessuna quota CPU/RAM.
+I tempi end-to-end in tabella partono dall'avvio persistito del batch;
+i log scenario includono anche l'attesa iniziale e sono circa un secondo maggiori.
+
+### Costi e risorse
+
+Span inclusivi medi, **concorrenti e non additivi**, in secondi:
+
+| Stadio | Baseline | Ottimizzato |
+|---|---:|---:|
+| SQL ordinario worker | 90,898 | 79,705 |
+| COPY | 4,055 | 4,592 |
+| COMMIT | 4,005 | 6,144 |
+| Preparazione staging | 16,525 | 16,725 |
+| Append PackStore | 25,455 | 18,720 |
+| Finish/seal/verifica | 16,997 | 21,552 |
+| Checkpoint | 4,167 | 4,471 |
+
+SQL e append diminuiscono rispettivamente del **12,3% e 26,5%**; staging non
+migliora, COPY/commit/seal aumentano. Il beneficio è sul percorso completo,
+non su ogni span. Fsync, synchronous commit, WAL, vincoli e verifiche
+indipendenti del seal non vengono disabilitati.
+
+CPU worker per opera sul canonico, campioni cgroup più vicini agli estremi:
+**0,010908 → 0,010577 CPU-s/opera**; comprende API e figli Python, non solo Node.
+Sull'intera pipeline: **0,012431 → 0,012034 CPU-s/opera**. I ruoli PostgreSQL,
+OpenSearch e projection sono separati nel JSON; SQL serve anche il downstream.
+Non sommare i picchi di memoria di processi/container come fossero simultanei.
+
+Working set massimo worker: baseline **1.139,81–1.167,87 MiB**, ottimizzato
+**1.153,45–1.186,98 MiB**; nessun OOM. I/O fisico worker sull'intera misura:
+baseline letti **8,47–15,17 MiB**, scritti **645,13–975,88 MiB**;
+ottimizzato letti **2,32–4,00 MiB**, scritti **959,30–1.143,12 MiB**.
+Questi contatori dipendono da page cache/writeback; non attestano una riduzione
+delle scritture fisiche. Byte/opera e intervalli campionati sono nel JSON.
+WAL medio pipeline **692,23 → 688,57 MiB**. Picchi medi staging nominato
+**849.872.730 → 806.534.553 byte**, prenotazioni adapter
+**1.344.337.070 → 1.264.645.294 byte**: non sommare questi due conteggi.
+
+### Storage e correttezza
+
+Medie dei byte finali prima del replay:
+
+| Componente | Baseline | Ottimizzato |
+|---|---:|---:|
+| PackStore | 290.793.287 | 290.789.283 |
+| PostgreSQL database | 436.346.003 | 429.616.275 |
+| OpenSearch primari | 466.986.489 | 469.198.615 |
+| Totale filesystem, WAL/translog/Redis inclusi | 2.407.136.094 | 2.399.456.923 |
+| Cache contenuti / staging finale | 0 / 0 | 0 / 0 |
+
+Pack baseline **61/65**, finale **65/67**; duplicati fisici **13/8 → 3/3**,
+sempre **107.054 hash unici**. La crescita naturale del numero di pack e
+OpenSearch (+0,47%) non introduce contenuti duplicati permanenti; totale
+filesystem −0,32%, PackStore sostanzialmente invariato. Il JSON contiene
+composizione compressa per tipo e dettaglio heap/indici/TOAST supplementare,
+rilevato dopo un replay identico per ogni profilo; non confonderlo con i byte
+principali catturati prima del replay.
+
+**21 test pertinenti passati**, poi **7 test dei percorsi cambiati rieseguiti
+sul codice finale**, senza fallimenti o skip; build completa riuscita.
+Tutti gli oggetti vengono riletti, decompressi e verificati SHA-256 in ogni
+esecuzione. Identità, metadata, provenienza, snapshot, contenuti, catalogo
+corrente/storico e documenti OpenSearch equivalgono fra i profili e alla
+semantica P3A. Le normalizzazioni eliminano solo UUID locali validati e campi
+operativi come nelle verifiche P3.
+
+I test coprono scritture vettoriali parziali, rotazione/corruzione pack,
+dedup globale, replay, sorgenti sovrapposte, artefatti condivisi, SIGTERM/SIGKILL,
+crash dentro transazione e seal, checkpoint contigui, assenze/.part/ZIP corrotti,
+pressione disco, quota staging, OpenSearch assente e ripresa downstream.
+Replay completo delle fixture finali: conteggi invariati, nessun nuovo snapshot,
+massimo quattro commit, code corrente/storico/testo vuote.
+
+### Limite residuo e riproduzione
+
+End-to-end medio **169,735 → 164,728 s**, **65,00 → 66,97 opere/s**;
+drenaggio/visibilità dopo il canonico **126,286 → 124,701 s**.
+Il catalogo serializzato e la sua materializzazione SQL restano dominanti.
+Sul canonico restano SQL, preparazione e verifica pack concorrenti, pool
+saturo e finestre ordinate del parser. Non si è dimostrato un unico limite
+fisico assoluto né la possibilità di raggiungere 2.000 opere/s.
+
+Promozione motivata da miglioramento in entrambe le coppie, correttezza completa,
+recovery affidabile e assenza di espansione persistente materiale. Default
+operativi invariati; il profilo esplicito sopra resta il migliore **misurato qui**,
+non un ottimo globale. P5 dovrà verificare sostenibilità prolungata, distribuzioni
+di opere grandi, crescita di DB/WAL/indici, quote e configurazione definitiva.
+Non è iniziata e non autorizza l'ingest degli oltre 900 GiB.
+
+Per riprodurre: costruire due immagini immutabili dal riferimento P3 e dal
+codice finale, senza modificare l'istanza. Usare directory nuove e quattro
+subnet libere:
+
+```sh
+AO3_DUMP_ROOT=/mnt/sdb/palimora-p3a-fixture \
+ P4_BENCH_PREFIX=/mnt/sdb/palimora-p3-final-nuovo-p4 \
+ P4_BASELINE_IMAGE=palimora-p4-baseline P4_CANDIDATE_IMAGE=palimora-p4-promote \
+ P4_SUBNET_OCTET=30 ./scripts/benchmark-p4-final.sh
+```
+
+La campagna usa gli stessi script P3; il prefisso delle directory è mantenuto
+per le loro guardie di isolamento. `summarize-p4-final.py PREFIX A3,D1,D2,A4`
+ricostruisce gli aggregati delle esecuzioni riportate. `check-p3a-retry.cjs`
+e `collect-p4-storage.py ROOT` sono verifiche supplementari dopo la cattura
+principale; per il dettaglio SQL avviare soltanto il PostgreSQL della fixture.
+Evidenze private `/mnt/sdb/palimora-p3-final-p4-*-final/results/`; immagini e
+hash del codice runtime registrati nel JSON.

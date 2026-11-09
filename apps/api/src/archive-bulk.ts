@@ -245,10 +245,9 @@ export async function stageRows(db: DB, input: Record<string, any[]>) {
       slots,
     )
       .map(([name, type]) => name + " " + type)
-      .join(",")}) ON COMMIT DELETE ROWS`,
-  );
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS palimora_stage_payload_id ON palimora_ingest_stage(i0) WHERE _group='payloads'",
+      .join(
+        ",",
+      )}) ON COMMIT DELETE ROWS; CREATE INDEX IF NOT EXISTS palimora_stage_payload_id ON palimora_ingest_stage(i0) WHERE _group='payloads'`,
   );
   const { from } = require("pg-copy-streams");
   await pipeline(

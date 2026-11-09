@@ -4,7 +4,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, open, stat, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PackStore, canonical, scanPack, sha } from "../apps/api/src/pack";
+import {
+  PackStore,
+  canonical,
+  scanPack,
+  sha,
+  prepareCompression,
+} from "../apps/api/src/pack";
 test("pack v1 reconstructs locators, round-trips independent records and rejects corruption", async () => {
   const root = await mkdtemp(join(tmpdir(), "palimora-pack-"));
   try {
@@ -1105,3 +1111,36 @@ test(
     }
   },
 );
+
+test("pack scatter writes handle partial vectors, empty payloads and batch rotation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "palimora-vectors-"));
+  const probe = await open(join(root, "probe"), "w");
+  const prototype = Object.getPrototypeOf(probe);
+  const original = prototype.writev;
+  let calls = 0;
+  prototype.writev = async function (buffers: Buffer[]) {
+    calls++;
+    // Force a short write in the middle of headers and payloads.
+    return original.call(this, [buffers[0].subarray(0, 17)]);
+  };
+  try {
+    const input = Array.from({ length: 300 }, (_, i) => ({
+      kind: i % 2 ? "asset" : "chapter_html",
+      bytes: Buffer.from(i % 3 ? ("record-" + (i % 7)).repeat(50) : ""),
+    }));
+    const store = new PackStore(root, 4096);
+    await prepareCompression(input);
+    const records = await store.write(input);
+    assert.ok(calls > input.length);
+    const decoded = await store.readMany(records);
+    assert.deepEqual(
+      decoded,
+      input.map((o) => o.bytes),
+    );
+    assert.equal((await readdir(join(root, "staging"))).length, 0);
+  } finally {
+    prototype.writev = original;
+    await probe.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -48,9 +48,22 @@ function compressible(o: { kind: string; bytes: Buffer }) {
 export async function prepareCompression(
   objects: { kind: string; bytes: Buffer }[],
 ) {
-  const input = objects.filter(
-    (o) => compressible(o) && !compressedContent.has(o.bytes),
-  );
+  // Equal verified bytes within this preparation share one encoded frame.
+  // The map lives only for the bounded staging group, never across commits.
+  const byHash = new Map<string, Buffer[]>();
+  for (const o of objects) {
+    if (!compressible(o) || compressedContent.has(o.bytes)) continue;
+    const hash = contentHash(o.bytes);
+    const group = byHash.get(hash);
+    if (group) {
+      if (group[0].length !== o.bytes.length) throw Error("HASH_COLLISION");
+      group.push(o.bytes);
+    } else byHash.set(hash, [o.bytes]);
+  }
+  const input = [...byHash.values()].map((buffers) => ({
+    bytes: buffers[0],
+    buffers,
+  }));
   for (let start = 0; start < input.length; start += 256) {
     const batch = input.slice(start, start + 256);
     const encoded = await Promise.all(
@@ -58,9 +71,10 @@ export async function prepareCompression(
         compressBatch(batch.slice(i * 64, (i + 1) * 64).map((o) => o.bytes)),
       ),
     );
-    encoded
-      .flat()
-      .forEach((bytes, i) => compressedContent.set(batch[i].bytes, bytes));
+    encoded.flat().forEach((bytes, i) => {
+      for (const source of batch[i].buffers)
+        compressedContent.set(source, bytes);
+    });
   }
 }
 export function contentHash(bytes: Buffer) {
@@ -107,6 +121,23 @@ async function writeAll(f: Awaited<ReturnType<typeof open>>, bytes: Buffer) {
     const r = await f.write(bytes, offset, bytes.length - offset);
     if (!r.bytesWritten) throw Error("PACK_SHORT_WRITE");
     offset += r.bytesWritten;
+  }
+}
+/** Scatter/gather without copying payloads; account for partial writes. */
+async function writeBuffers(
+  file: Awaited<ReturnType<typeof open>>,
+  buffers: Buffer[],
+) {
+  let pending = buffers.filter((b) => b.length);
+  while (pending.length) {
+    const { bytesWritten } = await file.writev(pending);
+    if (!bytesWritten) throw Error("PACK_SHORT_WRITE");
+    let consumed = bytesWritten,
+      index = 0;
+    while (index < pending.length && consumed >= pending[index].length)
+      consumed -= pending[index++].length;
+    pending = pending.slice(index);
+    if (consumed) pending[0] = pending[0].subarray(consumed);
   }
 }
 async function readAll(
@@ -455,8 +486,17 @@ export class PackWriter {
       });
     const result: Locator[] = [];
     // Four reusable codec contexts, amortized over batches of independent frames.
-    for (let i = 0; i < objects.length; i += 64) {
-      const batch = objects.slice(i, i + 64);
+    for (let i = 0; i < objects.length; ) {
+      let end = i,
+        raw = 0;
+      while (
+        end < objects.length &&
+        end - i < 256 &&
+        (end === i || raw + objects[end].bytes.length <= 16 * 1024 * 1024)
+      )
+        raw += objects[end++].bytes.length;
+      const batch = objects.slice(i, end);
+      i = end;
       const toCompress = batch.filter(
         (o) => compressible(o) && !compressedContent.has(o.bytes),
       );
@@ -464,7 +504,7 @@ export class PackWriter {
         await Promise.all(
           Array.from({ length: 4 }, (_, n) =>
             compressBatch(
-              toCompress.slice(n * 16, n * 16 + 16).map((o) => o.bytes),
+              toCompress.slice(n * 64, n * 64 + 64).map((o) => o.bytes),
             ),
           ),
         )
@@ -492,7 +532,8 @@ export class PackWriter {
           hash,
           kind: o.kind,
           size: o.bytes.length,
-          bytes: Buffer.concat([n, header, payload]),
+          buffers: [n, header, payload],
+          length: 4 + header.length + payload.length,
         };
       });
       let buffered: Buffer[] = [];
@@ -500,10 +541,9 @@ export class PackWriter {
         if (
           this.current &&
           this.current.records.length &&
-          this.current.offset + o.bytes.length > this.store.targetBytes
+          this.current.offset + o.length > this.store.targetBytes
         ) {
-          if (buffered.length)
-            await writeAll(this.current.file, Buffer.concat(buffered));
+          if (buffered.length) await writeBuffers(this.current.file, buffered);
           buffered = [];
           await this.finish();
         }
@@ -520,20 +560,19 @@ export class PackWriter {
           size: o.size,
           pack: c.pack,
           offset: c.offset,
-          length: o.bytes.length,
+          length: o.length,
         };
-        buffered.push(o.bytes);
-        c.offset += o.bytes.length;
+        buffered.push(...o.buffers);
+        c.offset += o.length;
         c.records.push(r);
         result.push(r);
         if (c.offset >= this.store.targetBytes) {
-          await writeAll(c.file, Buffer.concat(buffered));
+          await writeBuffers(c.file, buffered);
           buffered = [];
           await this.finish();
         }
       }
-      if (buffered.length)
-        await writeAll(this.current!.file, Buffer.concat(buffered));
+      if (buffered.length) await writeBuffers(this.current!.file, buffered);
     }
     return result;
   }

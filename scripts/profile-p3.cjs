@@ -40,10 +40,33 @@ for (const name of [
     }
   };
 }
+const { monitorEventLoopDelay } = require("node:perf_hooks");
+const loop = monitorEventLoopDelay({ resolution: 20 });
+loop.enable();
+const pool = require("../apps/api/dist/db").pool;
+let maxWaiting = 0,
+  maxConnections = 0;
+setInterval(() => {
+  maxWaiting = Math.max(maxWaiting, pool.waitingCount);
+  maxConnections = Math.max(maxConnections, pool.totalCount);
+}, 100).unref();
 const save = () =>
   fs.writeFileSync(
     "/results/p3-ingest-spans.json",
-    JSON.stringify({ last_commit_ms: lastCommit, peak, spans }),
+    JSON.stringify({
+      last_commit_ms: lastCommit,
+      peak,
+      spans,
+      pool: {
+        max_waiting_sampled: maxWaiting,
+        max_connections_sampled: maxConnections,
+      },
+      event_loop: {
+        mean_ms: loop.mean / 1e6,
+        p95_ms: loop.percentile(95) / 1e6,
+        max_ms: loop.max / 1e6,
+      },
+    }),
   );
 setInterval(save, 1000).unref();
 process.on("exit", save);

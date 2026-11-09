@@ -362,3 +362,33 @@ staging PackStore dei gruppi già ammessi può aggiungersi alle prenotazioni ada
 la soglia osservata arresta la produzione, non interrompe una transazione già
 in corso. Dimensionare quindi la riserva con margine per questi gruppi e per gli
 altri processi; P5 deve validare il margine sul carico sostenuto.
+
+### Percorso canonico P4
+
+I lookup dipendenti dallo stato precedente (alias, selezioni, capitoli, revisioni,
+snapshot, acquisizioni e riconciliazioni) non interrogano PostgreSQL quando il
+lookup delle identità sotto lock non restituisce opere. Per gruppi misti e replay
+rimangono le query complete. Creazione della tabella COPY temporanea e del suo
+indice preesistente condividono uno scambio SQL; nessun nuovo indice persistente.
+
+La precompressione riusa un frame per hash verificato nel solo gruppo di staging:
+i buffer restano immutabili e ogni lettura dello staging verifica comunque il
+proprio hash. Non è una cache fra transazioni. Il writer prepara al massimo 256
+oggetti / 16 MiB non compressi per finestra, con eccezione per il singolo oggetto
+più grande, ed esegue scritture vettoriali di lunghezze, header e payload senza
+concatenare due volte i contenuti. Le scritture parziali avanzano correttamente
+anche dentro un buffer. Il seal mantiene fsync, rilettura indipendente da disco,
+checksum dei frame, decompressione, SHA-256 dei contenuti e fsync delle directory.
+
+Gli artefatti ausiliari ZIP conservano oggetti, outbox e checkpoint nella stessa
+transazione usando il lock archivistico condiviso contro GC/compattazione:
+non modificano identità/versioni e non richiedono il lock esclusivo dell'intero
+archivio. Pause, ammissione disk-aware e slot globali restano attivi.
+Misure comparative e decisione di promozione sono in 11 e nel JSON P4.
+
+Le letture di stato per envelope, cache parser e identità riusano la connessione
+autocommit già assegnata al lease della sorgente. La lettura sequenziale degli
+envelope ne garantisce l'ordine; non si apre una transazione sulla connessione
+del lease. I commit usano ancora client indipendenti e il controllo periodico
+di cancellazione resta separato. Questo evita di chiedere un secondo client
+al pool da 12 per letture che la connessione della corsia può già eseguire.

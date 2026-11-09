@@ -67,11 +67,12 @@ export async function prepareIngest(
     ).rows,
   );
   const aliases = new Map(
-    (
-      await db.query(
-        "SELECT * FROM archive_identity_links WHERE work_id=ANY($1::uuid[])",
-        [works.map((w) => w.id)],
-      )
+    (works.length
+      ? await db.query(
+          "SELECT * FROM archive_identity_links WHERE work_id=ANY($1::uuid[])",
+          [works.map((w) => w.id)],
+        )
+      : { rows: [] }
     ).rows.map((r) => [r.work_id, r.canonical_work_id]),
   );
   if (aliases.size)
@@ -95,51 +96,57 @@ export async function prepareIngest(
   );
   const ids = [...byId.keys()];
   const selections = new Map(
-    (
-      await db.query(
-        "SELECT * FROM archive_selection_docs WHERE work_id=ANY($1::uuid[])",
-        [ids],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT * FROM archive_selection_docs WHERE work_id=ANY($1::uuid[])",
+          [ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => [r.work_id, r.fields]),
   );
   const chapters = new Map(
-    (
-      await db.query(
-        "SELECT * FROM archive_chapters WHERE work_id=ANY($1::uuid[])",
-        [ids],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT * FROM archive_chapters WHERE work_id=ANY($1::uuid[])",
+          [ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => [key(r.work_id, r.source_key), r.id]),
   );
   const revisions = new Map(
-    (
-      await db.query(
-        "SELECT r.* FROM archive_chapter_revisions r JOIN archive_chapters c ON c.id=r.chapter_id WHERE c.work_id=ANY($1::uuid[])",
-        [ids],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT r.* FROM archive_chapter_revisions r JOIN archive_chapters c ON c.id=r.chapter_id WHERE c.work_id=ANY($1::uuid[])",
+          [ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => [key(r.chapter_id, r.object_hash), r.id]),
   );
   const latest = new Map(
-    (
-      await db.query(
-        "SELECT DISTINCT ON(work_id,state) * FROM archive_snapshots WHERE work_id=ANY($1::uuid[]) ORDER BY work_id,state,imported_at DESC,id DESC",
-        [ids],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT DISTINCT ON(work_id,state) * FROM archive_snapshots WHERE work_id=ANY($1::uuid[]) ORDER BY work_id,state,imported_at DESC,id DESC",
+          [ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => [key(r.work_id, r.state), r]),
   );
   const acquisition = new Set(
-    (
-      await db.query(
-        "SELECT snapshot_id,encode(source_hash,'hex') AS hash FROM archive_record_data WHERE snapshot_id=ANY($1::uuid[])",
-        [works.map((w) => w.current_snapshot_id).filter(Boolean)],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT snapshot_id,encode(source_hash,'hex') AS hash FROM archive_record_data WHERE snapshot_id=ANY($1::uuid[])",
+          [works.map((w) => w.current_snapshot_id).filter(Boolean)],
+        )
+      : { rows: [] }
     ).rows.map((r) => key(r.snapshot_id, r.hash)),
   );
   const reconciliation = new Set(
-    (
-      await db.query(
-        "SELECT work_id,kind,detail FROM archive_reconciliations WHERE work_id=ANY($1::uuid[])",
-        [ids],
-      )
+    (ids.length
+      ? await db.query(
+          "SELECT work_id,kind,detail FROM archive_reconciliations WHERE work_id=ANY($1::uuid[])",
+          [ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => key(r.work_id, r.kind, canonical(r.detail).toString())),
   );
   const reconcile = (work_id: string, kind: string, detail: any) => {
@@ -150,17 +157,18 @@ export async function prepareIngest(
     }
   };
   const observations = new Map(
-    (
-      await db.query(
-        // Bound observation lookup to this group before joining the source dictionaries.
-        // A source-first nested loop scans every observation once per source entry.
-        `SELECT o.id,o.work_id,e.locator,r.name AS parser,encode(o.result_hash,'hex') AS fingerprint
+    (ids.length
+      ? await db.query(
+          // Bound observation lookup to this group before joining the source dictionaries.
+          // A source-first nested loop scans every observation once per source entry.
+          `SELECT o.id,o.work_id,e.locator,r.name AS parser,encode(o.result_hash,'hex') AS fingerprint
          FROM unnest($2::uuid[]) ids(work_id)
          JOIN LATERAL (SELECT * FROM archive_observation_data o WHERE o.work_id=ids.work_id OFFSET 0) o ON true
          JOIN archive_entries e ON e.id=o.entry_id JOIN archive_paths p ON p.id=e.path_id
          JOIN archive_parsers r ON r.id=o.parser_id WHERE p.path=$1`,
-        [source.path, ids],
-      )
+          [source.path, ids],
+        )
+      : { rows: [] }
     ).rows.map((r) => [
       key(r.work_id, r.locator, r.parser, r.fingerprint),
       r.id,

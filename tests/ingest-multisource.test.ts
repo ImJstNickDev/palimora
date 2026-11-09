@@ -45,6 +45,7 @@ for source in range(2):
     epub.writestr('content.opf','<package><metadata><source>https://archiveofourown.org/works/'+str(identity)+'</source><title>'+title+'</title></metadata><manifest><item id="c" href="chapter1.xhtml"/></manifest><spine><itemref idref="c"/></spine></package>')
     epub.writestr('chapter1.xhtml','<html><head><meta name="chapterurl" content="https://archiveofourown.org/chapters/'+str(identity)+'"/></head><body class="fff_chapter"><p>'+text+'</p></body></html>')
    z.writestr(str(i)+'.epub',data.getvalue())
+  z.writestr('manifest.json','{"shared":true}')
 `,
         root,
       ]);
@@ -67,7 +68,7 @@ for source in range(2):
       ).rows;
       assert.equal(rows.length, 2);
       for (const r of rows) {
-        assert.equal(r.checkpoint, "10");
+        assert.equal(r.checkpoint, "11");
         assert.equal(r.imported, "10");
         assert.equal(r.state, "ingested");
       }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setImmediate as yieldToIo } from "node:timers/promises";
 import { DB } from "./db";
 import { readObjectBatches } from "./archive";
 import { findObjects } from "./archive-catalog";
@@ -257,6 +258,7 @@ export async function loadTextInputs(
       end++;
     }
     const loaded = await objects(db, [...hashes]);
+    let cpuDeadline = performance.now() + 8;
     for (const task of tasks.slice(start, end)) {
       const input = result.get(task.work);
       if (!input || input instanceof Error) continue;
@@ -283,6 +285,12 @@ export async function loadTextInputs(
           task.work,
           e instanceof Error ? e : Error("TEXT_PREPARATION_FAILED"),
         );
+      }
+      // A decoded window can contain many synchronous HTML extractions. Let
+      // API sockets and lease timers run between tasks, keeping this snapshot.
+      if (performance.now() >= cpuDeadline) {
+        await yieldToIo();
+        cpuDeadline = performance.now() + 8;
       }
     }
     start = end;

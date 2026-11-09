@@ -7,6 +7,7 @@ import {
   textNdjson,
 } from "./catalog-text-pipeline";
 import { randomUUID } from "node:crypto";
+import { setImmediate as yieldToIo } from "node:timers/promises";
 import { pool, transaction, DB } from "./db";
 import { selectTextGroup } from "./catalog-text-preparation";
 import {
@@ -426,6 +427,7 @@ export async function projectText(
             }
             offset += consumed;
             preparationLimit = claims.length - offset;
+            let encodingDeadline = performance.now() + 8;
             for (const entry of prepared) {
               const { claim, document, error } = entry;
               capacity.check();
@@ -472,6 +474,12 @@ export async function projectText(
                 finish(claim);
               } finally {
                 encoding.cancel();
+              }
+              // Resolved capacity promises alone only yield to microtasks;
+              // service API I/O between bounded runs of NDJSON serialization.
+              if (performance.now() >= encodingDeadline) {
+                await yieldToIo();
+                encodingDeadline = performance.now() + 8;
               }
             }
             enqueue();

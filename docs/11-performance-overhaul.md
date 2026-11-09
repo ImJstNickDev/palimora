@@ -4,7 +4,8 @@
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
-le implementazioni P1A/P1B.1/P2A/P2B.1/P2B.2 e le nuove misure sono documentate in fondo.
+le implementazioni P1A/P1B.1/P2A/P2B.1/P2B.2 e le misure P2C sono documentate in fondo.
+P2C completa le campagne A/B/C; P2 resta aperta per la regressione interattiva sotto backlog.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -2279,3 +2280,360 @@ su input da circa 18–19 MiB e la successiva pubblicazione recuperabile.
 nessuna modifica a dump, dati di produzione, formato canonico, parser, PackStore,
 bibliografia o UI. Prove private conservate in
 `/mnt/sdb/palimora-p2b2-20261108`; container e rete temporanei rimossi.
+
+## P2C — Consolidamento e benchmark end-to-end
+
+**Stato: campagne A/B/C ed equivalenza concluse; P2 non dichiarata completata.**
+Rimane una regressione interattiva sotto backlog rispetto a P1B.1, ridotta ma
+non eliminata. I risultati aggregati, le configurazioni e gli esperimenti scartati
+sono in `performance-p2c.json`. Nessuna fase P3 o successiva è stata avviata.
+
+Un incidente nel runner B2 è registrato nel JSON: una modifica al file Bash in
+esecuzione ha interrotto i controlli successivi al timer. Timer e campioni risorse
+operativi erano già conclusi; il verificatore aggiuntivo ha sovrascritto solo il
+proprio JSON. Il confronto completo è stato ripreso sulla stessa fixture isolata.
+La ripetizione partita con la vecchia fixture ancora attiva è stata fermata ed
+**esclusa**, poi sostituita da una nuova prova pulita. Gli script sono stati congelati
+per il resto della campagna; il wrapper ora installa il cleanup prima del runner.
+
+La revisione misurata parte da `a3518765265d8b2577c40938f98ff4e8ddcc1f61`.
+L'unica correzione applicativa P2C cede il thread all'I/O, con `setImmediate`,
+fra le estrazioni HTML e fra le serializzazioni NDJSON dopo circa 8 ms di lavoro.
+Le promise già risolte del controllo di capacità non consentivano da sole ai
+socket dell'API di avanzare. Non è uno sleep, un limite di throughput o una nuova
+lane. Una singola estrazione/serializzazione resta sincrona e può superare 8 ms.
+Snapshot read-only, buffer, documenti, claim e ACK conservano le proprie garanzie.
+La prova con slice da 1 ms non dà un miglioramento HTTP aggiuntivo consistente:
+non è stata adottata. Parser, PackStore, bibliografia e formato restano invariati.
+
+### Metodo e integrazione
+
+`scripts/benchmark-p2c.sh` riusa runner e verificatore P0/P1B.1. Ogni A/B parte
+da PostgreSQL, Redis, OpenSearch e PackStore nuovi ed elabora solo
+`queue119_archive05.zip`: 11.032 EPUB, SHA-256
+`fd8e01e155c1a668c91bd86bc67cfc9b2ac3ad9da1322a35925a74c226e85429`.
+A rende sequenziali ingest, catalogo e full-text; il full-text conserva il proprio
+overlap interno. B usa API, ingest-worker e scheduler reali. Parser 2/commit 2,
+gruppi 256, Zstd 3, libuv 8 e seeding AO3 attivo; PostgreSQL 17.6, Redis 7.4.6
+AOF, OpenSearch 2.19.4 heap 1 GiB, shard 1, replica 0, refresh 1 s e translog
+`REQUEST`. Fsync, synchronous commit, full-page writes e SHA-256 attivi.
+Nessuna quota CPU/RAM, porta host o build/benchmark concorrente. Dump read-only.
+
+Il timer storico B va dall'accodamento alla fine del verificatore originale;
+si conserva per confrontarlo alle baseline. Il timer richiesto **dall'avvio
+effettivo dell'ingest alla stessa visibilità verificata** è riportato separatamente.
+Entrambi attendono ingest completato, tutte le code drenate, refresh e verifica
+delle 11.032 opere tramite indice/API e lettore. Tempi attivi sovrapposti non
+vengono sommati per ricavare l'end-to-end.
+
+Il preload corregge l'intercettazione di `projectText`: dopo P2 l'export getter
+richiede di avvolgere il modulo proprietario. Il normale runtime passa da
+`main` allo scheduler P1A, al builder collettivo e al producer/consumer P2.
+I contatori verificano zero PUT individuali e zero SQL bibliografico individuale.
+Il percorso statico e i contatori completi di A e della ripetizione B2 confermano
+la preparazione collettiva: il primo preload non scaricava il contatore opzionale
+degli input sul SIGTERM di B; ora lo registra dopo ogni passaggio durevole.
+I campioni mancanti non vengono interpretati come zero. Le connessioni di
+preparazione rilasciano la propria
+transazione prima dell'HTTP; PostgreSQL resta l'autorità dei claim.
+Preflight/rinnovo verificano revisione, token, generazione e lease vivo; versioni
+esterne monotone impediscono overwrite fuori ordine; ACK condizionati e flush
+su retry incerti impediscono perdita della coda. La ricerca normale esclude
+anche hit con generazione non più corrente.
+
+Dopo il timer ogni A/B confronta **tutti gli `_source` completi** col builder P2A
+sullo stesso database, già verificato contro P1B.1. Un indice temporaneo con stessi
+mapping/analyzer confronta cinque query; ID ordinati esplicitamente, totali e
+primi 100 risultati. Nessuna normalizzazione elimina campi. Fixture nuove hanno
+legittimamente UUID/date differenti. Si verificano inoltre viste storiche,
+snapshot, generazioni e otto letture storiche. La verifica originale nel timer
+rimane invariata. Dopo i guasti, sulla copia con gli stessi ID, si ricontrolla
+l'intero digest precedentemente verificato, oltre a query e lettore.
+
+C usa copie fredde indipendenti dello stesso B1 verificato prima della correzione,
+stessi ID/segmenti iniziali e pack read-only. P1B.1 usa l'immagine del commit
+applicativo registrato in P1B.1d, con schema 039 mantenuto uguale per il confronto.
+Probe autenticato originale: tre warm-up e 100 richieste sequenziali per endpoint,
+ricerca/dettaglio/lettore in successione, senza gateway. Backlog bibliografico:
+5.000 correnti e 5.000 viste storiche da rigenerare; backlog testo: 5.000 opere.
+Si registrano code prima/dopo ogni endpoint; non si rallenta un profilo per
+pareggiare artificialmente il lavoro drenato. Prima dei probe, 30 s a code vuote.
+
+CPU e I/O usano l'inviluppo cgroup di avvio/arresto, come nelle baseline; il JSON
+contiene anche la finestra interna al timer B. Working set, memoria cgroup,
+RSS Node e prenotazioni applicative sono distinti. Il picco RSS PostgreSQL non
+si ricava sommando pagine condivise dei backend. Host condiviso, cache filesystem
+non svuotata, merge/JIT variabili: non si attribuisce causalità esclusiva alla
+concorrenza. Le prove iniziali senza correzione e quelle diagnostiche restano
+nel report, non vengono sostituite selettivamente dai campioni migliori.
+
+### A — Pipeline sequenziale
+
+| Misura, secondi | P1B.1d | P2C A |
+|---|---:|---:|
+| Ingest | 48,271 | 47,472 |
+| Catalogo | 85,627 | 95,023 |
+| Full-text | 357,110 | 128,350 |
+| End-to-end | 511,889 | 295,003 |
+
+Corrente/storico: **57,934 /
+36,313 s**; refresh/verifica:
+**7,540 s**. Avvii e altri intervalli del runner
+spiegano il residuo. Preparazione **71,747 s**, HTTP cumulativo
+**102,241 s**, **690 bulk**, **428013939 byte**.
+Throughput full-text **85,952 documenti/s**;
+end-to-end **37,396 opere/s**, tempo ridotto del
+**42,37%**. Questo è un risultato end-to-end,
+non l'estrapolazione del microbenchmark P2B.2.
+
+### B — Runtime operativo
+
+| Metrica | P0 B | P1A B | P1B.1 B | P2 B1 | P2 B2 |
+|---|---:|---:|---:|---:|---:|
+| End-to-end s, timer storico | 1474,721 | 602,783 | 434,043 | 205,916 | 191,983 |
+| Opere/s visibili | 7,481 | 18,302 | 25,417 | 53,575 | 57,463 |
+| Ingest s | 63,097 | 65,079 | 55,863 | 65,609 | 63,227 |
+| Catalogo attivo s | 790,891 | 581,222 | 127,028 | 174,940 | 165,008 |
+| Full-text attivo s | 695,075 | 464,166 | 411,849 | 183,500 | 166,345 |
+| CPU totale s | 1851,926 | 1275,433 | 804,125 | 666,168 | 616,673 |
+| Picco working set simultaneo MiB | 3629,102 | 3154,320 | 3266,289 | 3181,352 | 3272,785 |
+| WAL byte | 1308492806 | 828938517 | 702735505 | 718428673 | 723036227 |
+| Ricerca P95 backlog bibliografico ms | — | — | 194,06 / 187,46¹ | 250,50 | 229,75 |
+
+¹ Controlli P1B.1 contemporanei sulla stessa copia, non il dato storico
+**166,21 ms** di P1B.1d. Per P0/P1A manca un campione C equivalente.
+P0 comprendeva 6.128 riproiezioni aggiuntive; non sono sottratte dai costi.
+Il picco RAM è simultaneo, non somma di massimi osservati in istanti diversi.
+
+Dall'avvio effettivo del lavoro: **B1 205,134 s,
+53,779 opere/s; B2
+190,876 s,
+57,797 opere/s**. Attese iniziali:
+**0,780 / 1,106 s**.
+Rispetto a P1B.1 il timer storico migliora di
+**2,11 / 2,26 volte**.
+
+Ripetizione B2: timer storico **192,064 s**,
+**57,439 opere/s**; timer da lavoro effettivo
+**191,670 s**. Ingest
+**61,428 s**, catalogo attivo
+**166,590 s**, full-text attivo
+**168,827 s**, **401 bulk**.
+CPU **638,585 s**, working set massimo
+**3417,988 MiB**, WAL
+**725222825 byte**. Il JSON conserva gli altri contatori completi.
+Non si converte questa variabilità in una garanzia di capacità.
+
+| Full-text / pipeline interna | B1: 16, 1+1 | B2: 64, 1+2 |
+|---|---:|---:|
+| Documenti/s per secondo attivo full-text | 60,120 | 66,320 |
+| Preparazione s | 114,737 | 90,072 |
+| HTTP cumulativo s | 125,485 | 116,582 |
+| Unione temporale HTTP s | 125,485 | 106,039 |
+| Claim s | 11,604 | 8,360 |
+| ACK s | 5,589 | 3,791 |
+| Overlap preparazione/HTTP s | 73,920 | 46,045 |
+| Overlap / wall dei passaggi produttivi % | 40,527 | 27,899 |
+| Bulk | 796 | 416 |
+| Byte NDJSON inviati | 428013939 | 428013939 |
+| SQL client full-text | 18912 | 10529 |
+| Transazioni esplicite full-text | 1716 | 1053 |
+| SQL client API + ingest-worker | 75643 | 65748 |
+| Producer in attesa s | 0,000 | 0,020 |
+| Consumer inattivi cumulativo s | 38,552 | 141,055 |
+| Attesa coda interna cumulativa s | 71,854 | 1,988 |
+| Attesa interna massima s | 9,219 | 0,861 |
+| Massimo documenti buffered | 64 | 200 |
+| Massimo claim in memoria | 80 | 244 |
+| Massimo NDJSON/copie MiB | 13,509 | 20,575 |
+| Massime prenotazioni MiB | 379,649 | 386,430 |
+| RSS API medio MiB | 329,421 | 354,570 |
+| RSS API picco MiB | 391,859 | 455,656 |
+
+Ogni profilo compie **11.032 claim, ACK e rinnovi validi**, senza lease scaduti,
+retry, errori o riproiezioni. Tutte le code terminano a zero. I bulk operativi
+possono partire parzialmente pieni: media **13,859 / 26,519
+documenti/richiesta**, concorrenza HTTP massima **1 / 2**, media nei periodi HTTP
+**1,000 / 1,099**.
+B2 cambia sia batch sia numero di publisher: non è un'ablazione di una sola variabile.
+
+Code correnti/storiche, picco B1/B2: **8292 /
+8232**; testo **828 /
+600**, sotto il high-water 2.048.
+Residenza media per opera, inclusa permanenza in servizio: catalogo
+**66,602 / 61,568 s**,
+testo **2,982 / 1,464 s**.
+Overlap ingest + catalogo + full-text: **56,753 / 53,594 s**;
+catalogo + full-text, includendo quell'intervallo: **167,911 / 153,490 s**.
+Sono intervalli di servizio sovrapposti, non CPU simultaneamente occupata.
+Slice corrente **105,240 / 99,628 s**,
+storica **68,174 / 64,072 s**.
+Il maggior costo attivo catalogo rispetto a P1B.1 resta visibile: l'overlap e la
+contesa non rendono più veloce ogni singolo stadio.
+
+### Risorse B1/B2
+
+Ogni cella riporta B1 / B2; CPU 100% = un core. Applicazione comprende API,
+ingest-worker e parser, come nelle baseline.
+
+| Container | CPU-s | CPU media % | CPU massima % | Working set medio MiB | Working set massimo MiB |
+|---|---:|---:|---:|---:|---:|
+| Applicazione | 286,39 / 263,77 | 135,71 / 134,55 | 393,33 / 400,29 | 886,69 / 934,74 | 1016,89 / 1088,38 |
+| PostgreSQL | 178,52 / 162,01 | 84,60 / 82,65 | 271,92 / 261,92 | 346,92 / 324,11 | 453,12 / 446,36 |
+| OpenSearch | 199,03 / 188,92 | 94,32 / 96,37 | 448,74 / 442,27 | 1569,19 / 1584,91 | 1740,69 / 1803,26 |
+| Redis | 2,24 / 1,97 | 1,06 / 1,01 | 2,73 / 1,85 | 4,58 / 7,93 | 4,89 / 8,23 |
+
+| Container | Disco letto MB | Disco scritto MB | Rete ricevuta MB | Rete inviata MB |
+|---|---:|---:|---:|---:|
+| Applicazione | 26,141 / 34,312 | 367,337 / 562,065 | 265,342 / 262,264 | 977,340 / 973,964 |
+| PostgreSQL | 20,578 / 13,230 | 2453,111 / 2511,053 | 547,264 / 543,889 | 262,485 / 259,509 |
+| OpenSearch | 27,161 / 29,569 | 873,062 / 1121,497 | 429,178 / 429,196 | 2,316 / 2,242 |
+| Redis | 0,307 / 0,303 | 0,696 / 0,688 | 0,899 / 0,881 | 0,541 / 0,513 |
+
+MB decimali; MiB binari. La rete interna è osservata su entrambe le estremità,
+non sommarle come byte unici. I/O fisico cgroup non è lettura logica PackStore.
+RSS ingest-worker medio **388,528 / 398,449 MiB**,
+picco **488,172 / 497,730 MiB**.
+Il JSON include anche memoria cgroup comprensiva delle pagine file e statistiche SQL.
+
+L'indice opere conta esattamente **11.032** operazioni in ogni prova. Tempo interno
+OpenSearch indexing **102,599 / 100,292 s**,
+refresh **17,360 / 15,811 s**,
+merge **2,178 / 3,509 s**.
+Flush/throttling/rifiuti write sono riportati nel JSON; gli indici interni di nodo
+non sono conteggi di riproiezioni. Translog `REQUEST` preservato.
+
+I budget **384 MiB NDJSON e 448 MiB complessivi non sono limiti RSS/Docker**.
+La prenotazione include spazio di avanzamento per documenti eccezionali; il massimo
+payload ordinario osservato è molto inferiore al budget. Non si abbassa quel margine
+sulla base di un corpus senza grandi eccezioni e non lo si aumenta per aggiungere lane.
+
+### C — Latenze e regressione residua
+
+Ogni cella è **P50 / P95 in ms**, 100 richieste. Il controllo contemporaneo P1B.1
+usa le stesse copie; le latenze storiche P1B.1d sotto backlog erano ricerca
+105,16/166,21, dettaglio 22,09/36,20, lettore 32,12/50,60 ms.
+
+| Profilo / carico | Ricerca | Dettaglio | Lettore |
+|---|---:|---:|---:|
+| P1B.1 code vuote | 78,73 / 115,85 | 15,14 / 28,31 | 20,17 / 29,04 |
+| P1B.1 corrente + storico | 118,12 / 194,06 | 22,95 / 40,48 | 40,21 / 66,22 |
+| P1B.1 full-text | 94,99 / 180,41 | 21,93 / 36,74 | 31,27 / 54,44 |
+| P2 B1 code vuote | 92,69 / 143,20 | 16,01 / 25,07 | 23,11 / 35,28 |
+| P2 B1 corrente + storico | 148,62 / 250,50 | 25,62 / 74,72 | 54,07 / 122,24 |
+| P2 B1 full-text | 142,92 / 259,67 | 21,57 / 59,42 | 28,52 / 108,01 |
+| P2 B2 code vuote | 84,44 / 135,99 | 17,46 / 27,99 | 24,36 / 41,47 |
+| P2 B2 corrente + storico | 133,68 / 229,75 | 24,96 / 102,94 | 35,34 / 133,71 |
+| P2 B2 full-text | 161,06 / 339,51 | 26,08 / 140,77 | 30,01 / 159,63 |
+
+| Profilo / backlog | Correnti drenati | Storici drenati | Testi drenati |
+|---|---:|---:|---:|
+| legacy / bibliography | 1200 | 1200 | 295 |
+| legacy / text | 0 | 0 | 330 |
+| b1 / bibliography | 1260 | 1260 | 1240 |
+| b1 / text | 0 | 0 | 1760 |
+| b2 / bibliography | 1280 | 1280 | 1260 |
+| b2 / text | 0 | 0 | 2432 |
+
+Il testo drenato include i nuovi accodamenti prodotti dal catalogo: non è solo
+la diminuzione netta della coda. I conteggi per singolo endpoint sono nel JSON.
+L'indicizzazione più rapida produce più lavoro e più contesa durante lo stesso
+probe; questo limita l'attribuzione causale ma non annulla la regressione percepita.
+
+Prima della correzione la ripetizione B2 con backlog testo aveva ricerca P95
+**391,72 ms** e lettore **227,23 ms**, contro 397,29/179,78 nel primo campione.
+La versione consolidata misura **339,51 / 159,63 ms**. Il massimo ritardo event-loop
+osservato passa da **333,97 ms** a **120,59 ms** nella finestra ricerca B2;
+un singolo encoding resta capace di occupare **56,33 ms**. Nel profilo B1,
+con backlog bibliografico, il massimo event-loop durante il lettore passa da
+**104,33 a 46,86 ms**, ma il P95 HTTP non migliora coerentemente
+(97,55 ms nel controllo ripetuto, 122,24 ms consolidato).
+Non si attribuisce tutta la latenza all'event-loop né si considera il problema risolto.
+
+Nel probe B2 testo consolidato, 100 richieste OpenSearch della ricerca, misurate
+dal client fino agli header e quindi soggette anche alle attese Node, hanno
+media **92,52 ms**, contro media API **176,18 ms**. La differenza delle medie
+include PIT, SQL, API e attese; non si sottraggono percentili marginali per
+inventare componenti di latenza. Nella stessa finestra OpenSearch indicizza
+**1.408** opere e accumula **324 ms** di GC osservato: quel solo GC non spiega
+l'intera coda delle latenze. CPU condivisa, pubblicazione e SQL restano concorrenti.
+
+A code vuote lo scheduler compie circa un passaggio al secondo per fase,
+come configurato, senza busy-loop. Nei 30 s dopo readiness, la CPU media del container applicativo è
+**8,89%** nel controllo P1B.1, **10,71%** in B1 e **11,07%** in B2
+(campioni bibliografici); la finestra può includere JIT/inizializzazione.
+Il report conserva anche gli altri container e il numero dei passaggi. Non si afferma consumo
+zero: polling e bookkeeping hanno un costo anche quando non ci sono documenti.
+
+### Equivalenza, recovery e decisione operativa
+
+Tutte le nuove A/B, la ripetizione e la verifica post-guasti hanno 11.032 opere,
+snapshot, documenti catalogo, viste storiche e documenti OpenSearch; generazioni,
+snapshot e hash completi coincidono col riferimento. Cinque query e lettore
+passano; 107.054 oggetti canonici verificati dopo i guasti; nessuna coda residua.
+Le regressioni critiche P2B.2/P2A sono riusate senza indebolirle: snapshot
+indipendenti, nessuna transazione propria durante HTTP, invalidazione durante
+preparazione/attesa, lease rinnovato/scaduto, versioni fuori ordine, errore parziale
+mentre un altro bulk riesce, 429/503, perdita connessione PG, SIGKILL producer/
+HTTP/prima dell'ACK, SIGTERM, pausa/ripresa e flush prima dell'ACK su retry incerto.
+Il nuovo controllo esercita ricerca normale e scheduler nelle modalità di manutenzione.
+
+Recupero fixture 12 opere dopo expiry forzata: producer **137,56 ms**,
+HTTP **262,19 ms**, prima ACK **210,22 ms**; SIGTERM **230,73 ms** senza forzatura.
+Non sono tempi comprensivi dei cinque minuti di lease naturale. Ricreazione indice,
+oggetti grandi/corrotti e casi bibliografici complessi restano coperti dalle suite
+P2A/P2B.1/P2B.2 già passate: codice relativo invariato, non duplicate integralmente.
+Build completa e cinque test mirati pipeline/ingest passati.
+
+Per uso interattivo si conserva **16 / preparazione 1 / pubblicazione 1**;
+per ingest/reindicizzazione senza priorità alla latenza, **64 / 1 / 2** è un'opzione
+misurata, non il nuovo default. Budget e configurazione OpenSearch invariati.
+La presenza della regressione impedisce di promuovere B2 a default interattivo
+oppure dichiarare P2 interamente chiusa.
+
+### Limite dominante e seguito giustificato
+
+B1: ultimo commit canonico a **66,152 s**, ultima slice corrente a **188,489 s**, storica a **188,541 s**, full-text a **193,457 s** dall'accodamento.
+B2: ultimo commit canonico a **63,734 s**, ultima slice corrente a **177,910 s**, storica a **178,039 s**, full-text a **181,423 s** dall'accodamento.
+B2 ripetuto: ultimo commit canonico a **61,550 s**, ultima slice corrente a **179,609 s**, storica a **179,639 s**, full-text a **181,867 s** dall'accodamento.
+
+Questi estremi, le code e l'overlap nel JSON identificano il percorso critico:
+il canonico finisce molto prima; catalogo corrente/storico e full-text avanzano
+in contesa e chiudono vicini, oppure resta una breve coda testo nel default.
+Il profilo 64/1+2 non mantiene due publisher pieni perché il catalogo fornisce
+nuovi documenti più lentamente. Non è evidenza di saturazione globale dei 14 CPU
+dell'host: serialità dello scheduler/catalogo e CPU condivisa dell'API limitano
+il lavoro sfruttabile. Neppure i 120,29 documenti/s del full-text isolato P2B.2
+rappresentano la capacità end-to-end.
+
+Il prossimo intervento motivato dai numeri è analizzare la contesa del catalogo
+corrente/storico con il lavoro CPU full-text nel processo API e progettare, in una
+fase autorizzata, un'esecuzione che protegga le richieste interattive senza limitare
+artificialmente l'indicizzazione. Occorre separare costo bibliografico, attesa SQL
+e occupazione del thread prima di scegliere la modifica. Non è giustificato
+anticipare parallelismo fra ZIP o riscrittura canonica per accelerare questo
+percorso: l'ingest è già terminato mentre le proiezioni continuano. Il target
+2.000 opere/s rimane lontano e non è attestato da questa campagna.
+
+### Riproduzione
+
+```sh
+# Costruire una sola volta, prima delle prove; conservare il dist P2A di riferimento.
+docker build -f infra/Dockerfile --target api -t palimora-p2c-api .
+RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p2c-new-b1 \
+ RELEASE_IMAGE=palimora-p2c-api P0_SCENARIO=B \
+ P2C_REFERENCE_DIST=/percorso/privato/p2a/apps/api/dist \
+ PROJECTION_TEXT_BATCH=16 PROJECTION_TEXT_PUBLISH_LANES=1 \
+ ./scripts/benchmark-p2c.sh
+# A: P0_SCENARIO=A. B2: batch64/publish2. Ogni root deve essere nuova.
+python3 scripts/summarize-p2c.py /mnt/sdb/palimora-p2c-new-b1
+# C: clonare una fixture verificata e fermata; root nuova a ogni invocazione.
+P2C_SOURCE=/mnt/sdb/palimora-p2c-new-b1 P2C_ROOT=/mnt/sdb/palimora-p2c-new-c \
+ P2C_IMAGE=palimora-p2c-api P2C_EVENT_LOOP=1 \
+ BENCH_LATENCY_TEXT_ONLY=0 BENCH_REGENERATE_HISTORY=1 \
+ BENCH_REQUIRE_BIBLIOGRAPHY_BACKLOG=1 ./scripts/benchmark-p2c-latency.sh
+# Solo testo: TEXT_ONLY=1, REGENERATE_HISTORY=0, REQUIRE_BIBLIOGRAPHY_BACKLOG=0.
+```
+
+Le directory private e gli ID immagine sono nel JSON; container/reti temporanei
+rimossi, fixture conservate. Nessun contenuto delle opere o dato account pubblicato.

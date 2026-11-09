@@ -32,6 +32,21 @@ if (!new URL(process.env.DATABASE_URL).pathname.endsWith("_test"))
   }
   const catalog = await get("/works");
   const id = catalog.items[0].id;
+  const queues = async () =>
+    (
+      await require("../apps/api/dist/db").pool.query(
+        "SELECT (SELECT count(*)::int FROM catalog_pending) current,(SELECT count(*)::int FROM catalog_snapshot_pending) historical,(SELECT count(*)::int FROM catalog_text_pending) text",
+      )
+    ).rows[0];
+  const searchStats = async () => {
+    if (process.env.P2C_EVENT_LOOP !== "1") return undefined;
+    const response = await fetch(
+      "http://opensearch:9200/_nodes/stats/jvm,process,indices?filter_path=nodes.*.jvm.gc.collectors,nodes.*.jvm.mem.heap_used_in_bytes,nodes.*.process.cpu.total_in_millis,nodes.*.indices.indexing,nodes.*.indices.refresh,nodes.*.indices.merges,nodes.*.indices.search.open_contexts,nodes.*.indices.segments.count",
+    );
+    assert.ok(response.ok);
+    return Object.values((await response.json()).nodes)[0];
+  };
+  const windows = {};
   const result = {
     transport: "internal HTTP, authenticated; no gateway",
     samples: 100,
@@ -43,11 +58,25 @@ if (!new URL(process.env.DATABASE_URL).pathname.endsWith("_test"))
   })) {
     for (let i = 0; i < 3; i++) await get(path);
     const times = [];
+    const before =
+      process.env.P2C_HTTP_QUEUES === "1" ? await queues() : undefined;
+    const opensearch_before = await searchStats();
+    const started_at = Date.now();
     for (let i = 0; i < 100; i++) {
       const t = performance.now();
       await get(path);
       times.push(performance.now() - t);
     }
+    if (before)
+      windows[kind] = {
+        started_at,
+        ended_at: Date.now(),
+        before,
+        after: await queues(),
+        ...(opensearch_before
+          ? { opensearch_before, opensearch_after: await searchStats() }
+          : {}),
+      };
     times.sort((a, b) => a - b);
     result[kind] = {
       mean_ms: times.reduce((a, b) => a + b, 0) / 100,
@@ -62,6 +91,10 @@ if (!new URL(process.env.DATABASE_URL).pathname.endsWith("_test"))
       { pit_id: [...pits] },
       "DELETE",
     );
+  if (process.env.P2C_HTTP_QUEUES === "1") {
+    result.windows = windows;
+    await require("../apps/api/dist/db").pool.end();
+  }
   fs.writeFileSync(
     "/results/http-latency.json",
     JSON.stringify(result, null, 2),

@@ -60,7 +60,12 @@ if (output) {
   const fetch = global.fetch;
   global.fetch = async function (...args) {
     const start = performance.now();
-    const kind = String(args[0]).includes("/_doc/") ? "document" : "other";
+    const url = String(args[0]);
+    const kind = url.includes("/_doc/")
+      ? "document"
+      : url.endsWith("/_bulk")
+        ? "bulk"
+        : "other";
     try {
       return await fetch(...args);
     } finally {
@@ -75,6 +80,13 @@ if (output) {
     }
   };
   function wrap(owner, name) {
+    // P2 re-exports this entrypoint through a read-only getter. Instrument the
+    // authoritative implementation, preserving the original SQL context.
+    if (
+      name === "projectText" &&
+      Object.getOwnPropertyDescriptor(owner, name)?.get
+    )
+      owner = require("../apps/api/dist/catalog-text-bulk");
     const fn = owner[name];
     owner[name] = function (...args) {
       const start = performance.now();

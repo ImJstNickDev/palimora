@@ -29,9 +29,19 @@ docker run -d --name "$release_name-search" --network "$release_name" --network-
 for attempt in {1..90}; do if docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null 2>&1 && docker exec "$release_name-pg" pg_isready -U postgres >/dev/null 2>&1; then break; fi; sleep 1; done
 docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null
 docker exec "$release_name-pg" pg_isready -U postgres >/dev/null
-docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:-}" -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" sleep infinity >/dev/null
+docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:-}" -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 \
+ -e PROJECTION_TEXT_BATCH=${PROJECTION_TEXT_BATCH:-16} \
+ -e PROJECTION_TEXT_PREPARE_LANES=${PROJECTION_TEXT_PREPARE_LANES:-1} \
+ -e PROJECTION_TEXT_PUBLISH_LANES=${PROJECTION_TEXT_PUBLISH_LANES:-1} \
+ -e PROJECTION_TEXT_GROUPS=${PROJECTION_TEXT_GROUPS:-8} \
+ -e PROJECTION_TEXT_DOCUMENTS=${PROJECTION_TEXT_DOCUMENTS:-256} \
+ -e PROJECTION_TEXT_NDJSON_MIB=${PROJECTION_TEXT_NDJSON_MIB:-384} \
+ -e PROJECTION_TEXT_MEMORY_MIB=${PROJECTION_TEXT_MEMORY_MIB:-448} \
+ -e PROJECTION_TEXT_RENEW_MS=${PROJECTION_TEXT_RENEW_MS:-60000} \
+ -e PROJECTION_TEXT_OVERLAP=${PROJECTION_TEXT_OVERLAP:-1} "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" sleep infinity >/dev/null
 printf '%s\n' "$release_name" > "$release_root/name"
 git rev-parse HEAD > "$release_root/results/source-commit.txt"
+docker exec -e NODE_OPTIONS= "$release_name-worker" sh -c 'for module_path in apps/api/src/catalog.ts apps/api/src/catalog-search.ts apps/api/src/catalog-text-*.ts apps/api/src/operations-index.ts; do if [ -f "$module_path" ]; then sha256sum "$module_path"; fi; done' > "$release_root/results/source-module-checksums.txt"
 docker image inspect --format '{{.Id}}' "${RELEASE_IMAGE:-palimora-release-api:1.0.0}" > "$release_root/results/image-id.txt"
 sha256sum scripts/benchmark-p0.sh scripts/performance-*.cjs scripts/benchmark-performance*.cjs > "$release_root/results/script-checksums.txt"
 python3 - "$release_root" <<'PY'

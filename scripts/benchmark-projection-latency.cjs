@@ -27,7 +27,12 @@ let child;
   const fd = fs.openSync("/results/latency-api.log", "w");
   child = spawn(process.execPath, ["apps/api/dist/main.js"], {
     stdio: ["ignore", fd, fd],
-    env: process.env,
+    env: {
+      ...process.env,
+      ...(process.env.P2C_LATENCY_PROFILE
+        ? { P0_PROFILE: process.env.P2C_LATENCY_PROFILE }
+        : {}),
+    },
   });
   fs.closeSync(fd);
   let ready = false;
@@ -39,6 +44,15 @@ let child;
     await delay(1000);
   }
   assert.ok(ready);
+  const idle = {};
+  if (process.env.P2C_IDLE_SECONDS) {
+    const seconds = Number(process.env.P2C_IDLE_SECONDS);
+    assert.ok(seconds >= 30 && seconds <= 300);
+    idle.started_at = Date.now();
+    await delay(seconds * 1000);
+    idle.ended_at = Date.now();
+    assert.ok(Object.values(await queues()).every((n) => n === 0));
+  }
   execFileSync(process.execPath, ["scripts/benchmark-performance-http.cjs"]);
   fs.renameSync("/results/http-latency.json", "/results/http-idle.json");
   if (regenerateHistory)
@@ -79,7 +93,14 @@ let child;
   fs.writeFileSync(
     "/results/latency-load.json",
     JSON.stringify(
-      { workload, textOnly, regenerateHistory, before, after },
+      {
+        workload,
+        textOnly,
+        regenerateHistory,
+        before,
+        after,
+        ...(idle.started_at ? { idle } : {}),
+      },
       null,
       2,
     ),
@@ -89,6 +110,15 @@ let child;
     assert.ok(Date.now() < end, "Drain deadline");
     await delay(1000);
   }
+  const report = JSON.parse(
+    fs.readFileSync("/results/latency-load.json", "utf8"),
+  );
+  report.drained_at_ms = Date.now();
+  report.final_queues = await queues();
+  fs.writeFileSync(
+    "/results/latency-load.json",
+    JSON.stringify(report, null, 2),
+  );
   console.log(JSON.stringify({ latency_verified: true, before, after }));
 })()
   .catch((e) => {

@@ -58,6 +58,7 @@ function launch(name, file) {
   if (!ready) throw Error("API readiness timeout");
   const id = randomUUID(),
     start = performance.now(),
+    started_at_ms = Date.now(),
     timeline = [];
   await pool.query(
     "INSERT INTO ingest_batches(id,state,selection,reprocess) VALUES($1,'pending',$2,false)",
@@ -69,7 +70,7 @@ function launch(name, file) {
       throw Error("Application process exited");
     const row = (
       await pool.query(
-        `SELECT state,extract(epoch from(started_at-created_at))::float queue_seconds,extract(epoch from(finished_at-started_at))::float processing_seconds,(SELECT count(*) FROM archive_work_heads)::int works,(SELECT count(*) FROM catalog_documents)::int documents,(SELECT count(*) FROM catalog_pending)::int catalog,(SELECT count(*) FROM catalog_snapshot_pending)::int historical,(SELECT count(*) FROM catalog_text_pending)::int text FROM ingest_batches WHERE id=$1`,
+        `SELECT state,extract(epoch from started_at)*1000 processing_started_at_ms,extract(epoch from finished_at)*1000 processing_finished_at_ms,extract(epoch from(started_at-created_at))::float queue_seconds,extract(epoch from(finished_at-started_at))::float processing_seconds,(SELECT count(*) FROM archive_work_heads)::int works,(SELECT count(*) FROM catalog_documents)::int documents,(SELECT count(*) FROM catalog_pending)::int catalog,(SELECT count(*) FROM catalog_snapshot_pending)::int historical,(SELECT count(*) FROM catalog_text_pending)::int text FROM ingest_batches WHERE id=$1`,
         [id],
       )
     ).rows[0];
@@ -95,12 +96,18 @@ function launch(name, file) {
   if (!complete) throw Error("Pipeline deadline");
   execFileSync(process.execPath, ["scripts/benchmark-performance-verify.cjs"]);
   const seconds = (performance.now() - start) / 1000;
+  const ended_at_ms = Date.now();
   execFileSync(process.execPath, ["scripts/performance-snapshot.cjs", "after"]);
   fs.writeFileSync(
     "/results/end-to-end.json",
     JSON.stringify(
       {
         scenario: "B",
+        started_at_ms,
+        ended_at_ms,
+        work_start_to_visible_seconds:
+          (ended_at_ms - Number(timeline.at(-1).processing_started_at_ms)) /
+          1000,
         seconds,
         works_per_second: 11032 / seconds,
         last: timeline.at(-1),

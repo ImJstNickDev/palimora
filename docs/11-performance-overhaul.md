@@ -4074,3 +4074,29 @@ e `collect-p4-storage.py ROOT` sono verifiche supplementari dopo la cattura
 principale; per il dettaglio SQL avviare soltanto il PostgreSQL della fixture.
 Evidenze private `/mnt/sdb/palimora-p3-final-p4-*-final/results/`; immagini e
 hash del codice runtime registrati nel JSON.
+
+## P5 — valutazione di scala e readiness (9 novembre 2026)
+
+**NO-GO, P5 incompleta.** La valutazione e i criteri operativi sono in
+[12-first-ingest-readiness](12-first-ingest-readiness.md); inventario, quote e
+risultati puntuali in [performance-p5-final.json](performance-p5-final.json).
+Non è stato avviato alcun ingest massivo o deployment.
+
+Il campione P4 era il più piccolo dei 139 ZIP. Il campionamento di sei central
+directory rivela anche 2,3 milioni di TXT/HTML in un solo ZIP; cardinalità globale,
+sovrapposizioni e costo degli SQLite non sono ancora sufficientemente misurati.
+Il modello di sensibilità separa pack, snapshot, capitoli, testo indicizzato,
+WAL, code, cache SQLite, manutenzione e backup. Il volume dati disponibile non
+copre gli scenari proposti. I deficit sono condizionati alle ipotesi, non misure
+dello spazio esatto richiesto dall'archivio.
+
+Il controllo con quote aggiunge evidenza sul piccolo corpus ma non dimostra
+throughput sostenuto, recovery con backlog prolungato o correttezza dell'ingest
+eterogeneo. Le prove precedenti non vengono riclassificate come P5. Non si
+promuove una configurazione definitiva né si dichiara raggiunto il target 2.000/s.
+
+Riepilogo: **P0** diagnosi/baseline completata; **P1** storage e ingest completati;
+**P2** proiezioni/ricerca completate, facet paralleli sempre 0; **P3** indipendenza
+e backpressure completate; **P4** percorso canonico completato con confronto
+alternato; **P5** verifica di scala ancora incompleta, decisione operativa NO-GO.
+Il Performance Overhaul P0–P5 non è dichiarato concluso.

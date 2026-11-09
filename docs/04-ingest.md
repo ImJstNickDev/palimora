@@ -392,3 +392,12 @@ envelope ne garantisce l'ordine; non si apre una transazione sulla connessione
 del lease. I commit usano ancora client indipendenti e il controllo periodico
 di cancellazione resta separato. Questo evita di chiedere un secondo client
 al pool da 12 per letture che la connessione della corsia può già eseguire.
+
+### Gate prima dell'importazione massiva
+
+La [valutazione P5](12-first-ingest-readiness.md) è **NO-GO**: i parametri P4
+non costituiscono ancora un profilo definitivo per tutti i ZIP. Eseguire il
+preflight documentato, dimensionare volume di lavoro e backup separatamente,
+verificare le central directory dei ZIP grandi rispetto alla memoria aggregata.
+Il campione di 11.032 opere non valida throughput sostenuto o costo globale degli
+indici SQLite. Le modalità e i budget predefiniti non sono modificati da P5.

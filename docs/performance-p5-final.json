@@ -1,0 +1,1899 @@
+{
+  "schema": "palimora.performance.p5-final.v1",
+  "reference_commit": "7f0f41f02cf6833b6886d7637896069231437504",
+  "status": "incomplete",
+  "decision": "NO-GO",
+  "inventory": {
+    "groups": {
+      ".part": {
+        "count": 10,
+        "bytes": 18060673024
+      },
+      ".sqlite3": {
+        "count": 3,
+        "bytes": 57734889472
+      },
+      ".sqlite3-shm": {
+        "count": 1,
+        "bytes": 32768
+      },
+      ".sqlite3-wal": {
+        "count": 1,
+        "bytes": 0
+      },
+      ".zip": {
+        "count": 139,
+        "bytes": 915989099277
+      }
+    },
+    "zip_size_quantiles_bytes": {
+      "0": 228622123,
+      "0.25": 2144418903,
+      "0.5": 4375244806,
+      "0.75": 9300845886,
+      "0.9": 16944618298,
+      "1": 37339847782
+    },
+    "samples": [
+      {
+        "zip": "queue119_archive05.zip",
+        "bytes": 228622123,
+        "members": 11040,
+        "expanded_bytes": 598801143,
+        "extensions": {
+          "": 3,
+          ".epub": 11032,
+          ".tsv": 1,
+          ".log": 1,
+          ".txt": 3
+        },
+        "largest_members_bytes": [
+          1155106,
+          124533923,
+          262421940
+        ]
+      },
+      {
+        "zip": "queue73.zip",
+        "bytes": 2144418903,
+        "members": 77367,
+        "expanded_bytes": 2164910169,
+        "extensions": {
+          "": 3,
+          ".epub": 77364
+        },
+        "largest_members_bytes": [
+          3757115,
+          4647625,
+          18856861
+        ]
+      },
+      {
+        "zip": "queue100.zip",
+        "bytes": 4375244806,
+        "members": 94134,
+        "expanded_bytes": 4407620205,
+        "extensions": {
+          "": 3,
+          ".epub": 94131
+        },
+        "largest_members_bytes": [
+          2751469,
+          3159675,
+          3393205
+        ]
+      },
+      {
+        "zip": "queue03.zip",
+        "bytes": 9300845886,
+        "members": 429983,
+        "expanded_bytes": 9393069931,
+        "extensions": {
+          "": 3,
+          ".epub": 429980
+        },
+        "largest_members_bytes": [
+          6480749,
+          7018425,
+          7018446
+        ]
+      },
+      {
+        "zip": "queue22.zip",
+        "bytes": 16944618298,
+        "members": 361773,
+        "expanded_bytes": 17102364038,
+        "extensions": {
+          "": 3,
+          ".epub": 361770
+        },
+        "largest_members_bytes": [
+          7766896,
+          10265957,
+          14479605
+        ]
+      },
+      {
+        "zip": "ao3_old_files_part17.zip",
+        "bytes": 37339847782,
+        "members": 2308264,
+        "expanded_bytes": 96277599830,
+        "extensions": {
+          "": 1,
+          ".txt": 2097044,
+          ".html": 211219
+        },
+        "largest_members_bytes": [
+          15412862,
+          17958360,
+          19232795
+        ]
+      }
+    ],
+    "sqlite": [
+      {
+        "file": "ao3_deduped.sqlite3",
+        "schema": [
+          [
+            "ao3_metadata",
+            "CREATE TABLE \"ao3_metadata\" (\n\t\"Path\"\tTEXT,\n\t\"Title\"\tTEXT,\n\t\"Author\"\tTEXT,\n\t\"Category\"\tTEXT,\n\t\"Genre\"\tTEXT,\n\t\"Language\"\tTEXT,\n\t\"Status\"\tTEXT,\n\t\"Published\"\tTEXT,\n\t\"Updated\"\tTEXT,\n\t\"Packaged\"\tTEXT,\n\t\"Rating\"\tTEXT,\n\t\"Warnings\"\tTEXT,\n\t\"Chapters\"\tINT,\n\t\"Words\"\tINT,\n\t\"Publisher\"\tTEXT,\n\t\"Story_URL\"\tTEXT,\n\t\"Author_URL\"\tTEXT,\n\t\"Summary\"\tTEXT,\n\t\"Relationships\"\tTEXT,\n\t\"Series\"\tTEXT,\n\t\"Series_URL\"\tTEXT,\n\t\"Comments\"\tTEXT,\n\t\"Kudos\"\tINT,\n\t\"Collections\"\tTEXT\n)"
+          ],
+          [
+            "sqlite_stat1",
+            "CREATE TABLE sqlite_stat1(tbl,idx,stat)"
+          ],
+          [
+            "ao3_tags",
+            "CREATE TABLE ao3_tags (\n    id INTEGER PRIMARY KEY,\n    type TEXT,\n    name TEXT,\n    canonical INTEGER,\n    cached_count INTEGER,\n    merger_id INTEGER\n)"
+          ]
+        ]
+      },
+      {
+        "file": "ao3.sqlite3",
+        "schema": [
+          [
+            "ao3_metadata",
+            "CREATE TABLE \"ao3_metadata\" (\n\t\"Path\"\tTEXT,\n\t\"Title\"\tTEXT,\n\t\"Author\"\tTEXT,\n\t\"Category\"\tTEXT,\n\t\"Genre\"\tTEXT,\n\t\"Language\"\tTEXT,\n\t\"Status\"\tTEXT,\n\t\"Published\"\tTEXT,\n\t\"Updated\"\tTEXT,\n\t\"Packaged\"\tTEXT,\n\t\"Rating\"\tTEXT,\n\t\"Warnings\"\tTEXT,\n\t\"Chapters\"\tINTEGER,\n\t\"Words\"\tINTEGER,\n\t\"Publisher\"\tTEXT,\n\t\"Story_URL\"\tTEXT,\n\t\"Author_URL\"\tTEXT,\n\t\"Summary\"\tTEXT,\n\t\"Relationships\"\tTEXT,\n\t\"Series\"\tTEXT,\n\t\"Series_URL\"\tTEXT,\n\t\"Comments\"\tTEXT,\n\t\"Kudos\"\tINTEGER,\n\t\"Collections\"\tTEXT\n)"
+          ]
+        ]
+      },
+      {
+        "file": "ao3_old_files.sqlite3",
+        "schema": [
+          [
+            "metadata_full_old",
+            "CREATE TABLE \"metadata_full_old\" (\n\t\"Path\"\t,\n\t\"Title\"\t,\n\t\"Author\"\t,\n\t\"Category\"\t,\n\t\"Genre\"\t,\n\t\"Language\"\t,\n\t\"Status\"\t,\n\t\"Published\"\t,\n\t\"Updated\"\t,\n\t\"Packaged\"\t,\n\t\"Rating\"\t,\n\t\"Warnings\"\t,\n\t\"Chapters\"\t,\n\t\"Words\"\t,\n\t\"Publisher\"\t,\n\t\"StoryURL\"\t,\n\t\"AuthorURL\"\t,\n\t\"Summary\"\t,\n\t\"Relationships\"\t,\n\t\"Series\"\t,\n\t\"SeriesURL\"\t,\n\t\"Comments\"\t,\n\t\"Kudos\"\t,\n\t\"Collections\"\t\n)"
+          ],
+          [
+            "stories",
+            "CREATE TABLE \"stories\" (\n\t\"storyurl\"\tTEXT\n)"
+          ]
+        ]
+      }
+    ]
+  },
+  "hardware": {
+    "logical_cpus": 14,
+    "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900H",
+    "virtualization": "KVM",
+    "memory_kib": 65845476,
+    "filesystems": {
+      "/": {
+        "total_bytes": 811512500224,
+        "available_bytes": 283742216192
+      },
+      "/mnt/sdb": {
+        "total_bytes": 3786736029696,
+        "available_bytes": 1666586275840
+      },
+      "/mnt/teratron_data": {
+        "total_bytes": 21988093460480,
+        "available_bytes": 3030593576960
+      }
+    }
+  },
+  "capacity_model": {
+    "kind": "planning sensitivity; not a validated population forecast",
+    "units": "GiB",
+    "formula": "pack=ZIP_GiB*pack_ratio; PG=16+(snapshots*12000+chapters*8000)/2^30; search=16+text_GiB*search_ratio; total=(pack+PG+search+wal+queues+staging+derived_cache+maintenance)*1.25",
+    "scenarios": {
+      "favourable": {
+        "snapshot_assumption": 15000000,
+        "chapter_assumption": 25000000,
+        "unique_works_unknown": true,
+        "pack_ratio": 1.2,
+        "pack_gib": 1023.6975915100425,
+        "postgres_gib": 369.90257835388184,
+        "search_gib": 466.0,
+        "wal_gib": 32,
+        "backlog_gib": 8,
+        "staging_tmp_gib": 8,
+        "sqlite_derived_cache_gib": 128,
+        "maintenance_gib": 256,
+        "safety_fraction": 0.25,
+        "total_working_gib": 2864.5002123299055,
+        "additional_working_gib": 1312.3707910957746,
+        "backup_and_restore": "Separate volumes required; conservatively reserve another total_working_gib each. Export may require uncompressed object bytes, not pack bytes."
+      },
+      "central": {
+        "snapshot_assumption": 30000000,
+        "chapter_assumption": 60000000,
+        "unique_works_unknown": true,
+        "pack_ratio": 1.8,
+        "pack_gib": 1535.546387265064,
+        "postgres_gib": 798.310962677002,
+        "search_gib": 1456.0,
+        "wal_gib": 64,
+        "backlog_gib": 8,
+        "staging_tmp_gib": 8,
+        "sqlite_derived_cache_gib": 128,
+        "maintenance_gib": 512,
+        "safety_fraction": 0.25,
+        "total_working_gib": 5637.321687427582,
+        "additional_working_gib": 4085.1922661934514,
+        "backup_and_restore": "Separate volumes required; conservatively reserve another total_working_gib each. Export may require uncompressed object bytes, not pack bytes."
+      },
+      "prudent": {
+        "snapshot_assumption": 50000000,
+        "chapter_assumption": 150000000,
+        "unique_works_unknown": true,
+        "pack_ratio": 3,
+        "pack_gib": 2559.2439787751064,
+        "postgres_gib": 1692.3806343078613,
+        "search_gib": 4216.0,
+        "wal_gib": 128,
+        "backlog_gib": 8,
+        "staging_tmp_gib": 8,
+        "sqlite_derived_cache_gib": 128,
+        "maintenance_gib": 1024,
+        "safety_fraction": 0.25,
+        "total_working_gib": 12204.53076635371,
+        "additional_working_gib": 10652.401345119579,
+        "backup_and_restore": "Separate volumes required; conservatively reserve another total_working_gib each. Export may require uncompressed object bytes, not pack bytes."
+      }
+    }
+  },
+  "bounded_member_sampling": [
+    {
+      "source": "queue119_archive05.zip",
+      "members": 11040,
+      "central_directory_process_peak_rss_kib": 21696,
+      "sampled_bytes": 3412409,
+      "samples": [
+        {
+          "extension": ".epub",
+          "bytes": 8549,
+          "crc_verified": true,
+          "inner_bytes": 16522,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 22223,
+          "crc_verified": true,
+          "inner_bytes": 52685,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 9000,
+          "crc_verified": true,
+          "inner_bytes": 18885,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 6205,
+          "crc_verified": true,
+          "inner_bytes": 11838,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 4748,
+          "crc_verified": true,
+          "inner_bytes": 8919,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 9654,
+          "crc_verified": true,
+          "inner_bytes": 22256,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".txt",
+          "bytes": 1063783,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 180,
+          "crc_verified": true
+        },
+        {
+          "extension": ".epub",
+          "bytes": 1132961,
+          "crc_verified": true,
+          "inner_bytes": 3856863,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 1155106,
+          "crc_verified": true,
+          "inner_bytes": 3249635,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        }
+      ]
+    },
+    {
+      "source": "queue73.zip",
+      "members": 77367,
+      "central_directory_process_peak_rss_kib": 92644,
+      "sampled_bytes": 23772372,
+      "samples": [
+        {
+          "extension": ".epub",
+          "bytes": 7216,
+          "crc_verified": true,
+          "inner_bytes": 16111,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 6596,
+          "crc_verified": true,
+          "inner_bytes": 15705,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 7936,
+          "crc_verified": true,
+          "inner_bytes": 16651,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 3673,
+          "crc_verified": true,
+          "inner_bytes": 6183,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 32315,
+          "crc_verified": true,
+          "inner_bytes": 55276,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 6870,
+          "crc_verified": true,
+          "inner_bytes": 13336,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 24055,
+          "crc_verified": true,
+          "inner_bytes": 58065,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 179225,
+          "crc_verified": true,
+          "inner_bytes": 363723,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 4647625,
+          "crc_verified": true,
+          "inner_bytes": 12621716,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 18856861,
+          "crc_verified": true,
+          "inner_bytes": 53919957,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        }
+      ]
+    },
+    {
+      "source": "queue100.zip",
+      "members": 94134,
+      "central_directory_process_peak_rss_kib": 179840,
+      "sampled_bytes": 6787978,
+      "samples": [
+        {
+          "extension": ".epub",
+          "bytes": 6094,
+          "crc_verified": true,
+          "inner_bytes": 12144,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 7530,
+          "crc_verified": true,
+          "inner_bytes": 15376,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 17485,
+          "crc_verified": true,
+          "inner_bytes": 42738,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 16366,
+          "crc_verified": true,
+          "inner_bytes": 35889,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 118502,
+          "crc_verified": true,
+          "inner_bytes": 241081,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 12125,
+          "crc_verified": true,
+          "inner_bytes": 27462,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 36053,
+          "crc_verified": true,
+          "inner_bytes": 84853,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 20943,
+          "crc_verified": true,
+          "inner_bytes": 47430,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 3159675,
+          "crc_verified": true,
+          "inner_bytes": 8633572,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 3393205,
+          "crc_verified": true,
+          "inner_bytes": 7928542,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        }
+      ]
+    },
+    {
+      "source": "queue03.zip",
+      "members": 429983,
+      "central_directory_process_peak_rss_kib": 491244,
+      "sampled_bytes": 14264923,
+      "samples": [
+        {
+          "extension": ".epub",
+          "bytes": 10825,
+          "crc_verified": true,
+          "inner_bytes": 23993,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 6397,
+          "crc_verified": true,
+          "inner_bytes": 13155,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 57526,
+          "crc_verified": true,
+          "inner_bytes": 128415,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 15870,
+          "crc_verified": true,
+          "inner_bytes": 34931,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 5551,
+          "crc_verified": true,
+          "inner_bytes": 10609,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 42727,
+          "crc_verified": true,
+          "inner_bytes": 100863,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 12678,
+          "crc_verified": true,
+          "inner_bytes": 27425,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 76478,
+          "crc_verified": true,
+          "inner_bytes": 182791,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 7018425,
+          "crc_verified": true,
+          "inner_bytes": 18565679,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 7018446,
+          "crc_verified": true,
+          "inner_bytes": 18565723,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        }
+      ]
+    },
+    {
+      "source": "queue22.zip",
+      "members": 361773,
+      "central_directory_process_peak_rss_kib": 705084,
+      "sampled_bytes": 25086195,
+      "samples": [
+        {
+          "extension": ".epub",
+          "bytes": 35794,
+          "crc_verified": true,
+          "inner_bytes": 83925,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 188304,
+          "crc_verified": true,
+          "inner_bytes": 481057,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 26105,
+          "crc_verified": true,
+          "inner_bytes": 56337,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 15035,
+          "crc_verified": true,
+          "inner_bytes": 32524,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 20945,
+          "crc_verified": true,
+          "inner_bytes": 54292,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 9149,
+          "crc_verified": true,
+          "inner_bytes": 20660,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 30713,
+          "crc_verified": true,
+          "inner_bytes": 81134,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 14588,
+          "crc_verified": true,
+          "inner_bytes": 30734,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 10265957,
+          "crc_verified": true,
+          "inner_bytes": 26332547,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        },
+        {
+          "extension": ".epub",
+          "bytes": 14479605,
+          "crc_verified": true,
+          "inner_bytes": 41145381,
+          "media_bytes": 0,
+          "chapter_filename_matches": 0
+        }
+      ]
+    },
+    {
+      "source": "ao3_old_files_part17.zip",
+      "members": 2308264,
+      "central_directory_process_peak_rss_kib": 2611612,
+      "sampled_bytes": 37336753,
+      "samples": [
+        {
+          "extension": ".txt",
+          "bytes": 2794,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 25254,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 5262,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 5119,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 71087,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 19285,
+          "crc_verified": true
+        },
+        {
+          "extension": ".html",
+          "bytes": 11739,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 5058,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 17958360,
+          "crc_verified": true
+        },
+        {
+          "extension": ".txt",
+          "bytes": 19232795,
+          "crc_verified": true
+        }
+      ]
+    }
+  ],
+  "sampling_limits": {
+    "max_outer_member_bytes": 25165824,
+    "max_bytes_per_zip": 67108864,
+    "max_members_per_zip": 10,
+    "read_only_container": true,
+    "cpus": 1,
+    "memory_gib": 3,
+    "chapter_count_not_measured": "Filename matches are not chapter counts; fff_chapter classes need adapter inspection."
+  },
+  "quota_checks": {
+    "A": {
+      "sources": 4,
+      "works": 11032,
+      "canonical_seconds": 48.42258911132812,
+      "canonical_works_per_second": 227.82755326519998,
+      "source_gib_per_hour": 15.837356896715256,
+      "chapters_per_second": 473.4980186062822,
+      "end_to_end_seconds": 176.93758911132812,
+      "drain_seconds": 128.515,
+      "queue_peaks": {
+        "catalog": 8952,
+        "historical": 8952,
+        "text": 720
+      },
+      "queue_bytes_peak": 3457024,
+      "wal_generated_bytes": 727239620,
+      "staging_peak_bytes": 860202904,
+      "adapter_reserved_peak_bytes": 1361114286,
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 189,
+            "seconds": 188.01966071128845,
+            "cpu_seconds": 139.299226,
+            "cpu_mean_percent": 74.08758502862071,
+            "cpu_max_percent": 401.3151244413785,
+            "working_mean_mib": 841.9226810515873,
+            "working_max_mib": 1104.3359375,
+            "memory_max_mib": 1813.46484375,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 31.458091735839844,
+            "tx_mib": 171.95333576202393
+          },
+          "pg": {
+            "samples": 189,
+            "seconds": 188.01735067367554,
+            "cpu_seconds": 150.262174,
+            "cpu_mean_percent": 79.91931247919574,
+            "cpu_max_percent": 201.84707601809845,
+            "working_mean_mib": 335.0550595238095,
+            "working_max_mib": 500.80078125,
+            "memory_max_mib": 1298.046875,
+            "read_mib": 23.5390625,
+            "write_mib": 2392.7265625,
+            "rx_mib": 517.2228717803955,
+            "tx_mib": 248.67320251464844
+          },
+          "search": {
+            "samples": 189,
+            "seconds": 188.01542973518372,
+            "cpu_seconds": 157.224819,
+            "cpu_mean_percent": 83.62335964736951,
+            "cpu_max_percent": 203.78190395119657,
+            "working_mean_mib": 1408.1186549272486,
+            "working_max_mib": 1462.609375,
+            "memory_max_mib": 2221.4765625,
+            "read_mib": 25.546875,
+            "write_mib": 1184.7734375,
+            "rx_mib": 409.384783744812,
+            "tx_mib": 2.2913522720336914
+          },
+          "redis": {
+            "samples": 189,
+            "seconds": 188.014306306839,
+            "cpu_seconds": 1.732533,
+            "cpu_mean_percent": 0.9214899834124908,
+            "cpu_max_percent": 1.999668417610376,
+            "working_mean_mib": 4.65348048941799,
+            "working_max_mib": 5.03515625,
+            "memory_max_mib": 5.0390625,
+            "read_mib": 0.23828125,
+            "write_mib": 0.625,
+            "rx_mib": 0.7890748977661133,
+            "tx_mib": 0.49228763580322266
+          },
+          "projection": {
+            "samples": 189,
+            "seconds": 187.8248167037964,
+            "cpu_seconds": 148.288495,
+            "cpu_mean_percent": 78.95042710668741,
+            "cpu_max_percent": 125.11340025229016,
+            "working_mean_mib": 152.50177744708995,
+            "working_max_mib": 194.75,
+            "memory_max_mib": 196.20703125,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 220.00079727172852,
+            "tx_mib": 755.4414358139038
+          }
+        }
+      },
+      "verified_objects": 107054,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787754",
+          "packs": "68",
+          "database_bytes": "433245331"
+        },
+        "physical": {
+          "records": 107057,
+          "unique_hashes": 107054,
+          "duplicates": 3,
+          "duplicate_record_bytes": 1415,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            311499,
+            465576,
+            1051085,
+            1238102,
+            1373801,
+            1881267,
+            1993658,
+            2271372,
+            2294882,
+            2335118,
+            2340074,
+            2401044,
+            2487969,
+            2532677,
+            2538562,
+            2663058,
+            2800695,
+            2827588,
+            3062982,
+            3184696,
+            3270347,
+            3357905,
+            3455150,
+            3505462,
+            3594046,
+            3634732,
+            3771102,
+            3863497,
+            4085005,
+            4112674,
+            4327788,
+            4844219,
+            4857804,
+            4877953,
+            5064608,
+            5112157,
+            5196548,
+            5197519,
+            5201136,
+            5231724,
+            5443724,
+            5504918,
+            5631365,
+            5642621,
+            5714941,
+            5726031,
+            5755579,
+            5856602,
+            5889355,
+            5890199,
+            5929940,
+            5979788,
+            6181503,
+            6187981,
+            6238906,
+            6333820,
+            6359899,
+            6447666,
+            6527413,
+            7003033,
+            7598544,
+            8062328,
+            8165373,
+            8172621,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "be2d318bbb31022462ace285a878ef5a",
+          "historical": "2513b55288a069f863ec5fbfa4f31f6d"
+        },
+        "search_content_sha256": "d2a6e42e089649768348db30550f5ee31a50bf1c82e2432b0139886fd2b166c3",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "857a4a5a7de0abadeeeabf2f5182eef0"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290789713,
+          "allocated": 290930688,
+          "files": 68
+        },
+        "packs": {
+          "apparent": 290789713,
+          "allocated": 290930688,
+          "files": 68
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "search_primary_bytes": 473835371,
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.150383158,
+        "verified_at": 1794223139426,
+        "monotonic_ns": "559559518219565"
+      },
+      "image_id": "sha256:fe86e9d4ca4098b4be58267494465304e6754a193a1d9d2d214a70961df23d7b",
+      "measured_with_quotas": true,
+      "catalog_done_seconds": 164.98393603432814,
+      "index_documents_per_second_over_pipeline": 62.34966835147012,
+      "wal_retained_peak_bytes": null,
+      "io_peak_bytes_per_second": null,
+      "integrity_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+      "wal_directory_post_stop_bytes": 738209792,
+      "wal_directory_post_stop_note": "A includes subsequent isolated-schema recovery checks; B/C pipeline only. Not a retained WAL peak."
+    },
+    "B": {
+      "sources": 2,
+      "works": 11032,
+      "canonical_seconds": 50.18801000976563,
+      "canonical_works_per_second": 219.8134573945726,
+      "source_gib_per_hour": 15.280259676960299,
+      "chapters_per_second": 456.8421819382488,
+      "end_to_end_seconds": 180.07201000976562,
+      "drain_seconds": 129.884,
+      "queue_peaks": {
+        "catalog": 8912,
+        "historical": 8912,
+        "text": 904
+      },
+      "queue_bytes_peak": 3588096,
+      "wal_generated_bytes": 723582139,
+      "staging_peak_bytes": 585333059,
+      "adapter_reserved_peak_bytes": 1033958574,
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 189,
+            "seconds": 188.01944303512573,
+            "cpu_seconds": 143.533873,
+            "cpu_mean_percent": 76.3399096832688,
+            "cpu_max_percent": 406.74997121511404,
+            "working_mean_mib": 728.4013310185185,
+            "working_max_mib": 885.58984375,
+            "memory_max_mib": 1412.3125,
+            "read_mib": 9.125,
+            "write_mib": 1274.03515625,
+            "rx_mib": 31.11753749847412,
+            "tx_mib": 172.74137496948242
+          },
+          "pg": {
+            "samples": 189,
+            "seconds": 188.0176067352295,
+            "cpu_seconds": 150.789535,
+            "cpu_mean_percent": 80.1996885389277,
+            "cpu_max_percent": 207.23569523942396,
+            "working_mean_mib": 332.20089285714283,
+            "working_max_mib": 452.9765625,
+            "memory_max_mib": 1277.34765625,
+            "read_mib": 16.01953125,
+            "write_mib": 2304.23046875,
+            "rx_mib": 517.246883392334,
+            "tx_mib": 247.5273609161377
+          },
+          "search": {
+            "samples": 189,
+            "seconds": 188.00587701797485,
+            "cpu_seconds": 162.315497,
+            "cpu_mean_percent": 86.3353314133267,
+            "cpu_max_percent": 206.93192145330573,
+            "working_mean_mib": 1413.1058201058202,
+            "working_max_mib": 1470.84765625,
+            "memory_max_mib": 2188.921875,
+            "read_mib": 22.17578125,
+            "write_mib": 1108.2578125,
+            "rx_mib": 409.24427223205566,
+            "tx_mib": 2.122701644897461
+          },
+          "redis": {
+            "samples": 189,
+            "seconds": 188.00270342826843,
+            "cpu_seconds": 1.701464,
+            "cpu_mean_percent": 0.905021028407278,
+            "cpu_max_percent": 1.899042907253006,
+            "working_mean_mib": 9.451140873015873,
+            "working_max_mib": 9.7578125,
+            "memory_max_mib": 10.48046875,
+            "read_mib": 0.24609375,
+            "write_mib": 0.625,
+            "rx_mib": 0.7901163101196289,
+            "tx_mib": 0.4701089859008789
+          },
+          "projection": {
+            "samples": 189,
+            "seconds": 187.78026700019836,
+            "cpu_seconds": 150.518997,
+            "cpu_mean_percent": 80.15698316151665,
+            "cpu_max_percent": 128.10195097557266,
+            "working_mean_mib": 135.12309854497354,
+            "working_max_mib": 173.16796875,
+            "memory_max_mib": 174.078125,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.00394821166992,
+            "tx_mib": 754.5387754440308
+          }
+        }
+      },
+      "verified_objects": 107054,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787354",
+          "packs": "62",
+          "database_bytes": "428428435"
+        },
+        "physical": {
+          "records": 107057,
+          "unique_hashes": 107054,
+          "duplicates": 3,
+          "duplicate_record_bytes": 1064,
+          "pack_sizes": [
+            388,
+            26180,
+            63782,
+            112924,
+            954725,
+            963324,
+            1135742,
+            1625301,
+            1858033,
+            2047327,
+            2800687,
+            3271150,
+            3473748,
+            3541731,
+            3644017,
+            3759568,
+            3807438,
+            4063770,
+            4085005,
+            4505957,
+            4631870,
+            4732050,
+            4747269,
+            4820759,
+            4856267,
+            4991813,
+            4992120,
+            5065050,
+            5111556,
+            5118531,
+            5167367,
+            5211492,
+            5231731,
+            5232700,
+            5316025,
+            5318100,
+            5380735,
+            5443606,
+            5489548,
+            5567432,
+            5608023,
+            5651791,
+            5652746,
+            5702173,
+            5856887,
+            5869787,
+            5887855,
+            5890448,
+            5916134,
+            5982014,
+            6174945,
+            6181874,
+            6253931,
+            6405735,
+            6447032,
+            6536760,
+            7038400,
+            7314149,
+            7441113,
+            7504179,
+            7554732,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "a0623efc883598ab2017a7ec7d9a6274",
+          "historical": "98247f2794d1865fef07d073eb0509d5"
+        },
+        "search_content_sha256": "30556b5ee421d241ab85aa17d5ec259cca6e401a819daa4a2cc8871752d3d8d5",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "fa9ed1ee05e439e6df92dbfa5f1e114e"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290788914,
+          "allocated": 290918400,
+          "files": 62
+        },
+        "packs": {
+          "apparent": 290788914,
+          "allocated": 290918400,
+          "files": 62
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "search_primary_bytes": 493080061,
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 10.67565163,
+        "verified_at": 1794223496182,
+        "monotonic_ns": "559916274642639"
+      },
+      "image_id": "sha256:fe86e9d4ca4098b4be58267494465304e6754a193a1d9d2d214a70961df23d7b",
+      "measured_with_quotas": true,
+      "catalog_done_seconds": 167.52725154876563,
+      "index_documents_per_second_over_pipeline": 61.264379730096394,
+      "wal_retained_peak_bytes": null,
+      "io_peak_bytes_per_second": null,
+      "integrity_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+      "wal_directory_post_stop_bytes": 754987008,
+      "wal_directory_post_stop_note": "A includes subsequent isolated-schema recovery checks; B/C pipeline only. Not a retained WAL peak."
+    },
+    "C": {
+      "sources": 2,
+      "works": 11032,
+      "canonical_seconds": 51.09760791015625,
+      "canonical_works_per_second": 215.90051767975737,
+      "source_gib_per_hour": 15.008252968857157,
+      "chapters_per_second": 448.70985037721874,
+      "end_to_end_seconds": 177.36360791015625,
+      "drain_seconds": 126.26599999999999,
+      "queue_peaks": {
+        "catalog": 8852,
+        "historical": 8852,
+        "text": 696
+      },
+      "queue_bytes_peak": 3424256,
+      "wal_generated_bytes": 721265302,
+      "staging_peak_bytes": 611014550,
+      "adapter_reserved_peak_bytes": 1067513006,
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 185,
+            "seconds": 184.0299379825592,
+            "cpu_seconds": 142.541153,
+            "cpu_mean_percent": 77.45541544088813,
+            "cpu_max_percent": 398.8555098432546,
+            "working_mean_mib": 844.8408783783784,
+            "working_max_mib": 1020.82421875,
+            "memory_max_mib": 1451.24609375,
+            "read_mib": 10.2421875,
+            "write_mib": 1522.12890625,
+            "rx_mib": 30.79768466949463,
+            "tx_mib": 171.437105178833
+          },
+          "pg": {
+            "samples": 185,
+            "seconds": 184.0313048362732,
+            "cpu_seconds": 149.236595,
+            "cpu_mean_percent": 81.09304834455804,
+            "cpu_max_percent": 204.898619036181,
+            "working_mean_mib": 324.58861908783786,
+            "working_max_mib": 446.49609375,
+            "memory_max_mib": 1271.40234375,
+            "read_mib": 10.6171875,
+            "write_mib": 2297.171875,
+            "rx_mib": 516.6347408294678,
+            "tx_mib": 247.93222427368164
+          },
+          "search": {
+            "samples": 185,
+            "seconds": 184.03154373168945,
+            "cpu_seconds": 158.299108,
+            "cpu_mean_percent": 86.01737766803375,
+            "cpu_max_percent": 211.63093186710353,
+            "working_mean_mib": 1416.5153293918918,
+            "working_max_mib": 1468.65625,
+            "memory_max_mib": 2257.0703125,
+            "read_mib": 22.34375,
+            "write_mib": 1131.4765625,
+            "rx_mib": 409.37107944488525,
+            "tx_mib": 2.2663955688476562
+          },
+          "redis": {
+            "samples": 185,
+            "seconds": 184.03310322761536,
+            "cpu_seconds": 1.682868,
+            "cpu_mean_percent": 0.9144376584894075,
+            "cpu_max_percent": 2.0636462619633487,
+            "working_mean_mib": 4.652364864864865,
+            "working_max_mib": 5.0078125,
+            "memory_max_mib": 5.109375,
+            "read_mib": 0.234375,
+            "write_mib": 0.62109375,
+            "rx_mib": 0.7929000854492188,
+            "tx_mib": 0.4748983383178711
+          },
+          "projection": {
+            "samples": 185,
+            "seconds": 183.81400656700134,
+            "cpu_seconds": 150.280427,
+            "cpu_mean_percent": 81.7567876391519,
+            "cpu_max_percent": 131.01223396919323,
+            "working_mean_mib": 128.89894425675675,
+            "working_max_mib": 179.125,
+            "memory_max_mib": 180.3984375,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.87706184387207,
+            "tx_mib": 755.3607549667358
+          }
+        }
+      },
+      "verified_objects": 107054,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787697",
+          "packs": "60",
+          "database_bytes": "425864339"
+        },
+        "physical": {
+          "records": 107061,
+          "unique_hashes": 107054,
+          "duplicates": 7,
+          "duplicate_record_bytes": 3023,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            541023,
+            1625333,
+            1937172,
+            2617819,
+            2678739,
+            2800677,
+            2878189,
+            3223436,
+            3266997,
+            3271113,
+            3396548,
+            3832109,
+            3857507,
+            4045375,
+            4063745,
+            4085005,
+            4117236,
+            4298466,
+            4661724,
+            4719553,
+            4856307,
+            4893394,
+            5111516,
+            5117070,
+            5154570,
+            5231796,
+            5232703,
+            5278618,
+            5283633,
+            5316070,
+            5318152,
+            5380491,
+            5380830,
+            5489481,
+            5501874,
+            5567457,
+            5607888,
+            5622535,
+            5651835,
+            5765771,
+            5887842,
+            5890491,
+            5942539,
+            5981951,
+            6045021,
+            6181966,
+            6240885,
+            6253894,
+            6438970,
+            6447039,
+            6963362,
+            7405380,
+            7950235,
+            8047211,
+            8196013,
+            8310162,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "042aa4308d2bfb26c42a40c8e638c429",
+          "historical": "6c4b44f74eb7c824eda5b1340bf5214e"
+        },
+        "search_content_sha256": "a40a4859d4519a639d20e98d829fc6a49c871b0b31a26e32f0b03250de530223",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "5fc88b28312b38e3090b1d256b87daa1"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290791200,
+          "allocated": 290902016,
+          "files": 60
+        },
+        "packs": {
+          "apparent": 290791200,
+          "allocated": 290902016,
+          "files": 60
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "search_primary_bytes": 479873171,
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.194331242,
+        "verified_at": 1794223818917,
+        "monotonic_ns": "560239009222276"
+      },
+      "image_id": "sha256:fe86e9d4ca4098b4be58267494465304e6754a193a1d9d2d214a70961df23d7b",
+      "measured_with_quotas": true,
+      "catalog_done_seconds": 167.33087095415627,
+      "index_documents_per_second_over_pipeline": 62.199907466859116,
+      "wal_retained_peak_bytes": null,
+      "io_peak_bytes_per_second": null,
+      "integrity_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+      "wal_directory_post_stop_bytes": 754987008,
+      "wal_directory_post_stop_note": "A includes subsequent isolated-schema recovery checks; B/C pipeline only. Not a retained WAL peak."
+    }
+  },
+  "limitations": [
+    "No sustained distinct-identity workload measured",
+    "No prolonged OpenSearch outage or recovery under large backlog measured in P5",
+    "Heterogeneous sample inspected but not ingested",
+    "No final backup/restore rehearsal",
+    "No final production profile validated",
+    "Capacity scenarios are sensitivity assumptions, not measured population cardinalities",
+    "Only source-concurrency comparison on the same smallest ZIP; no global optimum established"
+  ],
+  "validation": {
+    "build": "passed",
+    "pressure_and_sources_tests": 8,
+    "preflight_tests": 2,
+    "original_sources_imported": false,
+    "production_modified": false,
+    "sustained_throughput": null,
+    "p5_complete": false,
+    "recovery_tests": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 35.820874016,
+      "backlog_works": 160,
+      "disk_pressure": "injected capacity probe; no destructive filesystem test",
+      "outage": "unreachable search URL, not a prolonged service outage",
+      "coverage": [
+        "source overlaps and conflicts",
+        "global dedup",
+        "provenance",
+        "durable checkpoints",
+        "SIGTERM",
+        "SIGKILL",
+        "transaction barrier crash",
+        "seal barrier crash",
+        "disk pause",
+        "offline search and projection restart"
+      ]
+    },
+    "preflight_command_used": "python3 scripts/preflight-first-ingest.py --env-file .env.example --required-gib 6000"
+  },
+  "readers": {
+    "concurrency": 3,
+    "requests": 30,
+    "errors": 0,
+    "p95_ms": 700.8860519999998,
+    "max_ms": 721.428285,
+    "condition": "Post-drain, authenticated search and sample reader; internal HTTP"
+  },
+  "preflight": {
+    "command": "python3 scripts/preflight-first-ingest.py --env-file .env.example --required-gib 6000",
+    "decision": "NO-GO",
+    "mode": "static read-only; mandatory manual runtime and restore checks unresolved",
+    "tests_passed": 2
+  },
+  "quota_profile": {
+    "worker": {
+      "cpus": 4,
+      "memory_gib": 3
+    },
+    "postgres": {
+      "cpus": 2,
+      "memory_gib": 2
+    },
+    "search": {
+      "cpus": 2,
+      "memory_gib": 3,
+      "heap_gib": 1
+    },
+    "projection": {
+      "cpus": 2,
+      "memory_gib": 1.5
+    },
+    "redis": {
+      "cpus": 0.5,
+      "memory_mib": 256
+    },
+    "pressure_mode": "throughput-first",
+    "parsers_total": 6,
+    "commits": 4,
+    "pool_per_process": 12,
+    "group_records": 256,
+    "io_threads": 8,
+    "zstd_level": 3,
+    "backlog_gib": 8,
+    "staging_gib": 4,
+    "reserve_gib_per_mount": 8,
+    "search_parallel_facets": 0,
+    "final_production_profile": false
+  },
+  "time_sensitivity": {
+    "measured_forecast": false,
+    "zip_gib": 853.0813262583688,
+    "scenarios": {
+      "favourable": {
+        "assumed_source_gib_per_hour": 20,
+        "canonical_zip_hours": 42.66,
+        "assumed_unique_works": 10000000,
+        "assumed_downstream_works_per_second": 70,
+        "downstream_hours": 39.68,
+        "end_to_end_days": [
+          2,
+          4
+        ]
+      },
+      "central": {
+        "assumed_source_gib_per_hour": 12,
+        "canonical_zip_hours": 71.09,
+        "assumed_unique_works": 20000000,
+        "assumed_downstream_works_per_second": 50,
+        "downstream_hours": 111.11,
+        "end_to_end_days": [
+          5,
+          10
+        ]
+      },
+      "prudent": {
+        "assumed_source_gib_per_hour": 6,
+        "canonical_zip_hours": 142.18,
+        "assumed_unique_works": 35000000,
+        "assumed_downstream_works_per_second": 25,
+        "downstream_hours": 388.89,
+        "end_to_end_days": [
+          17,
+          30
+        ]
+      }
+    }
+  },
+  "integrity_equivalence": true
+}

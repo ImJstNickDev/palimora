@@ -404,3 +404,10 @@ su un disco con spazio sufficiente; OpenSearch deve poter rispettare le proprie
 soglie di capacità. Ogni flusso browser di bootstrap usa database e storage nuovi.
 La pipeline costruisce i target Docker `api`, `web`, `monitoring` dal lockfile;
 nessuna migrazione viene applicata alla produzione durante le prove.
+
+### Gate P5 prima del primo ingest
+
+Prima di selezionare il dump completo applicare la procedura di
+[readiness](12-first-ingest-readiness.md), incluso il preflight read-only.
+Lo stato attuale è **NO-GO**; la build riuscita e i benchmark brevi non autorizzano
+il primo ingest. Nessun override di produzione viene applicato automaticamente.

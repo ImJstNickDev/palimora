@@ -3086,3 +3086,185 @@ P2C_SOURCE=/mnt/sdb/palimora-p2c-b1-20261109 \
 # Ripetere con root nuova e P2E_ORDER=reverse, senza campagne/build concorrenti.
 python3 scripts/summarize-search-ablations.py /root/forward /root/reverse
 ```
+
+## P2E.1b — Facet a carico comparabile e diagnosi conclusiva
+
+**2026-11-09 — P2E.1b e diagnosi P2E.1 concluse; P2 resta aperta.**
+Report: [`performance-p2e1b.json`](performance-p2e1b.json). Nessuna ottimizzazione
+applicativa: nuovi runner diagnostici, estensione minima del preload esistente,
+nessuna modifica ai report P2E.1/P2E.1a o al codice di produzione.
+
+### Metodo e confronto matched
+
+Quattro copie indipendenti della stessa fixture P2C B1 ferma, 11.032 opere;
+ordine completa → senza facet → senza facet → completa. PostgreSQL 17.6,
+OpenSearch 2.19.4 (heap 1 GiB), Redis 7.4.6, stessa immagine `palimora-p2d-api`
+identificata nel JSON; PackStore sorgente in sola lettura, rete interna, nessuna
+quota CPU/RAM, modifica durability, ingest o build concorrente. API e projection
+sono processi Node distinti nello stesso container di test. Le finestre iniziali
+a vuoto non avviano ancora il projection worker; restano i job di fondo dell'API.
+
+Ogni finestra: 3 warmup, 80 richieste HTTP autenticate, 4 richieste/s per 20 s.
+Per backlog: 800 invalidazioni del medesimo contenuto, worker reale 16/1/1,
+5 s di avviamento; il solo preload diagnostico attende prima del bulk un budget
+nominale di 20 documenti/s. Preparazione e HTTP aggiungono tempo: il throughput
+**effettivo**, non quello nominale, decide il matching. Il pacing è rimosso solo
+dopo la finestra per drenare. Non è una misura del throughput massimo di Palimora.
+
+| Coppia | Variante | ACK nella finestra / s | Indicizzazioni interne OS / s | Bulk completi | Coda prima → dopo |
+|---|---|---:|---:|---:|---|
+| 1 | Completa | 336 / 16,80 | 352 / 17,60 | 21 | 736 → 400 |
+| 1 | Senza facet | 336 / 16,80 | 347 / 17,35 | 21 | 720 → 384 |
+| 2 | Completa | 352 / 17,60 | 352 / 17,60 | 22 | 736 → 384 |
+| 2 | Senza facet | 352 / 17,60 | 352 / 17,60 | 22 | 720 → 368 |
+
+ACK e indicizzazioni differiscono ai confini per bulk in-flight. Le letture dei
+contatori precedono/seguono di pochi round-trip la finestra temporale: non sono
+un'unica transazione atomica. Entrambi gli indicatori rispettano ±10%; anche
+OpenSearch differisce solo dell'1,44% nella prima coppia. Il backlog non si esaurisce.
+
+### Latenze
+
+Millisecondi; OS client comprende header e consumo JSON. `took` è incluso nel
+client, non va sommato. I percentili sono distribuzioni distinte, non contributi
+sottraibili. Il JSON conserva gli span correlati di ciascuna richiesta.
+
+| Condizione / replica | Variante | API media | API P50 / P95 | OS media | OS P50 / P95 | took medio |
+|---|---|---:|---|---:|---|---:|
+| Vuoto 1 | Completa | 75,72 | 71,25 / 111,92 | 46,01 | 42,74 / 75,62 | 39,10 |
+| Vuoto 1 | Senza facet | 47,97 | 45,46 / 71,42 | 20,22 | 18,89 / 29,38 | 13,95 |
+| Vuoto 2 | Completa | 74,72 | 72,66 / 104,42 | 45,20 | 41,81 / 68,00 | 38,23 |
+| Vuoto 2 | Senza facet | 46,77 | 45,11 / 60,38 | 20,12 | 19,48 / 27,23 | 14,36 |
+| Backlog 1 | Completa | 90,90 | 84,67 / 154,63 | 60,52 | 52,28 / 112,63 | 54,41 |
+| Backlog 1 | Senza facet | 44,58 | 40,99 / 72,34 | 18,51 | 17,42 / 31,41 | 13,62 |
+| Backlog 2 | Completa | 83,33 | 77,16 / 138,93 | 54,73 | 45,33 / 99,14 | 48,48 |
+| Backlog 2 | Senza facet | 47,44 | 43,46 / 77,23 | 19,16 | 17,47 / 27,25 | 13,88 |
+
+La differenza delle **medie** OS è 25,79/25,08 ms a vuoto e 42,01/35,57 ms
+sotto carico matched. È il costo osservato dell'ablazione, non il guadagno già
+ottenuto conservando i facet. Il P95 API scende in entrambe le ripetizioni;
+non si attribuisce la differenza dei P95 a uno span specifico.
+
+Per richiesta sotto backlog: 9 chiamate SQL, complessivamente 7,45–9,17 ms medi,
+di cui recupero documenti 3,10–3,71 ms; filtro generazioni/cursore 0,08–0,10 ms.
+Tre chiamate OpenSearch: HEAD stato 2,34–2,79 ms, apertura PIT 6,28–7,97 ms,
+ricerca come sopra. Nessuna pagina aggiuntiva nei campioni. Serializzazione/invio
+sincrono 1,93–2,63 ms; residuo per richiesta non coperto dall'unione degli span
+4,68–5,48 ms. Il wall server è 87,14/41,37 e 79,90/44,10 ms medi; il client
+include ricezione e consumo risposta. Le durate SQL includono trasporto/scheduling;
+non sono tempo puro del server PostgreSQL. Il filtro generazioni include anche
+costruzione cursore e scheduling microtask.
+
+Due query aggiuntive a indice stabile, una coppia ciascuna:
+
+| Query | Risultati | API media completa → senza facet | API P50/P95 completa → senza facet | OS header medio completa → senza facet |
+|---|---:|---|---|---|
+| Primo fandom della ricerca autorevole | 464 | 59,42 → 42,57 | 56,02/81,18 → 38,63/65,62 | 28,75 → 16,71 |
+| Full-text `love` | 5.277 | 56,10 → 37,47 | 53,16/76,45 → 35,68/53,36 | 33,09 → 15,24 |
+
+ID, ordine e totali identici fra varianti in tutti i campioni confrontati.
+Il vantaggio persiste ma si riduce con queste selettività; non si estrapola ad
+altri termini o al backlog, non misurato per queste due query.
+
+### Risorse nella medesima finestra
+
+| Metrica | Completa 1 | Senza facet 1 | Completa 2 | Senza facet 2 |
+|---|---:|---:|---:|---:|
+| CPU OS, secondi / 20 s | 31,36 | 20,04 | 27,33 | 17,73 |
+| Heap massimo campionato, MiB | 642,18 | 620,60 | 641,96 | 675,54 |
+| GC young, eventi / ms cumulativi | 5 / 110 | 2 / 34 | 5 / 81 | 1 / 22 |
+| GC concurrent, eventi / ms cumulativi | 2 / 12 | 2 / 8 | 2 / 47 | 0 / 0 |
+| Refresh, eventi / ms cumulativi | 17 / 3.107 | 17 / 2.741 | 18 / 2.540 | 18 / 2.062 |
+| Merge, eventi / ms cumulativi | 2 / 1.879 | 2 / 1.513 | 2 / 1.453 | 2 / 1.100 |
+| Indicizzazione interna, ms cumulativi | 2.128 | 1.490 | 1.815 | 1.395 |
+| Bulk client medio, ms, pacing escluso | 120,89 | 89,31 | 105,57 | 82,21 |
+| OS I/O disco letti / scritti, MiB | 0,047 / 10,40 | 0,047 / 16,32 | 0,047 / 13,79 | 0,047 / 21,62 |
+| OS rete RX / TX, MiB | 9,45 / 0,47 | 9,93 / 0,33 | 10,47 / 0,47 | 9,93 / 0,33 |
+
+Nessun old GC, flush, throttle o rejection search/write; code campionate sempre
+zero, write active massimo 1. Campionamento OS ogni 2 s e ai confini: picchi brevi
+possono sfuggire, specialmente search active misurato dopo la risposta. Docker è
+campionato a 1 Hz, finestre effettive circa 19 s interne ai 20 s. Working set OS
+massimo 1.711/1.649/1.631/1.583 MiB: **heap JVM e memoria container non coincidono**.
+CPU PostgreSQL nelle quattro finestre Docker 2,16/2,35/2,05/2,05 s; CPU API
+3,53/3,18/3,28/2,96 s, projection 2,82/2,79/2,56/2,74 s. RSS API massimo
+282/281/219/219 MiB; projection 171/174/172/179 MiB.
+Event-loop API medio 10,18–10,30 ms e projection 10,30–10,39 ms a risoluzione 10 ms;
+massimi dei P95 per bin API 11,91–13,28 ms. Non emerge saturazione persistente
+API; non si sottrae la risoluzione per inventare una latenza netta.
+
+### Distorsioni e limiti
+
+PIT nuovo per ricerca, chiuso dal probe dopo la prima pagina: al massimo un PIT
+del probe aperto, nessun cursore successivamente usato. Apertura nello span API;
+chiusura fuori dal suo timer ma dentro il ritmo di richieste. Contesti zero ai
+confini e nei campioni post-chiusura: prova del cleanup, non assenza di contesti
+mentre la ricerca è in corso. Segmenti backlog 21→20 / 22→21 / 21→21 / 24→24;
+nessun accumulo di PIT residuo. Delta hit/miss/eviction delle cache query/request
+zero; questo non esclude cache OS, page cache o JIT. Non sono state svuotate.
+Merge/GC/segmenti differiscono: matching del ritmo non significa equivalenza
+perfetta dello stato interno e non spiega esclusivamente ogni coda della latenza.
+
+Controllo overhead dopo drenaggio, indice stabile: medie API strumentata/non
+strumentata 39,69/38,88 ms senza facet e 64,98/64,92 ms completa; P95
+60,55/58,80 e 99,85/88,54 ms. Restart/JIT e ordine fisso impediscono di dichiarare
+overhead esattamente nullo. La prima fixture aveva solo il controllo non
+strumentato (67,40 ms): escluso dall'attribuzione paired. Il profiler di query
+è eseguito soltanto dopo le finestre; le sue durate non sostituiscono le latenze
+normali. Nessuna attribuzione CPU per singola richiesta è ricavabile dai delta
+CPU dell'intero nodo. Questa campagna diagnostica non risolve la regressione a
+pieno throughput né sostituisce i benchmark operativi P2C/P2D.
+
+### Diagnosi e unico intervento prioritario P2E.2
+
+1. **Facet:** maggiore costo ripetibile, anche a ritmo matched; differenza media
+   OS 35,57–42,01 ms sotto backlog, con riduzione contemporanea di `took` e CPU.
+2. **Ricerca residua hits/query/sort/total:** 18,51–19,16 ms client senza facet.
+   Le ablazioni sort/total precedenti restano valide, non sono state ripetute.
+3. **SQL e round-trip PIT/stato:** circa 7–9 ms SQL e 9–10 ms PIT+HEAD; non
+   mostrano un aumento paragonabile al costo facet in queste finestre.
+4. **Trasformazione API e serializzazione:** pochi ms misurati, residuo non
+   attribuito esplicitamente; nessuna evidenza di collo di bottiglia dominante.
+
+**Unica proposta P2E.2: partizionare le dieci aggregazioni indipendenti in due
+ricerche concorrenti bounded sul medesimo PIT e identico filtro**, ricomponendo
+la risposta originale. Una mantiene hits/sort/total e un sottoinsieme bilanciato
+di facet, l'altra `size:0` e gli altri facet. Candidato tecnico: `_msearch` con
+`max_concurrent_searches=2`, previsto dalla
+[documentazione OpenSearch](https://docs.opensearch.org/latest/api-reference/search-apis/multi-search/).
+Non cambiare definizioni `terms`, bucket, ordine o semantica dei facet.
+
+I due profili extra distribuiscono 61,90/35,84 ms fra dieci collector; fra questi
+unclassified 19,31/13,06, relationships 12,19/6,26, fandom 9,16/5,53 ms. Sono tempi
+**con profiler**, indicativi della distribuzione del lavoro, non del beneficio
+atteso. Il costo non è concentrato soltanto nell'inizializzazione degli ordinali:
+non giustifica assumere che eager ordinals elimini il problema.
+
+La proposta mira ad accorciare il tratto seriale conservando tutti i facet, non
+a eliminare il loro lavoro. Il margine dell'ablazione non è una previsione di
+speedup: traversal duplicato, CPU/heap aggiuntivi possono annullare il vantaggio o
+peggiorare l'indicizzazione. Complessità moderata di orchestrazione; modifica
+query, nessuna modifica API/frontend/mapping/durability. Accettazione futura:
+uguaglianza completa bucket/count/order, hits/totali/cursori/generazioni,
+stesso PIT/epoch/filtro, gestione atomica degli errori e cleanup; misure operative
+anche a pieno throughput prima di adottarla. **Non implementata in questa fase.**
+
+### Verifiche e riproduzione
+
+1.360 richieste misurate, zero errori HTTP; confronti hash ID/ordine/totali passati,
+11.032 documenti catalogo e coda full-text vuota al termine di ogni fixture.
+Build completa passata (warning frontend dimensione chunk preesistente), controlli
+sintattici e guardia DB di test passati. Il preload disattivato lascia intatti
+fetch, HTTP, pg ed Express. Nessuna suite crash ripetuta: motore e protocollo
+non cambiano. Report storici preservati. Evidenze private nei quattro percorsi
+elencati nel JSON; container e reti temporanei rimossi.
+
+```sh
+P2C_SOURCE=/mnt/sdb/palimora-p2c-b1-20261109 \
+ P2C_ROOT=/mnt/sdb/palimora-p2e1b-new-full1 \
+ P2C_IMAGE=palimora-p2d-api BENCH_PROJECTION_MODE=isolated \
+ P2D_DIAGNOSTICS=1 P2C_EVENT_LOOP=1 P2E_VARIANT=full P2E_EXTRA=1 \
+ ./scripts/benchmark-search-matched.sh
+# Ripetere in root nuove: no-aggs/EXTRA=1, no-aggs/EXTRA=0, full/EXTRA=overhead.
+python3 scripts/summarize-search-matched.py /root/full1 /root/noagg1 /root/noagg2 /root/full2
+```

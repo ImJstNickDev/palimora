@@ -30,8 +30,19 @@ if (
       args[0].url.split("?")[0] !== "/api/v1/works"
     )
       return emit.call(this, event, ...args);
-    const request = { id: randomUUID(), start: clock(), spans: [] };
+    const request = {
+      id: randomUUID(),
+      start: clock(),
+      epoch: Date.now(),
+      spans: [],
+    };
     const response = args[1];
+    const sample = args[0].headers["x-p2e-sample"];
+    request.sample =
+      typeof sample === "string" &&
+      /^(idle|backlog|fandom|fulltext|overhead)-[0-9]+$/.test(sample)
+        ? sample
+        : null;
     let ended = false;
     const finish = (aborted) => {
       if (ended) return;
@@ -41,6 +52,8 @@ if (
         process.env.P2E_SEARCH_SPANS || "/results/search-spans.jsonl",
         JSON.stringify({
           id: request.id,
+          sample: request.sample,
+          started_at: request.epoch,
           status: response.statusCode,
           aborted,
           wall_ms: clock() - request.start,
@@ -56,12 +69,23 @@ if (
   const query = pg.Client.prototype.query;
   pg.Client.prototype.query = function (...args) {
     if (!context.getStore()) return query.apply(this, args);
+    const sql = String(args[0]?.text ?? args[0]);
+    const purpose = sql.startsWith(
+      "SELECT work_id AS id,snapshot_id,metadata,bibliography,generation FROM catalog_documents",
+    )
+      ? "documents"
+      : sql.startsWith("SELECT EXISTS(SELECT 1 FROM catalog_pending")
+        ? "indexing"
+        : "other";
+    if (purpose === "indexing") generationSpan();
     const start = clock();
     let recorded = false;
     const finish = () => {
       if (!recorded) {
         recorded = true;
-        span("postgres.client", start);
+        span("postgres.client", start, { purpose });
+        if (purpose === "documents")
+          context.getStore().documentsReady = clock();
       }
     };
     if (typeof args.at(-1) === "function") {
@@ -79,6 +103,23 @@ if (
       throw error;
     }
   };
+  function generationSpan() {
+    const r = context.getStore();
+    if (r?.documentsReady !== undefined) {
+      span("generation.filter_and_cursor", r.documentsReady);
+      delete r.documentsReady;
+    }
+  }
+  const express = require("express");
+  const json = express.response.json;
+  express.response.json = function (...args) {
+    const start = clock();
+    try {
+      return json.apply(this, args);
+    } finally {
+      span("http.serialize_and_send", start);
+    }
+  };
   const fetch = global.fetch;
   global.fetch = async function (...args) {
     if (!context.getStore()) return fetch(...args);
@@ -88,6 +129,7 @@ if (
       new URL(process.env.OPENSEARCH_URL ?? "http://opensearch:9200").origin
     )
       return fetch(...args);
+    if (url.pathname.endsWith("/_search")) generationSpan();
     const start = clock(),
       method = args[1]?.method ?? "GET";
     const kind = url.pathname.endsWith("/_search")

@@ -10,6 +10,14 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5000,
   statement_timeout: 15000,
 });
+// A checked-out socket can emit another error while it closes, after its phase
+// listener has been removed. Query promises still reject; retain a lifetime
+// observer so a database restart does not become an uncaught process exception.
+pool.on("connect", (client) =>
+  client.on("error", () =>
+    console.error(JSON.stringify({ event: "database_client_disconnected" })),
+  ),
+);
 pool.on("error", () =>
   console.error(JSON.stringify({ event: "database_connection_error" })),
 );

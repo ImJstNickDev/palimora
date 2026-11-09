@@ -346,7 +346,11 @@ async function loadManifests(db: DB, rows: any[], refs?: any[]) {
 
 /** Select a byte-bounded prefix before retaining reconstructed texts. Large
  * individual works remain singleton groups; native reads isolate large frames. */
-export async function selectTextGroup(db: DB, claims: any[]) {
+export async function selectTextGroup(
+  db: DB,
+  claims: any[],
+  admit?: (bytes: number) => void,
+) {
   // Plan using byte counts, before transferring potentially large JSON values.
   const plan = (
     await db.query(
@@ -387,6 +391,7 @@ export async function selectTextGroup(db: DB, claims: any[]) {
     (byId.get(id)?.metadata_bytes ?? 0) +
     (manifestSizes.get(manifestHash.get(id)) ?? 0);
   selected = prefix(selected, baseSize);
+  admit?.(selected.reduce((sum, c) => sum + baseSize(c.work_id), 0));
   const chosen = new Set(selected.map((c) => c.work_id));
   const manifests = await loadManifests(
     db,
@@ -430,6 +435,18 @@ export async function selectTextGroup(db: DB, claims: any[]) {
         (sum, h) => sum + (sizes.get(h) ?? 0),
         0,
       ),
+  );
+  admit?.(
+    selected.reduce(
+      (sum, c) =>
+        sum +
+        baseSize(c.work_id) +
+        needed(manifests.get(c.work_id)).reduce(
+          (n, h) => n + (sizes.get(h) ?? 0),
+          0,
+        ),
+      0,
+    ),
   );
   const rows = (
     await db.query(

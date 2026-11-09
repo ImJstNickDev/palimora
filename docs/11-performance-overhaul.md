@@ -4,7 +4,7 @@
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
-le implementazioni P1A/P1B.1/P2A/P2B.1 e le nuove misure sono documentate in fondo.
+le implementazioni P1A/P1B.1/P2A/P2B.1/P2B.2 e le nuove misure sono documentate in fondo.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -2026,3 +2026,256 @@ misurato delle letture logiche e limiti di memoria dichiarati sopra.
 invariato. Nessuna modifica a parser, formato canonico, PackStore, bibliografia,
 UI o dati di produzione; nessun ingest massivo. Risultati privati conservati
 in `/mnt/sdb/palimora-p2b1-20261108`, servizi temporanei rimossi dopo le verifiche.
+
+## P2B.2 — preparazione e pubblicazione concorrenti
+
+La fase full-text usa ora producer e consumer nello stesso motore P2A. Ogni
+passaggio acquisisce al massimo otto gruppi: prima prenota posti per i documenti,
+poi esegue il claim persistente. La preparazione continua a usare `selectTextGroup`
+e il trasformatore P2B.1, con una connessione propria e una transazione
+`REPEATABLE READ, READ ONLY` per gruppo selezionato. La transazione termina prima
+della serializzazione e della pubblicazione di quei documenti. Una transazione
+read-only di un altro producer può sovrapporsi all'HTTP del consumer: nessuna
+transazione di preparazione attende l'HTTP, nessun lock della coda è mantenuto.
+
+I producer trasferiscono buffer NDJSON a una coda temporanea limitata. I consumer
+usano le stesse revisioni esterne strettamente crescenti, gli stessi ID, la stessa
+risposta per elemento e il flush durabile sui conflitti P2A. PostgreSQL resta
+l'unica coda autorevole. La trasformazione, SQL bibliografico, PackStore, parser,
+formato canonico e mapping non cambiano. Nessuna cache persistente.
+
+Il consumer rinnova e ricontrolla token, revisione, generazione e lease ancora
+valido subito prima dell'HTTP. Un monitor rinnova anche i claim in preparazione,
+in coda o in volo, al massimo ogni 60 secondi, per altri cinque minuti. Un lease
+scaduto non viene resuscitato; l'ACK richiede anche un lease non scaduto. La nuova
+invalidazione revoca l'ownership precedente tramite il protocollo P2A. Il rinnovo
+non sostituisce il fencing esterno: un'invalidazione dopo il controllo rimane
+protetta contro invii fuori ordine e ACK obsoleti.
+
+| Variabile | Default | Intervallo / significato |
+| --- | ---: | --- |
+| `PROJECTION_TEXT_BATCH` | 16 | 1–256, dimensione claim P1A invariata |
+| `PROJECTION_TEXT_PREPARE_LANES` | 1 | 1–2 connessioni di preparazione |
+| `PROJECTION_TEXT_PUBLISH_LANES` | 1 | 1–2 richieste bulk in volo |
+| `PROJECTION_TEXT_GROUPS` | 8 | 1–64 gruppi per passaggio finito |
+| `PROJECTION_TEXT_DOCUMENTS` | 256 | 1–4096 posti, almeno quanto il batch; include claim/preparazione/coda/HTTP |
+| `PROJECTION_TEXT_NDJSON_MIB` | 384 | 320–1024 MiB, ammissione conservativa dei payload e delle copie |
+| `PROJECTION_TEXT_MEMORY_MIB` | 448 | 352–2048 MiB, prenotazioni complessive preparazione e payload |
+| `PROJECTION_TEXT_RENEW_MS` | 60000 | 100–60000 ms, intervallo massimo rinnovo |
+| `PROJECTION_TEXT_OVERLAP` | 1 | `0` permette il controllo sequenziale con una lane per fase |
+
+Il budget deve consentire almeno 32 MiB per lane di preparazione più 320 MiB per
+serializzare un documento al limite P2A di 64 MiB. Il controllo prenota cinque
+volte quel limite prima della serializzazione, poi riduce la prenotazione a
+cinque volte i byte effettivi: copre buffer UTF-8 e copie temporanee UTF-16.
+La pubblicazione mantiene la prenotazione fino all'ACK. Un gruppo parzialmente
+serializzato viene consegnato al consumer prima di attendere altro spazio,
+evitando deadlock anche al budget minimo. L'ammissione può essere conservativa:
+con due lane e budget minimo può frammentare maggiormente i bulk.
+
+Le finestre P2B.1 restano da 16 MiB. Un input indivisibile eccezionalmente grande
+causa rollback prima delle letture pesanti, attesa fuori da SQL finché le altre
+preparazioni e i payload sono drenati, poi ripreparazione esclusiva. Rimane
+l'eccezione nativa P2B.1 del singolo frame/opera: può superare il budget ordinario,
+è osservabile e non si moltiplica per le lane. Il limite di output resta 64 MiB;
+un documento eccedente resta in coda con errore esplicito. I budget descrivono
+buffer e prenotazioni applicative, **non un limite assoluto al RSS**: DOM, oggetti
+JavaScript, GC, driver e codec aggiungono memoria, misurata separatamente.
+
+I gate attendono notifiche, senza polling aggressivo. 429/503 e risultati incerti
+fermano gli invii in attesa; i retry persistenti conservano il backoff P2A.
+Un errore di preparazione non elimina gli altri claim. Pausa e arresto fermano
+l'acquisizione, lasciano terminare l'HTTP già iniziato quando possibile e liberano
+condizionatamente i claim residui. SIGKILL lascia lease recuperabili. Una perdita
+del database interrompe il passaggio; se anche la pulizia fallisce, la coda
+persistita recupera alla scadenza. La perdita della connessione del leader P1A
+ferma la pipeline senza sovrascrivere lo stato di un nuovo leader. Gli errori
+delle connessioni restano osservati anche durante la chiusura del socket.
+
+La telemetria `text_bulk` conserva i contatori P2A e aggiunge tempi cumulativi di
+attesa producer/consumer/coda, durata per gruppo, unioni temporali di preparazione
+e HTTP, loro intersezione effettiva, concorrenza massima, picchi di documenti,
+byte NDJSON e prenotazioni, rinnovi/scadenze/rifiuti dei lease. I tempi cumulativi
+delle lane non sono tempo wall-clock e non vanno sommati per stimare throughput.
+
+### Verifiche e metodo P2B.2
+
+Le suite `verify-text-bulk.cjs` e `verify-text-preparation.cjs` sono invariate.
+La suite P2A gira con `PROJECTION_TEXT_GROUPS=1`: conserva anche l'asserzione
+storica che non vi siano transazioni SQL attive durante HTTP nel caso sequenziale.
+La nuova `verify-text-concurrency.cjs` verifica invece che ogni documento sia
+pubblicato dopo il commit della propria preparazione e che le due lane abbiano
+connessioni/snapshot read-only indipendenti. Non impone l'assenza di transazioni
+di altre lane durante l'HTTP, che impedirebbe la sovrapposizione richiesta.
+
+Le prove aggiuntive coprono coda piena, budget minimo, rinnovo e scadenza dei lease
+in coda, invalidazioni durante preparazione e attesa, due pubblicazioni dello
+stesso ID fuori ordine con ACK vecchio mentre il nuovo è ancora pendente, errore
+parziale con successo concorrente, 429/503 senza ulteriori invii buffered,
+terminazione di una connessione e riavvio reale PostgreSQL, perdita del leader,
+SIGKILL del producer/durante HTTP/prima dell'ACK, SIGTERM e pausa/ripresa. I crash
+SIGKILL forzano la scadenza SQL per non attendere cinque minuti: i tempi di
+recupero riportati escludono quell'attesa, non promettono ripartenza istantanea.
+Restano le prove P2A di timeout dopo accettazione, flush durabile, manutenzione,
+cronologia/retry amministrativi e ricreazione completa dell'indice. Le fixture
+P2B.1 conservano lettore/versioni storiche, tag/alias/crossover/OTP, capitoli/note
+condivisi, metadata incompleti e oggetti grandi/mancanti/corrotti.
+
+Il benchmark `benchmark-p2b2.sh` usa PostgreSQL 17.6, OpenSearch 2.19.4 con heap
+1 GiB e `UV_THREADPOOL_SIZE=8`, rete Docker interna senza porte host. Il database
+è copiato a freddo dalla fixture P2B.1, i pack originali della fixture P1B.1d B
+sono montati read-only. Nessuna modifica a fsync, synchronous_commit, integrità,
+refresh, shard o mapping. Si salva una sola copia fisica dell'indice popolato
+arrestando correttamente OpenSearch; ogni profilo ripristina quella stessa copia
+e avvia una JVM nuova. Questo controlla i segmenti iniziali, non la cache del
+filesystem, i checkpoint PostgreSQL o il carico dell'host condiviso.
+
+Il timer del motore, senza il wrapper amministrativo e l’interleaving dello scheduler
+per entrambi i commit, comprende tutti i passaggi claim/preparazione/pubblicazione/ACK e i
+controlli interni del motore. Enqueue iniziale, bootstrap, refresh finale e verifica
+sono fuori dal timer per entrambi i commit. Per ciascuna misura si confrontano
+SHA-256 del `_source` completo di tutte le 11.032 opere e cinque ricerche
+(totale e primi 100 ID in ordine esplicito), con il builder P2B.1 del commit
+`641755db939b629ddef39a311dcca9ab445e89ec`. La campagna è esclusivamente full-text.
+Il controllo `serial-16` usa il nuovo motore senza overlap: distingue il costo
+del controllo/rinnovo/serializzazione dal beneficio osservato della concorrenza.
+
+Riproduzione del benchmark con immagini costruite dalle revisioni indicate:
+
+```sh
+P2B2_SOURCE=/mnt/sdb/palimora-p2b1-20261108 \
+ P2B2_PACK_ROOT=/mnt/sdb/palimora-p1b1d-b-20261108/storage \
+ P2B2_ROOT=/mnt/sdb/palimora-p2b2-repeat \
+ P2B2_OLD_IMAGE=palimora-p2b1-api P2B2_IMAGE=palimora-p2b2-api \
+ ./scripts/benchmark-p2b2.sh
+```
+
+Lo script riproduce i benchmark e conserva le prove private; le verifiche di
+fault sono separate per non contaminarne i timer. Nella fixture corrente sono
+stati usati lo stesso contenitore API base e distribuzioni compilate montate
+read-only: riferimento estratto da `git archive` del commit P2B.1, codice attuale
+compilato dalla working tree. Il report registra Node e gli hash JavaScript
+rilevanti. `verify-text-preparation.cjs` richiede inoltre il builder P2A originale
+in `apps/api/p2a-dist`, come nella verifica P2B.1. Per il riavvio reale PostgreSQL,
+`verify-text-concurrency.cjs` con `P2B2_POSTGRES_OUTAGE=1` segnala `pg-stop-ready`:
+il supervisore della fixture arresta il solo container PostgreSQL isolato,
+lo riavvia dopo due secondi e scrive `pg-restarted` dopo `pg_isready`.
+
+### Risultati P2B.2 — 2026-11-09
+
+Dati aggregati in `docs/performance-p2b2.json`; undici campioni completi,
+zero errori/retry, nessun lease scaduto o rifiutato nelle misure. Le righe
+«rip.» sono una seconda esecuzione completa sullo stesso checkpoint OpenSearch.
+
+| Profilo | Full-text s | Doc/s | Preparazione cumulativa s | HTTP cumulativo s | Overlap / wall | Bulk |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| P2B.1 16 | 235,949 | 46,756 | 82,476 | 135,104 | 0,00% | 690 |
+| Sequenziale nuovo 16 | 242,964 | 45,406 | 76,860 | 135,353 | 0,00% | 690 |
+| 1 prep / 1 pub, 16 | 156,435 | 70,521 | 84,452 | 132,216 | 43,26% | 690 |
+| 2 prep / 1 pub, 16 | 150,298 | 73,401 | 119,968 | 126,204 | 35,55% | 690 |
+| 1 prep / 2 pub, 16 | 113,666 | 97,056 | 71,662 | 112,746 | 52,50% | 690 |
+| 1 prep / 1 pub, 64 | 110,017 | 100,275 | 54,310 | 96,581 | 41,63% | 173 |
+| 1 prep / 2 pub, 64 | 94,233 | 117,072 | 54,082 | 102,668 | 50,89% | 173 |
+| P2B.1 16 rip. | 160,979 | 68,531 | 54,237 | 92,440 | 0,00% | 690 |
+| 1 prep / 1 pub, 16 rip. | 123,936 | 89,014 | 68,097 | 103,312 | 43,68% | 690 |
+| 1 prep / 2 pub, 16 rip. | 110,545 | 99,796 | 69,503 | 111,707 | 52,60% | 690 |
+| 1 prep / 2 pub, 64 rip. | 91,715 | 120,285 | 55,735 | 105,855 | 53,51% | 173 |
+
+Il controllo P2B.1 varia **235,949 → 160,979 s**; anche il default nuovo varia
+**156,435 → 123,936 s**. Il riferimento storico **154,593 s / 71,362 doc/s**
+resta valido per la campagna P2B.1, ma non è il denominatore di queste misure.
+I confronti osservati della prima serie e della serie ripetuta riducono il
+wall-clock del default rispettivamente del **33,70% e 23,01%**. Non sono un
+fattore garantito né una stima isolata della sola concorrenza: cache, frequenza
+CPU/carico condiviso e lavoro di fondo restano variabili. Sono riportati tutti
+i campioni, senza selezionare soltanto quello più veloce.
+
+Il controllo nuovo senza overlap costa **242,964 s**, contro **235,949 s** del
+P2B.1 iniziale. Attivare 1+1 nella prima serie porta a **156,435 s**, con
+**67,677 s** di intersezione reale preparazione/HTTP; il risparmio wall-clock
+osservato è **86,529 s**. La differenza comprende anche sovrapposizione del
+controllo/serializzazione e variabilità, non solo quella intersezione. La seconda
+lane di preparazione mostra soltanto **6,137 s** di vantaggio in un campione;
+non viene raccomandata. Due publisher a 16 ottengono **113,666 / 110,545 s**.
+A 64, passare da uno a due publisher porta **110,017 → 94,233 s** nel primo
+confronto; la ripetizione del secondo profilo dà **91,715 s**. Il confronto
+complessivo 16 → 64 combina dimensione dei gruppi e concorrenza.
+
+Le risorse seguenti confrontano i **campioni ripetuti**, nello stesso ordine
+del benchmark. CPU in secondi cumulativi; RAM Node è RSS campionato, RAM dei
+container include cache. I/O è fisico letto/scritto, distinto dai byte logici
+PackStore e dalla rete.
+
+| Misura | P2B.1 16 rip. | Default 1+1, 16 rip. | 1+2, 64 rip. |
+| --- | ---: | ---: | ---: |
+| Query SQL client | 14493 | 15966 | 4066 |
+| Query SQL / documento | 1,314 | 1,447 | 0,369 |
+| Transazioni esplicite + ACK + rinnovo | 2071 | 2762 | 694 |
+| HTTP totali (bulk inclusi) | 1381 | 778 | 196 |
+| CPU Node / PostgreSQL / OpenSearch s | 61,937 / 19,407 / 157,450 | 73,337 / 22,090 / 158,490 | 69,473 / 12,325 / 162,640 |
+| RSS Node medio / massimo MiB | 208,53 / 270,33 | 214,25 / 268,00 | 261,16 / 324,91 |
+| RAM PostgreSQL media / massima MiB | 159,46 / 162,34 | 159,83 / 164,95 | 173,56 / 178,85 |
+| RAM OpenSearch media / massima MiB | 1942,95 / 2421,37 | 2025,94 / 2492,66 | 1981,52 / 2486,78 |
+| WAL MiB | 4,866 | 6,711 | 9,273 |
+| I/O Node letto / scritto byte | 8192 / 0 | 0 / 0 | 0 / 0 |
+| I/O PostgreSQL letto / scritto byte | 0 / 23359488 | 36864 / 24313856 | 131072 / 16023552 |
+| I/O OpenSearch letto / scritto byte | 12288 / 1104494592 | 12288 / 1047384064 | 12288 / 695971840 |
+| Claim / ACK s | 5,029 / 2,286 | 4,614 / 3,122 | 5,879 / 1,355 |
+
+Il default ripetuto paga **+10,16% query**, **+18,41% CPU Node** e circa
+**+37,91% WAL** rispetto al controllo ripetuto; il tempo di preparazione attivo
+sale **54,237 → 68,097 s** mentre il wall-clock scende. Questi costi non sono
+nascosti: il builder è invariato, ma controllo/rinnovo e contesa fra fasi hanno
+un prezzo. WAL e I/O includono checkpoint/autovacuum e attività di fondo; non
+attribuire ogni variazione al singolo UPDATE del lease. Nessuna regressione
+funzionale osservata.
+
+Tutti e tre i campioni ripetuti inviano **428.013.939 byte**. A 16 le letture
+logiche PackStore rimangono **347.145.819 byte**, **51.923 oggetti**, **18.933
+aperture** nel controllo e nel default: nessuna nuova ottimizzazione del builder.
+Il report include rete ricevuta/inviata per container, byte decompressi,
+estrazione HTML, query/transazioni server e payload minimi/medi/p95/massimi.
+I contatori OpenSearch includono attività interna: nella serie ripetuta,
+indicizzazione **77,149 / 83,708 / 91,807 s**, refresh **14,190 / 8,388 / 9,065 s**,
+merge **4,743 / 5,706 / 9,424 s**. Sono contatori cumulativi sovrapponibili,
+non componenti additive del tempo wall-clock.
+
+Nel default ripetuto si osservano **96 documenti buffered**, **11,943 MiB**
+di NDJSON/copie equivalenti e **376,448 MiB** di prenotazioni massime; attesa
+producer **0 s**, consumer **8,499 s cumulativi**, coda **116,497 s cumulativi**,
+massimo in coda **7,469 s**. Il gruppo medio dura **451,643 ms**, massimo
+**8,163 s**. Con 1+2 a 64 ripetuto: **256 documenti**, **26,026 MiB** NDJSON,
+**415,469 MiB** prenotati; attesa producer **0,067 s**, consumer **49,517 s
+cumulativi**, coda **5,475 s cumulativi**. A 64/1+1 il producer attende
+**18,243 s**: backpressure effettiva sul corpus, senza accumulo illimitato.
+
+Il costo dominante rimane la **pubblicazione HTTP**: nel default ripetuto
+**103,312 s di unione temporale su 123,936 s (83,36%)**; con 1+2/64 ripetuto
+**82,457 s su 91,715 s (89,90%)**. Restano **68,097 / 55,735 s** di preparazione
+attiva nei due profili. L’HTTP comprende rete e gestione della risposta; queste
+misure non dimostrano una saturazione hardware assoluta di OpenSearch. Non
+si aggiungono altri worker, cache, riscritture SQL o cambiamenti JVM/shard.
+
+Configurazione normale consigliata: **batch 16, preparazione 1, pubblicazione 1**,
+overlap attivo e limiti della tabella. Per reindicizzazione isolata è misurata
+l’opzione **batch 64, preparazione 1, pubblicazione 2**, con gli stessi budget.
+Il default dei batch rimane 16; i risultati non sostituiscono le future misure
+di carico misto. Nessuna campagna P2C è stata avviata.
+
+**Verifiche finali riuscite**: build completa, Compose valido, cinque test mirati
+`text-pipeline`/`ingest-pipeline` senza skip, suite P2A/P2B.1 originali e suite
+concorrente. La verifica del commit prima dell'HTTP associa ciascuna preparazione
+alla sua esatta revisione claimata, evitando di confonderla con un commit passato
+della stessa opera. Dopo l'ultimo riavvio PostgreSQL, nuovo confronto completo:
+**11.032 hash `_source` identici**, ID/snapshot/generazioni equivalenti, cinque
+ricerche identiche, tutte le code a zero e operazioni `idle`, senza errori.
+Fsync, synchronous_commit e full_page_writes sono `on`; OpenSearch usa durabilità
+translog `REQUEST`. Recupero delle fixture da 12 documenti: **207–300 ms** dopo
+scadenza forzata nei SIGKILL e **224 ms** dopo SIGTERM, con i limiti metodologici
+indicati sopra. Le fixture grandi esercitano realmente la preparazione esclusiva
+su input da circa 18–19 MiB e la successiva pubblicazione recuperabile.
+
+**P2B.2 completata; P2 non conclusa. P2C non avviata.** Nessun ingest massivo,
+nessuna modifica a dump, dati di produzione, formato canonico, parser, PackStore,
+bibliografia o UI. Prove private conservate in
+`/mnt/sdb/palimora-p2b2-20261108`; container e rete temporanei rimossi.

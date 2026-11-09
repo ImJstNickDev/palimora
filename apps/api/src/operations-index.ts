@@ -3,9 +3,18 @@ import { pool } from "./db";
 export async function runProjection(
   kind: "catalog" | "search",
   project: () => Promise<number | void>,
+  onInterrupted = () => {},
 ) {
   const db = await pool.connect();
-  let locked = false;
+  let locked = false,
+    disconnected = false;
+  const lost = () => {
+    if (disconnected) return;
+    disconnected = true;
+    onInterrupted();
+    console.error(JSON.stringify({ event: "projection_leader_lost", kind }));
+  };
+  db.on("error", lost);
   try {
     locked = (
       await db.query("SELECT pg_try_advisory_lock($1) AS yes", [
@@ -28,6 +37,10 @@ export async function runProjection(
     );
     try {
       const processed = (await project()) ?? 0;
+      if (disconnected)
+        throw Object.assign(Error("Projection leader disconnected"), {
+          processed,
+        });
       await db.query(
         "UPDATE operations_index SET state='idle',processed=processed+$2,error=NULL,retry_at=NULL,updated_at=now() WHERE kind=$1",
         [kind, processed],
@@ -39,6 +52,9 @@ export async function runProjection(
         );
       return processed;
     } catch (cause) {
+      // The lost session no longer owns the leader lock; do not overwrite the
+      // state/history of a replacement worker. Durable queue claims recover it.
+      if (disconnected) throw cause;
       const completed = (cause as { processed?: number })?.processed;
       const processed =
         Number.isSafeInteger(completed) && completed! > 0 ? completed! : 0;
@@ -55,11 +71,15 @@ export async function runProjection(
       return 0;
     }
   } finally {
-    if (locked)
-      await db.query("SELECT pg_advisory_unlock($1)", [
-        kind === "catalog" ? 70210472 : 70210473,
-      ]);
-    db.release();
+    try {
+      if (locked && !disconnected)
+        await db.query("SELECT pg_advisory_unlock($1)", [
+          kind === "catalog" ? 70210472 : 70210473,
+        ]);
+    } finally {
+      db.off("error", lost);
+      db.release(disconnected);
+    }
   }
 }
 
@@ -102,21 +122,29 @@ export function startProjections(
   let serial = Promise.resolve();
   const step = async (kind: "catalog" | "search") => {
     if (stopped) return 0;
-    return runProjection(kind, async () => {
-      if (stopped) return 0;
-      if (kind === "search") return search(settings.textBatch, () => stopped);
-      // Bound downstream backlog without withholding historical materialization.
-      const full = (
-        await pool.query(
-          "SELECT EXISTS(SELECT 1 FROM catalog_text_pending OFFSET $1 LIMIT 1) AS full",
-          [settings.textHighWater - 1],
-        )
-      ).rows[0].full;
-      return catalog(
-        full ? 0 : settings.catalogBatch,
-        settings.historicalBatch,
-      );
-    });
+    let interrupted = false;
+    return runProjection(
+      kind,
+      async () => {
+        if (stopped || interrupted) return 0;
+        if (kind === "search")
+          return search(settings.textBatch, () => stopped || interrupted);
+        // Bound downstream backlog without withholding historical materialization.
+        const full = (
+          await pool.query(
+            "SELECT EXISTS(SELECT 1 FROM catalog_text_pending OFFSET $1 LIMIT 1) AS full",
+            [settings.textHighWater - 1],
+          )
+        ).rows[0].full;
+        return catalog(
+          full ? 0 : settings.catalogBatch,
+          settings.historicalBatch,
+        );
+      },
+      () => {
+        interrupted = true;
+      },
+    );
   };
   const lane = async (kind: "catalog" | "search") => {
     let deadline = performance.now() + settings.budgetMs;

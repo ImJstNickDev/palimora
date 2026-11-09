@@ -1,0 +1,1208 @@
+{
+  "schema": "palimora.performance.p2e1.v1",
+  "status": "incomplete: initial request-span instrumentation and one full-text probe only",
+  "p2e1_complete": false,
+  "p2_complete": false,
+  "baseline_commit": "6bf2b0f2b9532716cb30cd3f18170861a0a341ba",
+  "evidence_root": "/mnt/sdb/palimora-p2e1-initial-20261109",
+  "image": "sha256:b5cd1989aceb4a0bcddc72fc42d49451f627f382dedac67bcb716c823926479a",
+  "conditions": {
+    "corpus_works": 11032,
+    "source_fixture": "/mnt/sdb/palimora-p2c-b1-20261109",
+    "mode": "isolated",
+    "batch": 16,
+    "prepare_lanes": 1,
+    "publish_lanes": 1,
+    "workload": 5000,
+    "instrumentation": "Explicit diagnostic preload only; test database guard; no SQL text, URLs, PIT IDs, query bodies or credentials recorded",
+    "aggregation": "Same-request spans; first setup request plus three warmups excluded in each state. No subtraction of independent percentiles. SQL client includes scheduling/transport, not pure PostgreSQL service."
+  },
+  "initial_observations": {
+    "idle": {
+      "durations": {
+        "api_wall": {
+          "count": 100,
+          "mean_ms": 88.04750213999985,
+          "p50_ms": 80.83144300000276,
+          "p95_ms": 126.79274500000611
+        },
+        "postgres.client": {
+          "count": 100,
+          "mean_ms": 10.05740779999942,
+          "p50_ms": 9.077652999993006,
+          "p95_ms": 14.573303000004671
+        },
+        "opensearch.headers/index.state": {
+          "count": 100,
+          "mean_ms": 3.810697430000364,
+          "p50_ms": 3.5950210000009974,
+          "p95_ms": 5.345535000000382
+        },
+        "opensearch.headers/pit.open": {
+          "count": 100,
+          "mean_ms": 8.385940770000234,
+          "p50_ms": 7.875947000000451,
+          "p95_ms": 11.022030000000086
+        },
+        "opensearch.body/pit.open": {
+          "count": 100,
+          "mean_ms": 0.8549639099999331,
+          "p50_ms": 0.6676000000006752,
+          "p95_ms": 1.5997060000008787
+        },
+        "opensearch.headers/search": {
+          "count": 100,
+          "mean_ms": 54.523320989999775,
+          "p50_ms": 49.81735299999855,
+          "p95_ms": 84.99753500000224
+        },
+        "opensearch.body/search": {
+          "count": 100,
+          "mean_ms": 0.9763265499996487,
+          "p50_ms": 0.9056090000012773,
+          "p95_ms": 1.5430430000051274
+        },
+        "opensearch_took": {
+          "count": 100,
+          "mean_ms": 47.47,
+          "p50_ms": 43,
+          "p95_ms": 77
+        }
+      },
+      "counts_per_request": {
+        "postgres.client": {
+          "min": 9,
+          "max": 9,
+          "mean": 9
+        },
+        "opensearch.headers/index.state": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.headers/pit.open": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.body/pit.open": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.headers/search": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.body/search": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        }
+      },
+      "probe": {
+        "transport": "internal HTTP, authenticated; no gateway",
+        "samples": 100,
+        "search": {
+          "mean_ms": 91.98252007999996,
+          "p50_ms": 84.42888399999993,
+          "p95_ms": 134.31680600000072,
+          "max_ms": 212.28424300000006
+        },
+        "work": {
+          "mean_ms": 17.87476073000005,
+          "p50_ms": 17.403540999999677,
+          "p95_ms": 27.182628000000477,
+          "max_ms": 34.39496699999836
+        },
+        "reader": {
+          "mean_ms": 24.300380049999966,
+          "p50_ms": 22.504235000000335,
+          "p95_ms": 37.37508100000014,
+          "max_ms": 55.88183299999946
+        },
+        "windows": {
+          "search": {
+            "started_at": 1794198382308,
+            "ended_at": 1794198391507,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 4
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 66050
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 529682944
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 12,
+                      "collection_time_in_millis": 184
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 8,
+                      "collection_time_in_millis": 33
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 79690
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 377927760
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "work": {
+            "started_at": 1794198391583,
+            "ended_at": 1794198393371,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 79690
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 377927760
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 79860
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 380024912
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "reader": {
+            "started_at": 1794198393480,
+            "ended_at": 1794198395910,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 0
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 79860
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 380024912
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 79940
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 382122064
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "backlog": {
+      "durations": {
+        "api_wall": {
+          "count": 100,
+          "mean_ms": 131.48204057999973,
+          "p50_ms": 126.93057399999816,
+          "p95_ms": 210.28522099999827
+        },
+        "postgres.client": {
+          "count": 100,
+          "mean_ms": 14.68492847999798,
+          "p50_ms": 13.550031999991916,
+          "p95_ms": 25.734182000007422
+        },
+        "opensearch.headers/index.state": {
+          "count": 100,
+          "mean_ms": 4.439191849999989,
+          "p50_ms": 3.7323019999967073,
+          "p95_ms": 8.44046900000103
+        },
+        "opensearch.headers/pit.open": {
+          "count": 100,
+          "mean_ms": 11.71192295999972,
+          "p50_ms": 9.27873499999987,
+          "p95_ms": 29.978737999997975
+        },
+        "opensearch.body/pit.open": {
+          "count": 100,
+          "mean_ms": 1.114023260000249,
+          "p50_ms": 0.9037140000000363,
+          "p95_ms": 1.9867289999965578
+        },
+        "opensearch.headers/search": {
+          "count": 100,
+          "mean_ms": 86.76933226000001,
+          "p50_ms": 77.6025540000046,
+          "p95_ms": 157.46753300000273
+        },
+        "opensearch.body/search": {
+          "count": 100,
+          "mean_ms": 1.2518790600002103,
+          "p50_ms": 1.1305540000030305,
+          "p95_ms": 2.110837000000174
+        },
+        "opensearch_took": {
+          "count": 100,
+          "mean_ms": 78.23,
+          "p50_ms": 69,
+          "p95_ms": 147
+        }
+      },
+      "counts_per_request": {
+        "postgres.client": {
+          "min": 9,
+          "max": 9,
+          "mean": 9
+        },
+        "opensearch.headers/index.state": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.headers/pit.open": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.body/pit.open": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.headers/search": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "opensearch.body/search": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        }
+      },
+      "probe": {
+        "transport": "internal HTTP, authenticated; no gateway",
+        "samples": 100,
+        "search": {
+          "mean_ms": 136.90484945000009,
+          "p50_ms": 131.87683100000004,
+          "p95_ms": 212.7488459999995,
+          "max_ms": 239.00430799999958
+        },
+        "work": {
+          "mean_ms": 22.41006854999996,
+          "p50_ms": 21.332673000000796,
+          "p95_ms": 33.34142399999837,
+          "max_ms": 34.56948399999965
+        },
+        "reader": {
+          "mean_ms": 39.14798380999986,
+          "p50_ms": 35.03453300000183,
+          "p95_ms": 61.36214699999982,
+          "max_ms": 82.94134499999927
+        },
+        "windows": {
+          "search": {
+            "started_at": 1794198397380,
+            "ended_at": 1794198411072,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 5000
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 4168
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 0,
+                  "index_time_in_millis": 0,
+                  "index_current": 1,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {}
+                },
+                "search": {
+                  "open_contexts": 4
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 11,
+                  "total_time_in_millis": 1,
+                  "external_total": 10,
+                  "external_total_time_in_millis": 27,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 18
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 80720
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 478591056
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 316
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 10,
+                      "collection_time_in_millis": 42
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 832,
+                  "index_time_in_millis": 8399,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {
+                    "2xx": 832
+                  }
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 1,
+                  "current_docs": 644,
+                  "current_size_in_bytes": 33073238,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 20,
+                  "total_time_in_millis": 4234,
+                  "external_total": 19,
+                  "external_total_time_in_millis": 4290,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 27
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 137060
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 290212672
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 26,
+                      "collection_time_in_millis": 559
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 127
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "work": {
+            "started_at": 1794198411291,
+            "ended_at": 1794198413533,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 4168
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 4008
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 840,
+                  "index_time_in_millis": 8482,
+                  "index_current": 1,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {
+                    "2xx": 832
+                  }
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 1,
+                  "current_docs": 644,
+                  "current_size_in_bytes": 33073238,
+                  "total": 1,
+                  "total_time_in_millis": 175,
+                  "total_docs": 25,
+                  "total_size_in_bytes": 61199,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 20,
+                  "total_time_in_millis": 4234,
+                  "external_total": 19,
+                  "external_total_time_in_millis": 4290,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 27
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 137060
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 290212672
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 26,
+                      "collection_time_in_millis": 559
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 127
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 1008,
+                  "index_time_in_millis": 9881,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {
+                    "2xx": 992
+                  }
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 2,
+                  "total_time_in_millis": 4883,
+                  "total_docs": 669,
+                  "total_size_in_bytes": 33134437,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 22,
+                  "total_time_in_millis": 5295,
+                  "external_total": 21,
+                  "external_total_time_in_millis": 5358,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 20
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 144760
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 709643072
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 26,
+                      "collection_time_in_millis": 559
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 127
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "reader": {
+            "started_at": 1794198413634,
+            "ended_at": 1794198417549,
+            "before": {
+              "current": 0,
+              "historical": 0,
+              "text": 3992
+            },
+            "after": {
+              "current": 0,
+              "historical": 0,
+              "text": 3672
+            },
+            "opensearch_before": {
+              "indices": {
+                "indexing": {
+                  "index_total": 1014,
+                  "index_time_in_millis": 9941,
+                  "index_current": 1,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {
+                    "2xx": 1008
+                  }
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 2,
+                  "total_time_in_millis": 4883,
+                  "total_docs": 669,
+                  "total_size_in_bytes": 33134437,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 22,
+                  "total_time_in_millis": 5295,
+                  "external_total": 21,
+                  "external_total_time_in_millis": 5358,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 20
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 144760
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 709643072
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 26,
+                      "collection_time_in_millis": 559
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 16,
+                      "collection_time_in_millis": 127
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            },
+            "opensearch_after": {
+              "indices": {
+                "indexing": {
+                  "index_total": 1328,
+                  "index_time_in_millis": 12084,
+                  "index_current": 0,
+                  "index_failed": 0,
+                  "delete_total": 0,
+                  "delete_time_in_millis": 0,
+                  "delete_current": 0,
+                  "noop_update_total": 0,
+                  "is_throttled": false,
+                  "throttle_time_in_millis": 0,
+                  "doc_status": {
+                    "2xx": 1328
+                  }
+                },
+                "search": {
+                  "open_contexts": 104
+                },
+                "merges": {
+                  "current": 0,
+                  "current_docs": 0,
+                  "current_size_in_bytes": 0,
+                  "total": 2,
+                  "total_time_in_millis": 4883,
+                  "total_docs": 669,
+                  "total_size_in_bytes": 33134437,
+                  "total_stopped_time_in_millis": 0,
+                  "total_throttled_time_in_millis": 0,
+                  "total_auto_throttle_in_bytes": 104857600,
+                  "unreferenced_file_cleanups_performed": 0
+                },
+                "refresh": {
+                  "total": 25,
+                  "total_time_in_millis": 6543,
+                  "external_total": 24,
+                  "external_total_time_in_millis": 6628,
+                  "listeners": 0
+                },
+                "segments": {
+                  "count": 23
+                }
+              },
+              "process": {
+                "cpu": {
+                  "total_in_millis": 152770
+                }
+              },
+              "jvm": {
+                "mem": {
+                  "heap_used_in_bytes": 435110192
+                },
+                "gc": {
+                  "collectors": {
+                    "young": {
+                      "collection_count": 28,
+                      "collection_time_in_millis": 603
+                    },
+                    "G1 Concurrent GC": {
+                      "collection_count": 18,
+                      "collection_time_in_millis": 161
+                    },
+                    "old": {
+                      "collection_count": 0,
+                      "collection_time_in_millis": 0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "queues": {
+    "workload": 5000,
+    "textOnly": true,
+    "regenerateHistory": false,
+    "before": {
+      "catalog": 0,
+      "historical": 0,
+      "text": 5000
+    },
+    "after": {
+      "catalog": 0,
+      "historical": 0,
+      "text": 3624
+    },
+    "idle": {
+      "started_at": 1794198350555,
+      "ended_at": 1794198380576
+    },
+    "drained_at_ms": 1794198456449,
+    "final_queues": {
+      "catalog": 0,
+      "historical": 0,
+      "text": 0
+    }
+  },
+  "pit_created_spans": 208,
+  "validation": {
+    "original_authenticated_http_probe": "passed, 208 search requests traced; detail/reader probes also passed",
+    "disabled_preload_preserves_functions": true,
+    "production_database_guard": true,
+    "build": "npm run build passed"
+  },
+  "missing": [
+    "Fine-grained query construction, generation filtering, serialization/send and PostgreSQL pool/server wait spans",
+    "Per-request event-loop attribution",
+    "Ablations: facets, total hits, PIT reuse, sort, representative filtered/full-text queries",
+    "Controlled equal indexing load and alternating repeated decisive pair",
+    "Complete OpenSearch thread pools, rejections, GC, refresh, merge, flush and I/O correlation",
+    "Measured PIT lifetime/concurrency and comparison to frontend navigation",
+    "Quantitative ranked bottlenecks and evidence-based single P2E.2 priority"
+  ],
+  "p2e2_priority": null,
+  "limits": [
+    "One exploratory pass, no causal conclusion or proven bottleneck",
+    "Header spans and JSON body spans are separate; took is nested within client latency, not additive",
+    "PIT close calls made by the probe outside API requests are not captured",
+    "Frontend paginates with cursors and refetches every two seconds while indexing=true. Probe instead issues 104 independent first-page requests sequentially and retains PITs through detail/reader. Distortion magnitude is unmeasured."
+  ]
+}

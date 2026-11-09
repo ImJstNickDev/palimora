@@ -2888,3 +2888,48 @@ python3 scripts/summarize-p2d.py /mnt/sdb/palimora-p2d-new-b1
 Il report JSON conserva configurazioni, immagine, checksum dei sorgenti runtime,
 radici delle evidenze, code per endpoint e limiti della strumentazione. Le fixture
 private restano sul disco; tutti i container e le reti temporanee sono rimossi.
+
+## P2E.1 — Prima raccolta diagnostica, fase incompleta
+
+Aggiunto `scripts/performance-search-spans.cjs`, preload esplicito per database
+`_test`; il runtime normale non lo carica. Correla tramite AsyncLocalStorage le
+query PostgreSQL client e le chiamate OpenSearch alla medesima richiesta HTTP,
+separando header, lettura JSON e `took`. Non registra SQL, query, contenuti,
+credenziali o identificativi PIT. Non modifica query o risposte.
+
+Una prova esplorativa riusa la fixture P2C B1, API isolata e projection 16/1/1,
+con 5.000 lavori testo. Le cento richieste misurate per condizione producono:
+
+| Media per richiesta, ms | Code vuote | Backlog testo |
+|---|---:|---:|
+| HTTP server fino a finish | 88,05 | 131,48 |
+| PostgreSQL client cumulativo | 10,06 | 14,68 |
+| Stato indice, fino agli header | 3,81 | 4,44 |
+| Apertura PIT, fino agli header | 8,39 | 11,71 |
+| Ricerca OpenSearch, fino agli header | 54,52 | 86,77 |
+| `took` OpenSearch | 47,47 | 78,23 |
+
+`took` è contenuto nella durata client: non va sommato. Le durate SQL includono
+trasporto e scheduling, non sono tempi server puri. Nessuna sottrazione di
+percentili indipendenti. Dati e limiti in [performance-p2e1.json](performance-p2e1.json).
+
+Il probe crea 104 PIT per invocazione (setup, tre warmup, cento prime pagine),
+208 nelle due condizioni, e li conserva fino alla pulizia finale. Il frontend
+usa cursor per paginare e refetch ogni due secondi quando `indexing=true`;
+quindi può anch'esso aprire ripetutamente PIT, ma con frequenza diversa dal probe
+sequenziale. Il costo di questa differenza non è ancora misurato.
+
+Build completa passata. Il probe autenticato originale passa per ricerca,
+dettaglio e lettore; 208 ricerche tracciate senza errori e code finali vuote.
+Verificati anche assenza di wrapper quando disattivato e rifiuto di database
+non di test. Nessun motore o contratto di prodotto modificato.
+
+**P2E.1 non completata.** Mancano ablazioni, carico equivalente, ripetizioni,
+span fini di costruzione/verifica/serializzazione, correlazione completa delle
+risorse OpenSearch e misura del ciclo PIT. Questa raccolta non dimostra un
+collo di bottiglia dominante e non seleziona un intervento P2E.2. P2 resta aperta.
+
+Per abilitare la raccolta, aggiungere esplicitamente il preload a `NODE_OPTIONS`
+della sola fixture API; destinazione default `/results/search-spans.jsonl`,
+oppure `P2E_SEARCH_SPANS` con percorso privato. Gli span iniziano alla ricezione
+Node e terminano a `finish`, che non equivale alla ricezione sul client.

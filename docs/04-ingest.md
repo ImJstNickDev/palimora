@@ -247,20 +247,31 @@ Riferimento semantico upstream: [template capitolo](https://github.com/otwcode/o
 e [generatore download](https://github.com/otwcode/otwarchive/blob/master/app/models/download_writer.rb).
 Adapter scritti per i byte osservati nel dump; nessun codice Rails/GPL incorporato.
 
-## Coordinamento multi-sorgente P3A
+## Coordinamento multi-sorgente P3
 
 `INGEST_SOURCE_CONCURRENCY` accetta interi 1–4, default **1**. Il worker conserva
 il leader PostgreSQL per tutto il tick, fino al drenaggio di tutte le corsie.
-Le corsie effettive sono `min(sorgenti configurate, parser, commit)`; i budget
-`INGEST_PARSER_WORKERS` e `INGEST_COMMIT_CONCURRENCY` vengono ripartiti fra esse,
-non moltiplicati. Ogni corsia libera prende il prossimo ZIP. Un sorgente non-ZIP
+Le corsie effettive sono `min(sorgenti configurate, parser, commit)`; il budget
+parser viene ripartito fra esse, non moltiplicato. I gruppi usano invece
+`INGEST_COMMIT_CONCURRENCY` permessi globali FIFO: una sorgente può utilizzare
+uno slot libero di un'altra, senza superare il budget complessivo. Anche record
+singoli, tag, artefatti ausiliari e relativi checkpoint usano questi permessi.
+Il permesso resta occupato fino all'ACK ordinato della propria sorgente, anche se il commit
+finisce prima di un gruppo precedente. Con meno ZIP delle corsie configurate,
+il gruppo di sorgenti usa comunque tutti i parser disponibili. Ogni corsia
+libera prende il prossimo ZIP. Una sorgente non-ZIP
 costituisce una barriera: attende i ZIP precedenti e usa il budget intero, evitando
 concorrenza sul percorso SQLite/cache metadata. L'ordine di ammissione non è
 un ordine cronologico delle revisioni.
 
 Ogni ZIP ha adapter, pipeline FIFO, lease identità su connessione dedicata,
-contatori, errori e staging `staging/source-<id>` propri. Al termine si attende
-l'uscita dell'adapter prima di eliminare lo staging della sorgente. Un retry I/O
+contatori, errori e staging `staging/source-<id>/run-<casuale>` propri. Prima
+del resume si rimuovono i temporanei precedenti, che non sono necessari a nessun
+commit durevole; il nuovo adapter ha un namespace distinto dai processi orfani.
+I pack non sigillati rimasti nello staging sono rimossi prima di ripartire sotto
+il lock esclusivo locator già esistente, dopo aver escluso gli altri writer.
+I pack già sigillati senza riferimenti restano soggetti alla GC esistente.
+Al termine si attende l'uscita dell'adapter prima di eliminare lo staging della sorgente. Un retry I/O
 aggiorna soltanto la sorgente; parser strutturale e guasti globali sospendono il
 batch. Ricevute, checkpoint contigui, lock per identità, transazioni e PackStore
 restano quelli esistenti. Le corsie non condividono connessioni transazionali.
@@ -272,8 +283,82 @@ si aggiungono un adapter padre e il resource tracker multiprocessing per corsia
 commit; prefetch adapter totale ≤ commit + corsie, più una finestra di parsing
 per corsia. Rimangono soglia gruppo 16 MiB e gestione integrale dei singoli
 record grandi: non è un limite assoluto di RAM per opere arbitrariamente grandi.
-Una verifica condivisa, al massimo una al secondo, ferma l'alimentazione quando
-catalogo corrente, storico o full-text raggiungono 65.536 elementi ciascuno.
-I gruppi già ammessi possono ancora committare; le proiezioni devono essere attive
-per proseguire oltre questa soglia. Pause e arresto continuano a essere osservati
-durante l'attesa. Nessuna nuova coda persistente o modifica del formato canonico.
+### Pressione e capacità
+
+`INGEST_PRESSURE_MODE=conservative` rimane il default. Conserva il limite di
+65.536 elementi per ciascuna delle tre code. La verifica condivisa visita al
+massimo 65.536 tuple visibili per relazione (`EXISTS/OFFSET`), senza contare tutto
+un backlog più grande; tuple morte restano un costo da gestire con autovacuum.
+I gruppi già ammessi possono terminare. Non serve alcuna migrazione per tornare
+alla modalità conservativa.
+
+`INGEST_PRESSURE_MODE=throughput-first` disaccoppia il canonico dalle cardinalità
+delle code. PostgreSQL rimane l'unica autorità per catalogo corrente, storico e
+invalidazioni full-text; una sorgente `ingested` o un batch `completed` indicano
+solo il completamento canonico. Le code vuote, le generazioni pubblicate e la
+visibilità effettiva attestano separatamente catalogazione e ricercabilità.
+
+Configurazioni, in GiB binari (0,25–1024):
+
+| Variabile | Default | Significato |
+|---|---:|---|
+| `INGEST_DISK_RESERVE_GIB` | 8 | Riserva per filesystem persistente; si conserva anche il maggiore `ARCHIVE_RESERVE_BYTES` nei writer |
+| `INGEST_BACKLOG_GIB` | 8 | Somma fisica delle tre code, TOAST e indici compresi, incluse pagine non ancora recuperate |
+| `INGEST_STAGING_GIB` | 4 | Budget globale delle prenotazioni adapter e soglia di arresto sullo staging osservato |
+
+Controlli condivisi al massimo ogni secondo; misure SQL ogni cinque secondi:
+`pg_total_relation_size` delle code, `pg_database_size` e `pg_stat_wal.wal_bytes`.
+Non richiedono superuser. Il percorso throughput-first non esegue `COUNT(*)`.
+La crescita del DB e il WAL sono osservabili; la capacità reale comprende anche
+WAL trattenuto, file temporanei SQL, translog e altri writer tramite `statfs`.
+Non si assume che il WAL generato sia ancora tutto presente su disco.
+
+Si controllano separatamente archivio, staging, temporanei e i percorsi dichiarati
+in `INGEST_CAPACITY_PATHS`, JSON con chiavi obbligatorie `postgres`, `wal`,
+`search`. Compose monta i dati PostgreSQL e OpenSearch **read-only** sotto
+`/capacity/`; nella topologia fornita il WAL risiede nel mount PostgreSQL.
+Con WAL esterno o altri mount, aggiungere i bind corrispondenti e impostare i
+percorsi reali, senza usare una directory qualsiasi sul filesystem del worker.
+Ogni tablespace PostgreSQL aggiuntivo richiede la chiave `tablespace:<nome>`;
+un tablespace non dichiarato impedisce l'ammissione. Tutti i percorsi aggiuntivi
+nel JSON vengono controllati. I temporanei del parser stanno nello staging;
+`/tmp` ha una riserva pari al minore fra la riserva configurata e il 10% del
+filesystem, per supportare anche tmpfs piccoli.
+
+Per ogni filesystem il margine è il maggiore fra riserva configurata e dieci
+secondi del consumo osservato fra campioni. Avviso sotto tre margini,
+rallentamento sotto due, sospensione dell'ammissione a un margine. Si riprende
+solo con almeno 2,5 margini. Per i byte delle code: avviso al 70%, rallentamento
+all'85%, attesa al 100%, ripresa all'80%. Il rallentamento aggiunge 250 ms per
+evento adapter; l'attesa ricontrolla ogni 250 ms senza creare altri gruppi core.
+Metriche mancanti, errori di lettura o campioni più vecchi di cinque secondi
+sospendono l'ammissione. Stop e pausa amministrativa restano osservati. La
+mancanza di HTTP OpenSearch non è una metrica di capacità: con il suo mount
+accessibile e capiente il canonico continua, lasciando i lavori durevoli pendenti.
+
+Le prenotazioni staging sono ripartite fra le corsie, con ledger temporaneo
+`.quota` protetto da `flock` fra padre e parser. Ogni scrittura o copia temporanea
+prenota i byte prima di iniziare, anche per spool non visibili nell'inventario dei
+file. Crediti fino a 8 MiB ammortizzano il costo; il cleanup dopo ACK restituisce
+la prenotazione della directory. Si contano prudentemente anche buffer di input
+che rimangono in memoria. Il ledger non è un checkpoint, non è fsyncato e non
+contiene contenuti canonici: dopo crash viene ricreato; un ledger illeggibile non
+autorizza nuove scritture. Il budget può rifiutare un singolo membro molto grande:
+nessun troncamento o salto, occorre aumentare esplicitamente la capacità e riprendere.
+
+Al superamento delle prenotazioni, della soglia staging osservata o a `ENOSPC`,
+il batch passa a `paused` con causa esplicita; i gruppi già ammessi terminano o
+fanno rollback, gli adapter si arrestano e lo staging viene liberato. Riprendere
+con il normale controllo ingest dopo aver corretto la capacità. Le attese per
+spazio/backlog invece riprendono automaticamente con isteresi e lasciano il batch
+`running`. I log `ingest_pressure` espongono stato, causa e campione alle transizioni e ogni 30 secondi;
+`ingest_pressure_summary` riporta controlli e attese (somme delle attese delle
+corsie, non wall-clock). Se il limite code è occupato da pagine morte, drenare
+non basta necessariamente: controllare vacuum/indici e capacità prima del resume.
+
+Restano i limiti di parser, pool, gruppi e commit, i controlli di spazio prima
+delle scritture PackStore, SHA-256, compressione, fsync e ACK dopo commit. Lo
+staging PackStore dei gruppi già ammessi può aggiungersi alle prenotazioni adapter:
+la soglia osservata arresta la produzione, non interrompe una transazione già
+in corso. Dimensionare quindi la riserva con margine per questi gruppi e per gli
+altri processi; P5 deve validare il margine sul carico sostenuto.

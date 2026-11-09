@@ -14,6 +14,6 @@ print(json.dumps(result))
 '''
 for value in sys.argv[1:]:
  root=pathlib.Path(value)
- assert str(root).startswith('/mnt/sdb/palimora-p3a-') and (root/'results/p3a-storage.json').exists()
+ assert str(root).startswith(('/mnt/sdb/palimora-p3a-', '/mnt/sdb/palimora-p3-final-')) and (root/'results/p3a-storage.json').exists()
  result=subprocess.check_output(['docker','run','--rm','--network','none','--user','0','--entrypoint','python3','--mount',f'type=bind,source={root},destination=/fixture,readonly','palimora-p3a-api','-c',code],text=True)
  (root/'results/p3a-disk.json').write_text(result)

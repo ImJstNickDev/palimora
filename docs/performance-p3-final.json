@@ -1,0 +1,2759 @@
+{
+  "schema": "palimora.performance.p3-final.v1",
+  "reference_commit": "c8a75c0acfbd4cf1417c0d8b4fe4c2b2133be23e",
+  "status": "implemented_verified_measured_complete_on_test_corpus",
+  "corpus": {
+    "works": 11032,
+    "sources": 4,
+    "source_bytes": 228732607,
+    "decompressed_bytes": 598801143,
+    "limitation": "Artificial partitions of the single authorized reference ZIP; not representative of the entire dump.",
+    "reference_zip_sha256": "fd8e01e155c1a668c91bd86bc67cfc9b2ac3ad9da1322a35925a74c226e85429"
+  },
+  "configuration": {
+    "default_mode": "conservative",
+    "default_sources": 1,
+    "parsers": 6,
+    "commits": 4,
+    "postgres_pool": 12,
+    "group_records": 256,
+    "zstd_level": 3,
+    "uv_threads": 8,
+    "projection_mode": "isolated",
+    "search_heap_gib": 1,
+    "search_parallel_facets": false,
+    "host_resource_quotas": false,
+    "conservative_queue_limit": 65536,
+    "throughput_first": {
+      "disk_reserve_gib": 8,
+      "backlog_allocated_gib": 8,
+      "adapter_staging_reserved_gib": 4,
+      "sample_ms": 1000,
+      "sql_sample_ms": 5000,
+      "max_sample_age_ms": 5000,
+      "disk_warning_reserves": 3,
+      "disk_slow_reserves": 2,
+      "disk_wait_reserves": 1,
+      "disk_resume_reserves": 2.5,
+      "growth_headroom_seconds": 10,
+      "backlog_warn_fraction": 0.7,
+      "backlog_slow_fraction": 0.85,
+      "backlog_wait_fraction": 1,
+      "backlog_resume_fraction": 0.8
+    }
+  },
+  "runs": {
+    "A": {
+      "source_concurrency": 4,
+      "mode": "conservative",
+      "canonical_seconds_to_last_commit": 41.8647060546875,
+      "canonical_seconds_to_batch_finished": 41.899047,
+      "canonical_works_per_second": 263.5155251201094,
+      "source_gib_per_hour": 18.31819443846865,
+      "source_mib_per_second": 5.210508640275528,
+      "decompressed_mib_per_second": 13.640637294045103,
+      "chapters_per_second": 547.6689593866813,
+      "objects_per_second": 2557.142043709952,
+      "end_to_end_seconds": 162.7017060546875,
+      "end_to_end_works_per_second": 67.80506650798063,
+      "drain_visibility_seconds": 120.83699999999999,
+      "catalog_done_seconds": 151.2948684746875,
+      "catalog_works_per_second_over_pipeline_interval": 72.91721200607486,
+      "index_documents_per_second_over_pipeline_interval": 67.80506650798063,
+      "queues_at_first_sample_after_last_commit": {
+        "seconds": 43.477624195000004,
+        "state": "completed",
+        "processing_started_at_ms": "1794212486728.294000",
+        "processing_finished_at_ms": "1794212528627.341000",
+        "queue_seconds": 0.974939,
+        "processing_seconds": 41.899047,
+        "works": 11032,
+        "documents": 1880,
+        "catalog": 9152,
+        "historical": 9152,
+        "text": 152
+      },
+      "search_node_docs_near_last_commit": {
+        "at": 1794212528978,
+        "docs": 1144
+      },
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 9152,
+          "mean_residence_seconds_estimate": 58.29143736234169
+        },
+        "historical": {
+          "max_sampled": 9152,
+          "mean_residence_seconds_estimate": 58.29143736234169
+        },
+        "text": {
+          "max_sampled": 780,
+          "mean_residence_seconds_estimate": 3.1886165594142493
+        }
+      },
+      "queue_storage": {
+        "catalog_pending": {
+          "max_allocated_bytes": 1433600,
+          "max_index_bytes": 573440,
+          "max_dead_tuples_estimated": "988"
+        },
+        "catalog_snapshot_pending": {
+          "max_allocated_bytes": 974848,
+          "max_index_bytes": 466944,
+          "max_dead_tuples_estimated": "980"
+        },
+        "catalog_text_pending": {
+          "max_allocated_bytes": 1449984,
+          "max_index_bytes": 647168,
+          "max_dead_tuples_estimated": "969"
+        }
+      },
+      "max_combined_queue_bytes_sampled": 3858432,
+      "capacity_probe_mean_ms": 5.056633060241476,
+      "inclusive_ingest_spans": {
+        "last_commit_ms": 1794212528593,
+        "peak": 4,
+        "spans": {
+          "sql.other": {
+            "calls": 5719,
+            "ms": 83527.80693899936
+          },
+          "sql.commit": {
+            "calls": 343,
+            "ms": 4659.337396000002
+          },
+          "staging.prepare": {
+            "calls": 57,
+            "ms": 15110.274237999996
+          },
+          "objectBytes": {
+            "calls": 96304,
+            "ms": 1135.9458249995832
+          },
+          "preserve": {
+            "calls": 107393,
+            "ms": 3119.483310998041
+          },
+          "sql.copy": {
+            "calls": 57,
+            "ms": 4500.159423000025
+          },
+          "pack.append": {
+            "calls": 87,
+            "ms": 23324.777154000003
+          },
+          "pack.finish": {
+            "calls": 62,
+            "ms": 16794.61357600001
+          },
+          "checkpoint": {
+            "calls": 57,
+            "ms": 4104.233745000008
+          },
+          "ingestRecords": {
+            "calls": 57,
+            "ms": 148936.88740500004
+          }
+        }
+      },
+      "wal_generated_pipeline_bytes": 728275744,
+      "pressure": [],
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.02368831634521,
+            "cpu_seconds": 133.918938,
+            "cpu_mean_percent": 77.39919273663347,
+            "cpu_max_percent": 620.56922641053,
+            "working_mean_mib": 832.7799030172414,
+            "working_max_mib": 1174.0,
+            "memory_max_mib": 1865.8046875,
+            "read_mib": 6.80078125,
+            "write_mib": 606.84375,
+            "rx_mib": 30.289469718933105,
+            "tx_mib": 171.200213432312
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.02239990234375,
+            "cpu_seconds": 145.022891,
+            "cpu_mean_percent": 83.8174080823367,
+            "cpu_max_percent": 300.419286265294,
+            "working_mean_mib": 345.6047503591954,
+            "working_max_mib": 467.2734375,
+            "memory_max_mib": 1293.890625,
+            "read_mib": 14.90234375,
+            "write_mib": 2333.66796875,
+            "rx_mib": 515.5887699127197,
+            "tx_mib": 246.84328079223633
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.01928520202637,
+            "cpu_seconds": 155.191177,
+            "cpu_mean_percent": 89.6958837963009,
+            "cpu_max_percent": 389.56350724010815,
+            "working_mean_mib": 1600.9887751436781,
+            "working_max_mib": 1770.2734375,
+            "memory_max_mib": 2474.97265625,
+            "read_mib": 23.48046875,
+            "write_mib": 1015.24609375,
+            "rx_mib": 409.2249402999878,
+            "tx_mib": 2.0926074981689453
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.02265620231628,
+            "cpu_seconds": 1.574652,
+            "cpu_mean_percent": 0.9100842829269429,
+            "cpu_max_percent": 2.469652067555757,
+            "working_mean_mib": 8.120105962643677,
+            "working_max_mib": 8.49609375,
+            "memory_max_mib": 10.19140625,
+            "read_mib": 0.203125,
+            "write_mib": 0.5859375,
+            "rx_mib": 0.7621755599975586,
+            "tx_mib": 0.4640035629272461
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 172.75960063934326,
+            "cpu_seconds": 113.186724,
+            "cpu_mean_percent": 65.51689375358715,
+            "cpu_max_percent": 116.41029430431351,
+            "working_mean_mib": 232.2317483836207,
+            "working_max_mib": 285.19921875,
+            "memory_max_mib": 286.56640625,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.11173629760742,
+            "tx_mib": 754.374550819397
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 11.73,
+          "rss_peak_bytes": 185159680
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 60.08,
+          "rss_peak_bytes": 660996096
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.26,
+          "rss_peak_bytes": 57348096
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.63,
+          "rss_peak_bytes": 91545600
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.16,
+          "rss_peak_bytes": 77320192
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.31,
+          "rss_peak_bytes": 51478528
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 9.22,
+          "rss_peak_bytes": 30031872
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 8.95,
+          "rss_peak_bytes": 28270592
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 6.12,
+          "rss_peak_bytes": 44158976
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.97,
+          "rss_peak_bytes": 27897856
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.75,
+          "rss_peak_bytes": 44019712
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.09,
+          "rss_peak_bytes": 27840512
+        }
+      ],
+      "max_python_processes_sampled": 10,
+      "staging_named_peak_bytes": 817100666,
+      "adapter_reservations_peak_bytes": null,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787215",
+          "packs": "62",
+          "database_bytes": "437603475"
+        },
+        "physical": {
+          "records": 107061,
+          "unique_hashes": 107054,
+          "duplicates": 7,
+          "duplicate_record_bytes": 2783,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            130567,
+            327569,
+            446971,
+            726332,
+            1199126,
+            2159300,
+            2609389,
+            2746878,
+            2800627,
+            3312377,
+            3854602,
+            3964062,
+            4085005,
+            4089284,
+            4102558,
+            4109689,
+            4168899,
+            4194625,
+            4444173,
+            4451077,
+            4575892,
+            4622874,
+            4743123,
+            4857769,
+            4972791,
+            5085975,
+            5112092,
+            5121959,
+            5176313,
+            5211542,
+            5246372,
+            5271474,
+            5360874,
+            5503059,
+            5517492,
+            5588623,
+            5670358,
+            5679019,
+            5683460,
+            5706745,
+            5771881,
+            5777791,
+            5888719,
+            5904350,
+            5932036,
+            5993426,
+            6138566,
+            6181486,
+            6235522,
+            6254598,
+            6445409,
+            6447071,
+            6696995,
+            6856888,
+            7629155,
+            7889079,
+            8066074,
+            8122050,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "2c6a8f4c32bd17f89cfb5a16c1950551",
+          "historical": "1dd8bbb0767e512cab0357fe4ed1feac"
+        },
+        "search_content_sha256": "73559d5996511b57ec6f1b49f5f6e67dae5493f1775af9824e03d54dad90b7da",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "cdb8cd805c445d42454f509515073470"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290790494,
+          "allocated": 290926592,
+          "files": 62
+        },
+        "packs": {
+          "apparent": 290790494,
+          "allocated": 290926592,
+          "files": 62
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290790494,
+          "allocated_bytes": 290926592,
+          "files": 62
+        },
+        "postgres": {
+          "apparent_bytes": 1214199843,
+          "allocated_bytes": 1214341120,
+          "files": 1977
+        },
+        "search": {
+          "apparent_bytes": 901235560,
+          "allocated_bytes": 901791744,
+          "files": 177
+        },
+        "redis": {
+          "apparent_bytes": 393396,
+          "allocated_bytes": 409600,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 2406619293,
+      "persistent_bytes_per_work": 218148.95694343728,
+      "source_to_persistent_ratio": 0.09504312030793646,
+      "search_primary_bytes": 473623441,
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1734,
+            "seconds": 0.9120510359998498,
+            "max_seconds": 0.015503412999998545,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1681,
+            "seconds": 1.648876242000073,
+            "max_seconds": 0.16786814699999922,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 577,
+            "seconds": 1.0958779639997132,
+            "max_seconds": 0.03733426999999938,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8856,
+            "seconds": 36.362000943000986,
+            "max_seconds": 2.1971067920000023,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 577,
+            "seconds": 85.86230382900028,
+            "max_seconds": 2.384611614999998,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6122,
+            "seconds": 10.967848477999466,
+            "max_seconds": 0.16786045999999988,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 577,
+            "seconds": 52.17981689800011,
+            "max_seconds": 0.9483363530000006,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.818437001000252,
+            "max_seconds": 0.1627006939999992,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.41909513900022,
+            "max_seconds": 0.05902584200000092,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 6.1165034449999345,
+            "max_seconds": 0.042557867999999874,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4912873659999186,
+            "max_seconds": 0.03513376699999935,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.33963667799971,
+            "max_seconds": 0.21542432299999928,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.557674132000045,
+            "max_seconds": 0.5488367430000016,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 10.808978344000044,
+            "max_seconds": 0.0899141529999979,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.6531741180001622,
+            "max_seconds": 0.021167225999990477,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4370018490000664,
+            "max_seconds": 0.02644207400000596,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 16.540794451000245,
+            "max_seconds": 0.20034058000000005,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.0496766720001696,
+            "max_seconds": 0.0313727770000005,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1734,
+            "seconds": 0.9056759839995845,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12720,
+            "seconds": 60.663451578000924,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8882,
+            "seconds": 27.879194020000572,
+            "commits": 577
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.554338818,
+        "verified_at": 1794212649409,
+        "monotonic_ns": "549069501516250"
+      },
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "image_id": "sha256:8a8f6aa09f1e2a207f1fdbab35337cbd27a8d28a8213c65bd540670745cad364",
+      "postgres_settings": [
+        {
+          "name": "fsync",
+          "setting": "on"
+        },
+        {
+          "name": "full_page_writes",
+          "setting": "on"
+        },
+        {
+          "name": "max_connections",
+          "setting": "100"
+        },
+        {
+          "name": "shared_buffers",
+          "setting": "16384"
+        },
+        {
+          "name": "synchronous_commit",
+          "setting": "on"
+        },
+        {
+          "name": "track_io_timing",
+          "setting": "on"
+        },
+        {
+          "name": "work_mem",
+          "setting": "4096"
+        }
+      ],
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 4,
+        "max_transactions_including_pool_acquisition": 4,
+        "max_sources_in_commit": 4
+      },
+      "downstream_events": {
+        "current": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794212490152,
+          "last_productive_end_ms": 1794212637859,
+          "done_seconds_from_batch_start": 151.1307060546875,
+          "productive_envelope_seconds": 147.707,
+          "rows_per_second_over_productive_envelope": 74.68840339320411,
+          "pending_at_canonical_commit_min": 9212,
+          "pending_at_canonical_commit_max": 9232
+        },
+        "historical": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794212490387,
+          "last_productive_end_ms": 1794212637920,
+          "done_seconds_from_batch_start": 151.1917060546875,
+          "productive_envelope_seconds": 147.533,
+          "rows_per_second_over_productive_envelope": 74.77649068344031,
+          "pending_at_canonical_commit_min": 9232,
+          "pending_at_canonical_commit_max": 9232
+        },
+        "text": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794212491408,
+          "last_productive_end_ms": 1794212638181,
+          "done_seconds_from_batch_start": 151.4527060546875,
+          "productive_envelope_seconds": 146.773,
+          "rows_per_second_over_productive_envelope": 75.16368814427722,
+          "pending_at_canonical_commit_min": 9240,
+          "pending_at_canonical_commit_max": 9368
+        }
+      },
+      "downstream_all_acknowledged_seconds": 151.4527060546875,
+      "verification_after_last_projection_seconds": 11.248999999999995
+    },
+    "B": {
+      "source_concurrency": 4,
+      "mode": "throughput-first",
+      "canonical_seconds_to_last_commit": 39.20447998046875,
+      "canonical_seconds_to_batch_finished": 39.291357,
+      "canonical_works_per_second": 281.3964119788357,
+      "source_gib_per_hour": 19.561178365359158,
+      "source_mib_per_second": 5.564068512813272,
+      "decompressed_mib_per_second": 14.56622485487125,
+      "chapters_per_second": 584.8311216325911,
+      "objects_per_second": 2730.6573139940424,
+      "end_to_end_seconds": 160.91047998046875,
+      "end_to_end_works_per_second": 68.55986012433162,
+      "drain_visibility_seconds": 121.706,
+      "catalog_done_seconds": 147.24465000446875,
+      "catalog_works_per_second_over_pipeline_interval": 74.92292589011002,
+      "index_documents_per_second_over_pipeline_interval": 68.55986012433162,
+      "queues_at_first_sample_after_last_commit": {
+        "seconds": 40.294025313999995,
+        "state": "completed",
+        "processing_started_at_ms": "1794214935552.520000",
+        "processing_finished_at_ms": "1794214974843.877000",
+        "queue_seconds": 0.84746,
+        "processing_seconds": 39.291357,
+        "works": 11032,
+        "documents": 1780,
+        "catalog": 9252,
+        "historical": 9252,
+        "text": 76
+      },
+      "search_node_docs_near_last_commit": {
+        "at": 1794214973028,
+        "docs": 1392
+      },
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 9252,
+          "mean_residence_seconds_estimate": 58.763672126369634
+        },
+        "historical": {
+          "max_sampled": 9252,
+          "mean_residence_seconds_estimate": 58.763672126369634
+        },
+        "text": {
+          "max_sampled": 860,
+          "mean_residence_seconds_estimate": 2.672603928217548
+        }
+      },
+      "queue_storage": {
+        "catalog_pending": {
+          "max_allocated_bytes": 1638400,
+          "max_index_bytes": 638976,
+          "max_dead_tuples_estimated": "9938"
+        },
+        "catalog_snapshot_pending": {
+          "max_allocated_bytes": 966656,
+          "max_index_bytes": 434176,
+          "max_dead_tuples_estimated": "960"
+        },
+        "catalog_text_pending": {
+          "max_allocated_bytes": 1318912,
+          "max_index_bytes": 581632,
+          "max_dead_tuples_estimated": "995"
+        }
+      },
+      "max_combined_queue_bytes_sampled": 3923968,
+      "capacity_probe_mean_ms": 4.626086762194966,
+      "inclusive_ingest_spans": {
+        "last_commit_ms": 1794214974757,
+        "peak": 4,
+        "spans": {
+          "sql.other": {
+            "calls": 5713,
+            "ms": 81340.02090500049
+          },
+          "sql.commit": {
+            "calls": 345,
+            "ms": 4340.265155999967
+          },
+          "staging.prepare": {
+            "calls": 58,
+            "ms": 14074.597337999992
+          },
+          "objectBytes": {
+            "calls": 96304,
+            "ms": 1091.2754959999656
+          },
+          "preserve": {
+            "calls": 107394,
+            "ms": 3733.4074599986743
+          },
+          "sql.copy": {
+            "calls": 58,
+            "ms": 3864.9740230000207
+          },
+          "pack.append": {
+            "calls": 90,
+            "ms": 25115.058736999974
+          },
+          "pack.finish": {
+            "calls": 63,
+            "ms": 14566.664419000008
+          },
+          "checkpoint": {
+            "calls": 58,
+            "ms": 4129.188566999971
+          },
+          "ingestRecords": {
+            "calls": 58,
+            "ms": 143045.12047700008
+          },
+          "archiveTransaction": {
+            "calls": 5,
+            "ms": 5776.387109999994
+          }
+        }
+      },
+      "wal_generated_pipeline_bytes": 716771578,
+      "pressure": [
+        {
+          "event": "ingest_pressure",
+          "state": "ready",
+          "reason": "capacity",
+          "sample": {
+            "at": 1794214935570,
+            "queues": 40960,
+            "database": 12692627,
+            "wal": 13659140,
+            "queueLimit": false,
+            "disks": [
+              {
+                "name": "postgres",
+                "free": 1689647706112,
+                "total": 3786736029696
+              },
+              {
+                "name": "wal",
+                "free": 1689647706112,
+                "total": 3786736029696
+              },
+              {
+                "name": "search",
+                "free": 1689647706112,
+                "total": 3786736029696
+              },
+              {
+                "name": "archive",
+                "free": 1689647706112,
+                "total": 3786736029696
+              },
+              {
+                "name": "staging",
+                "free": 1689647706112,
+                "total": 3786736029696
+              },
+              {
+                "name": "temporary",
+                "free": 285793550336,
+                "total": 811512500224
+              }
+            ],
+            "staging": 8
+          },
+          "metrics": {
+            "checks": 1,
+            "checkMs": 5,
+            "waitMs": 0,
+            "slowMs": 0
+          }
+        },
+        {
+          "event": "ingest_pressure",
+          "state": "ready",
+          "reason": "capacity",
+          "sample": {
+            "at": 1794214966761,
+            "queues": 2351104,
+            "database": 146754707,
+            "wal": 198325571,
+            "queueLimit": false,
+            "disks": [
+              {
+                "name": "postgres",
+                "free": 1688865648640,
+                "total": 3786736029696
+              },
+              {
+                "name": "wal",
+                "free": 1688865648640,
+                "total": 3786736029696
+              },
+              {
+                "name": "search",
+                "free": 1688865648640,
+                "total": 3786736029696
+              },
+              {
+                "name": "archive",
+                "free": 1688865648640,
+                "total": 3786736029696
+              },
+              {
+                "name": "staging",
+                "free": 1688865648640,
+                "total": 3786736029696
+              },
+              {
+                "name": "temporary",
+                "free": 285793378304,
+                "total": 811512500224
+              }
+            ],
+            "staging": 93794495
+          },
+          "metrics": {
+            "checks": 22,
+            "checkMs": 4740,
+            "waitMs": 0,
+            "slowMs": 0
+          }
+        },
+        {
+          "event": "ingest_pressure_summary",
+          "checks": 27,
+          "checkMs": 5454,
+          "waitMs": 0,
+          "slowMs": 0
+        }
+      ],
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 169,
+            "seconds": 168.0365297794342,
+            "cpu_seconds": 129.410393,
+            "cpu_mean_percent": 77.0132501366607,
+            "cpu_max_percent": 665.1656308429058,
+            "working_mean_mib": 880.9471384985208,
+            "working_max_mib": 1172.45703125,
+            "memory_max_mib": 1826.46484375,
+            "read_mib": 1.6796875,
+            "write_mib": 373.890625,
+            "rx_mib": 30.073436737060547,
+            "tx_mib": 171.24733924865723
+          },
+          "pg": {
+            "samples": 169,
+            "seconds": 168.03586173057556,
+            "cpu_seconds": 141.501996,
+            "cpu_mean_percent": 84.20940300641342,
+            "cpu_max_percent": 272.4882079317263,
+            "working_mean_mib": 329.98481416420117,
+            "working_max_mib": 488.3671875,
+            "memory_max_mib": 1356.38671875,
+            "read_mib": 1.7421875,
+            "write_mib": 2273.75390625,
+            "rx_mib": 516.1132478713989,
+            "tx_mib": 247.05436515808105
+          },
+          "search": {
+            "samples": 169,
+            "seconds": 168.03465795516968,
+            "cpu_seconds": 160.676303,
+            "cpu_mean_percent": 95.62093020290324,
+            "cpu_max_percent": 344.96165127976155,
+            "working_mean_mib": 1563.8175157174555,
+            "working_max_mib": 1732.8203125,
+            "memory_max_mib": 2498.8515625,
+            "read_mib": 17.71484375,
+            "write_mib": 843.65234375,
+            "rx_mib": 409.2983465194702,
+            "tx_mib": 2.176022529602051
+          },
+          "redis": {
+            "samples": 169,
+            "seconds": 168.03453946113586,
+            "cpu_seconds": 1.479371,
+            "cpu_mean_percent": 0.8803969735889677,
+            "cpu_max_percent": 1.7607492746021667,
+            "working_mean_mib": 8.20758598372781,
+            "working_max_mib": 8.4609375,
+            "memory_max_mib": 9.34375,
+            "read_mib": 0.1875,
+            "write_mib": 0.55859375,
+            "rx_mib": 0.7507600784301758,
+            "tx_mib": 0.4623746871948242
+          },
+          "projection": {
+            "samples": 169,
+            "seconds": 167.8335919380188,
+            "cpu_seconds": 113.14089,
+            "cpu_mean_percent": 67.41254160953851,
+            "cpu_max_percent": 119.44927444090331,
+            "working_mean_mib": 182.12895247781066,
+            "working_max_mib": 231.15234375,
+            "memory_max_mib": 231.4921875,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.6206398010254,
+            "tx_mib": 754.9141550064087
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 11.0,
+          "rss_peak_bytes": 175886336
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 58.15,
+          "rss_peak_bytes": 713003008
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.24,
+          "rss_peak_bytes": 63516672
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.13,
+          "rss_peak_bytes": 90980352
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.07,
+          "rss_peak_bytes": 77139968
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.0,
+          "rss_peak_bytes": 54296576
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.53,
+          "rss_peak_bytes": 43933696
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.94,
+          "rss_peak_bytes": 28053504
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 10.1,
+          "rss_peak_bytes": 29802496
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.72,
+          "rss_peak_bytes": 27480064
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 8.38,
+          "rss_peak_bytes": 28225536
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.65,
+          "rss_peak_bytes": 43929600
+        }
+      ],
+      "max_python_processes_sampled": 10,
+      "staging_named_peak_bytes": 829273884,
+      "adapter_reservations_peak_bytes": 1319171246,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787206",
+          "packs": "63",
+          "database_bytes": "428461203"
+        },
+        "physical": {
+          "records": 107064,
+          "unique_hashes": 107054,
+          "duplicates": 10,
+          "duplicate_record_bytes": 4989,
+          "pack_sizes": [
+            388,
+            63782,
+            67612,
+            112924,
+            284390,
+            743542,
+            1711321,
+            2180993,
+            2272308,
+            2527484,
+            2617696,
+            2800728,
+            2827582,
+            3084359,
+            3132541,
+            3270311,
+            3469284,
+            3529409,
+            3643441,
+            3705515,
+            4056715,
+            4063738,
+            4085005,
+            4114733,
+            4258635,
+            4457808,
+            4658121,
+            4857756,
+            5064622,
+            5075654,
+            5112039,
+            5170214,
+            5211530,
+            5231732,
+            5231780,
+            5302575,
+            5306822,
+            5316078,
+            5350845,
+            5381148,
+            5422150,
+            5489591,
+            5567363,
+            5651480,
+            5669052,
+            5715312,
+            5856539,
+            5889061,
+            5890166,
+            5979335,
+            6181568,
+            6255075,
+            6310007,
+            6333837,
+            6359886,
+            6447724,
+            6527362,
+            7825995,
+            7964077,
+            8047203,
+            8080862,
+            8224506,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "a0b3ee61b665efc750d18744dc17d97f",
+          "historical": "780ff02f4cd96b03c0860f4eb7c57859"
+        },
+        "search_content_sha256": "f8675d922281d400f8264f05b647115df325b76a9f194972589fd92a0229e569",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "6f7e792280077e8141a38b2200cc9e56"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290792699,
+          "allocated": 290926592,
+          "files": 63
+        },
+        "packs": {
+          "apparent": 290792699,
+          "allocated": 290926592,
+          "files": 63
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290792699,
+          "allocated_bytes": 290926592,
+          "files": 63
+        },
+        "postgres": {
+          "apparent_bytes": 1205944707,
+          "allocated_bytes": 1206054912,
+          "files": 1977
+        },
+        "search": {
+          "apparent_bytes": 901896216,
+          "allocated_bytes": 902426624,
+          "files": 168
+        },
+        "redis": {
+          "apparent_bytes": 383148,
+          "allocated_bytes": 397312,
+          "files": 3
+        }
+      },
+      "persistent_total_bytes": 2399016770,
+      "persistent_bytes_per_work": 217459.82324147935,
+      "source_to_persistent_ratio": 0.09534431349556594,
+      "search_primary_bytes": 474122934,
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1734,
+            "seconds": 0.8740335949998962,
+            "max_seconds": 0.020001709000000117,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1681,
+            "seconds": 1.3321180629998317,
+            "max_seconds": 0.03111733500000264,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 577,
+            "seconds": 1.0147895659997788,
+            "max_seconds": 0.031675479999990784,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8856,
+            "seconds": 35.27294778900143,
+            "max_seconds": 2.7413240360000017,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 577,
+            "seconds": 83.25338942499987,
+            "max_seconds": 2.837172778000002,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6122,
+            "seconds": 9.668100610999854,
+            "max_seconds": 0.1483549179999991,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 577,
+            "seconds": 51.62018181200015,
+            "max_seconds": 0.3561279489999997,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.581956022000181,
+            "max_seconds": 0.24971938099999896,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.122180494999892,
+            "max_seconds": 0.05436531999999716,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.640847844000312,
+            "max_seconds": 0.03902929600000789,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4808935659998888,
+            "max_seconds": 0.025922246000001904,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.447275816999627,
+            "max_seconds": 0.25189336499999626,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.945106067000149,
+            "max_seconds": 0.22183275999999932,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.117594370000127,
+            "max_seconds": 0.05894297500000175,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.9079146329999248,
+            "max_seconds": 0.031128227999997763,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.3612006210000256,
+            "max_seconds": 0.024971982999995816,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 16.895079658000085,
+            "max_seconds": 0.11497289300000012,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.1099307069999367,
+            "max_seconds": 0.04251259699999901,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1734,
+            "seconds": 0.8677133389999203,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12720,
+            "seconds": 58.89951146100137,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8882,
+            "seconds": 27.125399426999728,
+            "commits": 577
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 8.756750565,
+        "verified_at": 1794215096447,
+        "monotonic_ns": "551516539001955"
+      },
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "image_id": "sha256:2c768c6489be2d2e7f97f69b8b0f14ffea6875aa154ba2a17923fc457241f6b0",
+      "postgres_settings": [
+        {
+          "name": "fsync",
+          "setting": "on"
+        },
+        {
+          "name": "full_page_writes",
+          "setting": "on"
+        },
+        {
+          "name": "max_connections",
+          "setting": "100"
+        },
+        {
+          "name": "shared_buffers",
+          "setting": "16384"
+        },
+        {
+          "name": "synchronous_commit",
+          "setting": "on"
+        },
+        {
+          "name": "track_io_timing",
+          "setting": "on"
+        },
+        {
+          "name": "work_mem",
+          "setting": "4096"
+        }
+      ],
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 4,
+        "max_transactions_including_pool_acquisition": 4,
+        "max_sources_in_commit": 4
+      },
+      "downstream_events": {
+        "current": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794214939338,
+          "last_productive_end_ms": 1794215082258,
+          "done_seconds_from_batch_start": 146.70547998046874,
+          "productive_envelope_seconds": 142.92,
+          "rows_per_second_over_productive_envelope": 77.19003638399106,
+          "pending_at_canonical_commit_min": 9252,
+          "pending_at_canonical_commit_max": 9272
+        },
+        "historical": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794214939559,
+          "last_productive_end_ms": 1794215082298,
+          "done_seconds_from_batch_start": 146.74547998046876,
+          "productive_envelope_seconds": 142.739,
+          "rows_per_second_over_productive_envelope": 77.28791710744785,
+          "pending_at_canonical_commit_min": 9272,
+          "pending_at_canonical_commit_max": 9272
+        },
+        "text": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794214939676,
+          "last_productive_end_ms": 1794215086476,
+          "done_seconds_from_batch_start": 150.92347998046876,
+          "productive_envelope_seconds": 146.8,
+          "rows_per_second_over_productive_envelope": 75.14986376021798,
+          "pending_at_canonical_commit_min": 9312,
+          "pending_at_canonical_commit_max": 9440
+        }
+      },
+      "downstream_all_acknowledged_seconds": 150.92347998046876,
+      "verification_after_last_projection_seconds": 9.986999999999995
+    },
+    "C": {
+      "source_concurrency": 2,
+      "mode": "throughput-first",
+      "canonical_seconds_to_last_commit": 41.73987109375,
+      "canonical_seconds_to_batch_finished": 41.912262,
+      "canonical_works_per_second": 264.3036432772285,
+      "source_gib_per_hour": 18.37298021109444,
+      "source_mib_per_second": 5.22609214893353,
+      "decompressed_mib_per_second": 13.6814335011043,
+      "chapters_per_second": 549.3069192404183,
+      "objects_per_second": 2564.789904586695,
+      "end_to_end_seconds": 163.49887109375,
+      "end_to_end_works_per_second": 67.47447200215998,
+      "drain_visibility_seconds": 121.75900000000001,
+      "catalog_done_seconds": 151.44565711875,
+      "catalog_works_per_second_over_pipeline_interval": 72.84461112905801,
+      "index_documents_per_second_over_pipeline_interval": 67.47447200215998,
+      "queues_at_first_sample_after_last_commit": {
+        "seconds": 43.407875389,
+        "state": "completed",
+        "processing_started_at_ms": "1794215238885.129000",
+        "processing_finished_at_ms": "1794215280797.391000",
+        "queue_seconds": 0.80382,
+        "processing_seconds": 41.912262,
+        "works": 11032,
+        "documents": 2000,
+        "catalog": 9032,
+        "historical": 9032,
+        "text": 32
+      },
+      "search_node_docs_near_last_commit": {
+        "at": 1794215281329,
+        "docs": 1496
+      },
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 9112,
+          "mean_residence_seconds_estimate": 59.22793624965913
+        },
+        "historical": {
+          "max_sampled": 9112,
+          "mean_residence_seconds_estimate": 59.22793624965913
+        },
+        "text": {
+          "max_sampled": 824,
+          "mean_residence_seconds_estimate": 2.38206180912382
+        }
+      },
+      "queue_storage": {
+        "catalog_pending": {
+          "max_allocated_bytes": 1548288,
+          "max_index_bytes": 589824,
+          "max_dead_tuples_estimated": "9925"
+        },
+        "catalog_snapshot_pending": {
+          "max_allocated_bytes": 966656,
+          "max_index_bytes": 434176,
+          "max_dead_tuples_estimated": "960"
+        },
+        "catalog_text_pending": {
+          "max_allocated_bytes": 1302528,
+          "max_index_bytes": 573440,
+          "max_dead_tuples_estimated": "982"
+        }
+      },
+      "max_combined_queue_bytes_sampled": 3817472,
+      "capacity_probe_mean_ms": 4.930322427710984,
+      "inclusive_ingest_spans": {
+        "last_commit_ms": 1794215280625,
+        "peak": 4,
+        "spans": {
+          "sql.other": {
+            "calls": 5544,
+            "ms": 78263.39619899949
+          },
+          "sql.commit": {
+            "calls": 340,
+            "ms": 3667.746732000168
+          },
+          "staging.prepare": {
+            "calls": 53,
+            "ms": 12847.601023
+          },
+          "objectBytes": {
+            "calls": 96304,
+            "ms": 1039.015231000937
+          },
+          "preserve": {
+            "calls": 107389,
+            "ms": 3943.8550399996957
+          },
+          "pack.append": {
+            "calls": 85,
+            "ms": 20555.538222999967
+          },
+          "sql.copy": {
+            "calls": 53,
+            "ms": 3213.8270459999803
+          },
+          "pack.finish": {
+            "calls": 58,
+            "ms": 11438.589675000027
+          },
+          "checkpoint": {
+            "calls": 53,
+            "ms": 3737.2660729999907
+          },
+          "ingestRecords": {
+            "calls": 53,
+            "ms": 133312.58284499997
+          },
+          "archiveTransaction": {
+            "calls": 5,
+            "ms": 5462.921616000003
+          }
+        }
+      },
+      "wal_generated_pipeline_bytes": 724722609,
+      "pressure": [
+        {
+          "event": "ingest_pressure",
+          "state": "ready",
+          "reason": "capacity",
+          "sample": {
+            "at": 1794215238896,
+            "queues": 40960,
+            "database": 12692627,
+            "wal": 13661027,
+            "queueLimit": false,
+            "disks": [
+              {
+                "name": "postgres",
+                "free": 1687671984128,
+                "total": 3786736029696
+              },
+              {
+                "name": "wal",
+                "free": 1687671984128,
+                "total": 3786736029696
+              },
+              {
+                "name": "search",
+                "free": 1687671984128,
+                "total": 3786736029696
+              },
+              {
+                "name": "archive",
+                "free": 1687671984128,
+                "total": 3786736029696
+              },
+              {
+                "name": "staging",
+                "free": 1687671984128,
+                "total": 3786736029696
+              },
+              {
+                "name": "temporary",
+                "free": 285715349504,
+                "total": 811512500224
+              }
+            ],
+            "staging": 2
+          },
+          "metrics": {
+            "checks": 1,
+            "checkMs": 6,
+            "waitMs": 0,
+            "slowMs": 0
+          }
+        },
+        {
+          "event": "ingest_pressure",
+          "state": "ready",
+          "reason": "capacity",
+          "sample": {
+            "at": 1794215269400,
+            "queues": 2162688,
+            "database": 133532819,
+            "wal": 180582120,
+            "queueLimit": false,
+            "disks": [
+              {
+                "name": "postgres",
+                "free": 1686984331264,
+                "total": 3786736029696
+              },
+              {
+                "name": "wal",
+                "free": 1686984331264,
+                "total": 3786736029696
+              },
+              {
+                "name": "search",
+                "free": 1686984331264,
+                "total": 3786736029696
+              },
+              {
+                "name": "archive",
+                "free": 1686984331264,
+                "total": 3786736029696
+              },
+              {
+                "name": "staging",
+                "free": 1686984331264,
+                "total": 3786736029696
+              },
+              {
+                "name": "temporary",
+                "free": 285790896128,
+                "total": 811512500224
+              }
+            ],
+            "staging": 40665016
+          },
+          "metrics": {
+            "checks": 24,
+            "checkMs": 2707,
+            "waitMs": 0,
+            "slowMs": 0
+          }
+        },
+        {
+          "event": "ingest_pressure_summary",
+          "checks": 32,
+          "checkMs": 3960,
+          "waitMs": 0,
+          "slowMs": 0
+        }
+      ],
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.02355527877808,
+            "cpu_seconds": 131.448304,
+            "cpu_mean_percent": 75.97133453199974,
+            "cpu_max_percent": 536.9028001786185,
+            "working_mean_mib": 786.3771102729885,
+            "working_max_mib": 983.2109375,
+            "memory_max_mib": 1604.140625,
+            "read_mib": 5.59375,
+            "write_mib": 887.96875,
+            "rx_mib": 29.644611358642578,
+            "tx_mib": 172.13320446014404
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.0234034061432,
+            "cpu_seconds": 144.855912,
+            "cpu_mean_percent": 83.72041535905707,
+            "cpu_max_percent": 297.8468454070701,
+            "working_mean_mib": 344.1659482758621,
+            "working_max_mib": 472.37890625,
+            "memory_max_mib": 1263.12109375,
+            "read_mib": 7.7734375,
+            "write_mib": 2299.6875,
+            "rx_mib": 516.931058883667,
+            "tx_mib": 246.14986324310303
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.02325820922852,
+            "cpu_seconds": 161.86293,
+            "cpu_mean_percent": 93.54981039847668,
+            "cpu_max_percent": 371.8996444612227,
+            "working_mean_mib": 1563.5213496767242,
+            "working_max_mib": 1702.48828125,
+            "memory_max_mib": 2396.26171875,
+            "read_mib": 26.7890625,
+            "write_mib": 967.11328125,
+            "rx_mib": 409.26379203796387,
+            "tx_mib": 2.150050163269043
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.020893573761,
+            "cpu_seconds": 1.524882,
+            "cpu_mean_percent": 0.8813282422159747,
+            "cpu_max_percent": 2.1896152400961904,
+            "working_mean_mib": 4.943314475574713,
+            "working_max_mib": 5.36328125,
+            "memory_max_mib": 5.421875,
+            "read_mib": 0.20703125,
+            "write_mib": 0.578125,
+            "rx_mib": 0.7514543533325195,
+            "tx_mib": 0.4638347625732422
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 172.86069345474243,
+            "cpu_seconds": -0.041932,
+            "cpu_mean_percent": -0.02425768354966043,
+            "cpu_max_percent": 116.85601459483325,
+            "working_mean_mib": 201.80017510775863,
+            "working_max_mib": 260.0078125,
+            "memory_max_mib": 260.515625,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": -0.0001678466796875,
+            "tx_mib": -4.00543212890625e-05
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 10.9,
+          "rss_peak_bytes": 176680960
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 58.37,
+          "rss_peak_bytes": 611516416
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.57,
+          "rss_peak_bytes": 77090816
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.64,
+          "rss_peak_bytes": 92672000
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.09,
+          "rss_peak_bytes": 28065792
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.11,
+          "rss_peak_bytes": 28151808
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.58,
+          "rss_peak_bytes": 30175232
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.29,
+          "rss_peak_bytes": 27787264
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.37,
+          "rss_peak_bytes": 44228608
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.19,
+          "rss_peak_bytes": 27041792
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.42,
+          "rss_peak_bytes": 59580416
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.52,
+          "rss_peak_bytes": 28979200
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.5,
+          "rss_peak_bytes": 29188096
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.49,
+          "rss_peak_bytes": 27705344
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.27,
+          "rss_peak_bytes": 58081280
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.36,
+          "rss_peak_bytes": 27582464
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.44,
+          "rss_peak_bytes": 26972160
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.53,
+          "rss_peak_bytes": 27869184
+        }
+      ],
+      "max_python_processes_sampled": 8,
+      "staging_named_peak_bytes": 869367658,
+      "adapter_reservations_peak_bytes": 1361114286,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290786854",
+          "packs": "58",
+          "database_bytes": "433024147"
+        },
+        "physical": {
+          "records": 107065,
+          "unique_hashes": 107054,
+          "duplicates": 11,
+          "duplicate_record_bytes": 4700,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            873011,
+            1069650,
+            2055211,
+            2388162,
+            2800677,
+            2827997,
+            3270715,
+            3489634,
+            3616173,
+            3764868,
+            3785041,
+            4063735,
+            4085005,
+            4505964,
+            4818028,
+            4821175,
+            4856613,
+            4901458,
+            4991775,
+            5065043,
+            5111583,
+            5211863,
+            5231865,
+            5232648,
+            5316013,
+            5318048,
+            5381176,
+            5388920,
+            5489467,
+            5567298,
+            5626861,
+            5637633,
+            5651822,
+            5681379,
+            5701813,
+            5715697,
+            5830522,
+            5856890,
+            5869769,
+            5890022,
+            5890436,
+            5981665,
+            6181582,
+            6254050,
+            6325943,
+            6334185,
+            6521556,
+            7017683,
+            7504371,
+            7720485,
+            8047194,
+            8065365,
+            8080929,
+            8176868,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "c95e136d3bfe2d696a5b77aed825b2c1",
+          "historical": "406e9119b4ce6ca842d78d564b24aa30"
+        },
+        "search_content_sha256": "1b730a8f60bc96d2069d831cdc45b04fbead740c88f7370a39e767415fca5d6b",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "ceb7100bac75b2725e41bbb173732ac6"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290792018,
+          "allocated": 290922496,
+          "files": 58
+        },
+        "packs": {
+          "apparent": 290792018,
+          "allocated": 290922496,
+          "files": 58
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290792018,
+          "allocated_bytes": 290922496,
+          "files": 58
+        },
+        "postgres": {
+          "apparent_bytes": 1209627561,
+          "allocated_bytes": 1209741312,
+          "files": 1977
+        },
+        "search": {
+          "apparent_bytes": 901839145,
+          "allocated_bytes": 902447104,
+          "files": 183
+        },
+        "redis": {
+          "apparent_bytes": 379743,
+          "allocated_bytes": 393216,
+          "files": 3
+        }
+      },
+      "persistent_total_bytes": 2402638467,
+      "persistent_bytes_per_work": 217788.11339738942,
+      "source_to_persistent_ratio": 0.09520059307366446,
+      "search_primary_bytes": 473948112,
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1734,
+            "seconds": 1.0824010759999008,
+            "max_seconds": 0.022227332000009484,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1681,
+            "seconds": 1.5516773029999664,
+            "max_seconds": 0.039008937999999035,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 577,
+            "seconds": 1.2087605029999318,
+            "max_seconds": 0.04545573499999591,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8855,
+            "seconds": 35.6455039730002,
+            "max_seconds": 2.6349432099999994,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 577,
+            "seconds": 84.36269788600026,
+            "max_seconds": 2.8178378760000014,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6122,
+            "seconds": 10.992931023999846,
+            "max_seconds": 0.24283870300000127,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 577,
+            "seconds": 53.63634098399985,
+            "max_seconds": 0.4620337819999986,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.195312498000103,
+            "max_seconds": 0.15383232000000135,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.269247524000017,
+            "max_seconds": 0.04329828999999154,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.716422968000047,
+            "max_seconds": 0.049827681999999186,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.540584131000072,
+            "max_seconds": 0.028584069000000455,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.853084043999923,
+            "max_seconds": 0.3480702139999994,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 13.363446304000034,
+            "max_seconds": 0.14307766199999605,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.031006718000079,
+            "max_seconds": 0.042728853000000525,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.8450151660001752,
+            "max_seconds": 0.022437731000001803,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.3970023320000096,
+            "max_seconds": 0.03731256099999882,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 17.023199041999906,
+            "max_seconds": 0.10742749599998934,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.03524737999982,
+            "max_seconds": 0.03234224100000574,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1734,
+            "seconds": 1.075766366000131,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12719,
+            "seconds": 59.96401813799934,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8882,
+            "seconds": 28.26451235299949,
+            "commits": 577
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.151075371000001,
+        "verified_at": 1794215402367,
+        "monotonic_ns": "551822459523931"
+      },
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "image_id": "sha256:2c768c6489be2d2e7f97f69b8b0f14ffea6875aa154ba2a17923fc457241f6b0",
+      "postgres_settings": [
+        {
+          "name": "fsync",
+          "setting": "on"
+        },
+        {
+          "name": "full_page_writes",
+          "setting": "on"
+        },
+        {
+          "name": "max_connections",
+          "setting": "100"
+        },
+        {
+          "name": "shared_buffers",
+          "setting": "16384"
+        },
+        {
+          "name": "synchronous_commit",
+          "setting": "on"
+        },
+        {
+          "name": "track_io_timing",
+          "setting": "on"
+        },
+        {
+          "name": "work_mem",
+          "setting": "4096"
+        }
+      ],
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 4,
+        "max_transactions_including_pool_acquisition": 4,
+        "max_sources_in_commit": 2
+      },
+      "downstream_events": {
+        "current": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794215243163,
+          "last_productive_end_ms": 1794215389640,
+          "done_seconds_from_batch_start": 150.75487109375,
+          "productive_envelope_seconds": 146.477,
+          "rows_per_second_over_productive_envelope": 75.31557855499499,
+          "pending_at_canonical_commit_min": 9072,
+          "pending_at_canonical_commit_max": 9092
+        },
+        "historical": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794215243435,
+          "last_productive_end_ms": 1794215389718,
+          "done_seconds_from_batch_start": 150.83287109375,
+          "productive_envelope_seconds": 146.283,
+          "rows_per_second_over_productive_envelope": 75.41546181032656,
+          "pending_at_canonical_commit_min": 9092,
+          "pending_at_canonical_commit_max": 9092
+        },
+        "text": {
+          "completed_rows": 11032,
+          "first_productive_start_ms": 1794215243710,
+          "last_productive_end_ms": 1794215391598,
+          "done_seconds_from_batch_start": 152.71287109375,
+          "productive_envelope_seconds": 147.888,
+          "rows_per_second_over_productive_envelope": 74.5969923185113,
+          "pending_at_canonical_commit_min": 9096,
+          "pending_at_canonical_commit_max": 9224
+        }
+      },
+      "downstream_all_acknowledged_seconds": 152.71287109375,
+      "verification_after_last_projection_seconds": 10.786000000000001
+    }
+  },
+  "queue_cost_probe": {
+    "rows_direct": 100000,
+    "results": [
+      {
+        "queue": "catalog_pending",
+        "rows": 100000,
+        "empty": {
+          "bytes": 8192,
+          "index_bytes": 8192,
+          "heap_bytes": 0
+        },
+        "full": {
+          "bytes": 8880128,
+          "index_bytes": 4423680,
+          "heap_bytes": 4431872
+        },
+        "bytes_per_pending": 88.71936,
+        "enqueue_ms": 599.677057,
+        "enqueue_wal": 16391760,
+        "dequeue_ms": 70.90425199999993,
+        "dequeue_wal": 5616520,
+        "deleted": {
+          "bytes": 8880128,
+          "index_bytes": 4423680,
+          "heap_bytes": 4431872
+        },
+        "vacuum_ms": 18.14793499999996,
+        "vacuumed": {
+          "bytes": 4440064,
+          "index_bytes": 4423680,
+          "heap_bytes": 0
+        },
+        "refill_wal": 16391632,
+        "reused": {
+          "bytes": 13271040,
+          "index_bytes": 8814592,
+          "heap_bytes": 4431872
+        },
+        "probe": {
+          "bytes_mean_ms": 0.3109047499999974,
+          "bounded_mean_ms": 3.80669815,
+          "count_mean_ms": 5.8830442000000005
+        },
+        "extrapolated_1000000_bytes": 88727552
+      },
+      {
+        "queue": "catalog_snapshot_pending",
+        "rows": 100000,
+        "empty": {
+          "bytes": 8192,
+          "index_bytes": 8192,
+          "heap_bytes": 0
+        },
+        "full": {
+          "bytes": 8880128,
+          "index_bytes": 4423680,
+          "heap_bytes": 4431872
+        },
+        "bytes_per_pending": 88.71936,
+        "enqueue_ms": 500.501945,
+        "enqueue_wal": 16391760,
+        "dequeue_ms": 59.464098999999806,
+        "dequeue_wal": 5616504,
+        "deleted": {
+          "bytes": 8880128,
+          "index_bytes": 4423680,
+          "heap_bytes": 4431872
+        },
+        "vacuum_ms": 17.597516999999698,
+        "vacuumed": {
+          "bytes": 4440064,
+          "index_bytes": 4423680,
+          "heap_bytes": 0
+        },
+        "refill_wal": 16391632,
+        "reused": {
+          "bytes": 13271040,
+          "index_bytes": 8814592,
+          "heap_bytes": 4431872
+        },
+        "probe": {
+          "bytes_mean_ms": 0.1840940000000046,
+          "bounded_mean_ms": 3.7217291499999874,
+          "count_mean_ms": 5.741828600000008
+        },
+        "extrapolated_1000000_bytes": 88727552
+      },
+      {
+        "queue": "catalog_text_pending",
+        "rows": 100000,
+        "empty": {
+          "bytes": 24576,
+          "index_bytes": 16384,
+          "heap_bytes": 0
+        },
+        "full": {
+          "bytes": 16367616,
+          "index_bytes": 9502720,
+          "heap_bytes": 6832128
+        },
+        "bytes_per_pending": 163.4304,
+        "enqueue_ms": 908.3560640000001,
+        "enqueue_wal": 29144888,
+        "dequeue_ms": 58.53375799999958,
+        "dequeue_wal": 5616480,
+        "deleted": {
+          "bytes": 16367616,
+          "index_bytes": 9502720,
+          "heap_bytes": 6832128
+        },
+        "vacuum_ms": 28.654629999999997,
+        "vacuumed": {
+          "bytes": 9527296,
+          "index_bytes": 9502720,
+          "heap_bytes": 0
+        },
+        "refill_wal": 29144608,
+        "reused": {
+          "bytes": 25804800,
+          "index_bytes": 18939904,
+          "heap_bytes": 6832128
+        },
+        "probe": {
+          "bytes_mean_ms": 0.47078274999998937,
+          "bounded_mean_ms": 4.7842443,
+          "count_mean_ms": 6.052532250000013
+        },
+        "extrapolated_1000000_bytes": 163454976
+      }
+    ],
+    "limits": [
+      "Logged clones retain actual columns, defaults and indexes, but have no foreign keys or product triggers. UUID-only synthetic rows; not canonical ingest throughput.",
+      "WAL is cluster-wide during this otherwise idle isolated fixture; full-page images/checkpoint phase affect bytes.",
+      "One-million estimates are linear extrapolations, not a dump-wide forecast."
+    ]
+  },
+  "capacity_permissions": {
+    "non_superuser": true,
+    "search_stopped": true,
+    "normal": {
+      "state": "ready",
+      "reason": "capacity"
+    },
+    "missing": {
+      "state": "wait",
+      "reason": "capacity_unavailable"
+    }
+  },
+  "verification": {
+    "targeted_tests": 17,
+    "failed": 0,
+    "skipped": 0,
+    "all_objects_sha256": 107054,
+    "all_works_snapshots_catalog_search": 11032,
+    "chapter_revisions": 22928,
+    "all_profiles_equal": true,
+    "prior_p3a_semantics_equal": true,
+    "replay_all_profiles": true,
+    "recovery": [
+      "conservative count gate with reduced test threshold",
+      "catalog absent while 160 works commit canonically",
+      "disk capacity injection pauses admission without advancing checkpoint, then resumes",
+      "staging reservation exhaustion persists paused state and resumes with capacity restored",
+      "OpenSearch connection failure retains 160 invalidations; all drain after restoration",
+      "projection passes in separate restarted processes",
+      "SIGTERM/SIGKILL with two ZIPs and durable backlog",
+      "SIGKILL inside PostgreSQL commit transaction and inside pack seal; zero checkpoint for the uncommitted group",
+      "source staging and unsealed pack leftovers removed after resume under existing locks",
+      "overlapping identities, conflicting metadata, 17 distinct snapshots for 20 acquisitions",
+      "missing, partial and corrupt sources",
+      "four parser processes cannot exceed shared staging reservations; corrupt ledger refuses writes"
+    ]
+  },
+  "recommended": {
+    "default_unchanged": true,
+    "explicit_large_import_candidate": "B",
+    "source_concurrency": 4,
+    "parsers": 6,
+    "commits": 4,
+    "pressure_mode": "throughput-first",
+    "ingest_memory": "4g",
+    "ingest_cpus": 4,
+    "quotas_measured": false,
+    "production_ingest_authorized": false
+  },
+  "experimental_target": {
+    "works_per_second": 2000,
+    "achieved": false
+  },
+  "notes": [
+    "Filesystem caches were not dropped; this is a reused corpus on a shared host, not a cold-disk sustained-dump measurement.",
+    "Final pre-spawn cancellation cleanup was tested separately; the successful measured path is unchanged.",
+    "Source/decompressed MiB rates divide the verified input byte totals by canonical wall-clock; they are not isolated ZIP/decompression capacity measurements.",
+    "One final timed run per profile on a shared host without CPU/RAM quotas. A and B source concurrency 4; C uses 2 with identical total parser/commit budgets. Small canonical gain is not a statistical guarantee.",
+    "Canonical timing starts at persisted batch started_at and ends at the last successful ingestRecords return; batch-final cleanup/state time is separate. End-to-end includes queue drain, refresh and all-ID/generation plus authenticated sample reader checks.",
+    "The exact current/historical/full-text queue counts at the last commit are approximated by the first following ~1 s sample. OpenSearch node doc count can include Lucene deleted/nested documents; it is not the canonical searchable-work count. Final all-ID verification is authoritative.",
+    "CPU seconds and inclusive SQL/COPY/checkpoint/staging/pack spans overlap and must not be summed into wall-clock. API shares the worker benchmark container. Per-process CPU is sampled; a process can exit between samples.",
+    "Named staging sampling excludes anonymous/unlinked spool files. B/C reservations include these files and conservatively retained credits/input buffers, but exclude PackStore temporary packs (included in named staging). Baseline additional anonymous-spool upper bound is the sum of largest members above 8 MiB per source: 386955863 bytes, not a measured simultaneous peak.",
+    "Physical filesystem totals include cluster/WAL and OpenSearch translog and were captured after the timed drain/integrity verification, before queue-shape probes or replay. SQL database/index sizes and primary index bytes are separate. Filesystem cache contents and residual staging are zero.",
+    "The first B attempt stopped safely at 2071 committed works because an initial per-record staging estimate rejected a 262421940-byte member. Excluded from timing comparisons; replaced by shared per-source byte reservations, preserving the 4 GiB global budget.",
+    "B/C are measured from the final implementation, including global slots for single records, tags and auxiliary ZIP artifacts. Earlier B/C coordination probes are excluded from the main comparison. A uses the original P3A implementation.",
+    "Queue storage probe uses logged table clones with production columns/indexes, 100000 synthetic UUIDs, no foreign keys/triggers. It is a queue-operation measurement, not canonical ingest. One-million estimates are linear extrapolations. DELETE/VACUUM retain index pages; physical byte policy accounts for that.",
+    "Normalized comparisons retain content, metadata, versions and provenance; only validated local UUID references and non-semantic search generation/epoch/ingestion-time fields are normalized as in P3A. Tag keyword arrays are sorted, preserving multiplicity. Raw content hashes are also checked."
+  ]
+}

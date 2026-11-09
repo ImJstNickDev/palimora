@@ -13,7 +13,14 @@ function launch(name, file) {
   const fd = fs.openSync("/results/" + name + ".log", "w");
   const child = spawn(
     process.execPath,
-    ["--require", "/app/scripts/performance-profiler.cjs", file],
+    [
+      "--require",
+      "/app/scripts/performance-profiler.cjs",
+      ...(process.env.P3_PROFILE === "1" && name === "worker"
+        ? ["--require", "/app/scripts/profile-p3.cjs"]
+        : []),
+      file,
+    ],
     {
       env: {
         ...process.env,
@@ -52,6 +59,12 @@ function launch(name, file) {
   if (process.env.P2D_DIAGNOSTICS === "1")
     children.push(
       spawn(process.execPath, ["scripts/performance-postgres.cjs"], {
+        stdio: "ignore",
+      }),
+    );
+  if (process.env.P3_PROFILE === "1")
+    children.push(
+      spawn(process.execPath, ["scripts/sample-p3-capacity.cjs"], {
         stdio: "ignore",
       }),
     );

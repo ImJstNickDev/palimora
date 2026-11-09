@@ -1,3 +1,4 @@
+import { pressureConfig } from "./ingest-pressure";
 import { spawn } from "node:child_process";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -261,10 +262,7 @@ export class PackStore {
       for await (const b of input) {
         await check();
         const disk = await statfs(this.root);
-        if (
-          disk.bavail * disk.bsize <
-          Number(process.env.ARCHIVE_RESERVE_BYTES ?? 268435456) + b.length
-        )
+        if (disk.bavail * disk.bsize < archiveReserve() + b.length)
           throw Object.assign(Error("STORAGE_SPACE_INSUFFICIENT"), {
             code: "ENOSPC",
           });
@@ -450,8 +448,7 @@ export class PackWriter {
     const disk = await statfs(root);
     if (
       disk.bavail * disk.bsize <
-      Number(process.env.ARCHIVE_RESERVE_BYTES ?? 268435456) +
-        objects.reduce((n, o) => n + o.bytes.length, 0) * 2
+      archiveReserve() + objects.reduce((n, o) => n + o.bytes.length, 0) * 2
     )
       throw Object.assign(Error("Insufficient archive space"), {
         code: "ENOSPC",
@@ -653,4 +650,11 @@ export async function* scanPackRecords(
   } finally {
     await f.close();
   }
+}
+
+function archiveReserve() {
+  const base = Number(process.env.ARCHIVE_RESERVE_BYTES ?? 268435456);
+  return process.env.INGEST_PRESSURE_MODE === "throughput-first"
+    ? Math.max(base, pressureConfig().reserve)
+    : base;
 }

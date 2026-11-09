@@ -28,21 +28,25 @@ db.transaction = async (...args) => {
     transactions--;
   }
 };
-const ingest = archive.ingestRecords;
-archive.ingestRecords = async (source, ...args) => {
-  groups++;
-  maxGroups = Math.max(maxGroups, groups);
-  activeSources.set(source.id, (activeSources.get(source.id) || 0) + 1);
-  maxSources = Math.max(maxSources, activeSources.size);
-  try {
-    return await context.run(true, () => ingest(source, ...args));
-  } finally {
-    groups--;
-    const n = activeSources.get(source.id) - 1;
-    if (n) activeSources.set(source.id, n);
-    else activeSources.delete(source.id);
-  }
-};
+for (const name of ["ingestRecords", "ingestRecord", "archiveTransaction"]) {
+  const ingest = archive[name];
+  archive[name] = async (source, ...args) => {
+    if (context.getStore()) return ingest(source, ...args);
+    groups++;
+    maxGroups = Math.max(maxGroups, groups);
+    const key = source?.id ?? "control";
+    activeSources.set(key, (activeSources.get(key) || 0) + 1);
+    maxSources = Math.max(maxSources, activeSources.size);
+    try {
+      return await context.run(true, () => ingest(source, ...args));
+    } finally {
+      groups--;
+      const n = activeSources.get(key) - 1;
+      if (n) activeSources.set(key, n);
+      else activeSources.delete(key);
+    }
+  };
+}
 const counts = async () =>
   (
     await db.pool.query(

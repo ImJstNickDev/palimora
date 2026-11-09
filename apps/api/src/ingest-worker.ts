@@ -1,10 +1,19 @@
-import { scheduleSources, sourceBudgets } from "./ingest-sources";
+import { createIngestPressure, IngestPressure } from "./ingest-pressure";
+import { scheduleSources, sourceBudgets, IngestSlots } from "./ingest-sources";
 import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { readParseCache } from "./archive-catalog";
 import { IngestPipeline } from "./ingest-pipeline";
 import { progressKey } from "./ingest-progress";
 import { runQueue } from "./archive-queue";
-import { readdir, stat, mkdir, writeFile, unlink, rm } from "node:fs/promises";
+import {
+  readdir,
+  stat,
+  mkdir,
+  mkdtemp,
+  writeFile,
+  unlink,
+  rm,
+} from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -90,7 +99,10 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
   stopping = true;
 });
-export async function tick(batchId?: string) {
+export async function tick(
+  batchId?: string,
+  pressureOverride?: IngestPressure,
+) {
   const lock = await pool.connect();
   let ownsLeader = false;
   try {
@@ -110,6 +122,17 @@ export async function tick(batchId?: string) {
     let reconcileFile: string | undefined;
     try {
       await mkdir(join(store.root, "staging"), { recursive: true });
+      // Only unsealed packs can live here. Exclude every canonical writer using
+      // the existing locator lock before removing leftovers from a killed process.
+      await transaction(async (db) => {
+        await db.query("SELECT pg_advisory_xact_lock(70210402)");
+        for (const entry of await readdir(join(store.root, "staging"), {
+          withFileTypes: true,
+        })) {
+          if (entry.isFile() && /^[a-f0-9-]{36}\.pmpack$/.test(entry.name))
+            await unlink(join(store.root, "staging", entry.name));
+        }
+      });
       if (batch.reconcile_batch_id) {
         const ids = (
           await pool.query(
@@ -202,29 +225,16 @@ export async function tick(batchId?: string) {
           [batch.id],
         )
       ).rows;
-      // Shared downstream gate: no per-source multiplication of the backlog budget.
-      let pressureCheck: Promise<boolean> | undefined;
-      let pressureCheckedAt = 0;
-      const downstreamReady = async () => {
-        if (!pressureCheck || Date.now() - pressureCheckedAt > 1000) {
-          pressureCheckedAt = Date.now();
-          pressureCheck = pool
-            .query(
-              `SELECT
-            (SELECT count(*) FROM catalog_pending) < 65536 AND
-            (SELECT count(*) FROM catalog_snapshot_pending) < 65536 AND
-            (SELECT count(*) FROM catalog_text_pending) < 65536 AS ready`,
-            )
-            .then((r) => r.rows[0].ready as boolean);
-        }
-        return pressureCheck;
-      };
+      const pressure =
+        pressureOverride ?? createIngestPressure(pool, store.root);
+      const slots = new IngestSlots(commitConcurrency);
       await scheduleSources(
         sources,
         sourceBudgets(sourceConcurrency, parserWorkers, commitConcurrency),
         async (source, budget) => {
           const activeSource = source;
           let activeLocator: string | undefined;
+          let stagingCleaned = false;
           let sourceLock: import("./db").DB | undefined;
           const sourceStaging = join(
             store.root,
@@ -266,7 +276,33 @@ export async function tick(batchId?: string) {
               "UPDATE ingest_sources SET state='valid',error=NULL WHERE id=$1",
               [source.id],
             );
+            await rm(sourceStaging, { recursive: true, force: true });
             await mkdir(sourceStaging, { recursive: true });
+            const adapterStaging = await mkdtemp(join(sourceStaging, "run-"));
+            await writeFile(join(adapterStaging, ".quota"), "{}", {
+              mode: 0o600,
+            });
+            await pressure.admit(
+              async () =>
+                stopping ||
+                (
+                  await pool.query(
+                    "SELECT state FROM ingest_batches WHERE id=$1",
+                    [batch.id],
+                  )
+                ).rows[0]?.state !== "running",
+            );
+            if (
+              stopping ||
+              (
+                await pool.query(
+                  "SELECT state FROM ingest_batches WHERE id=$1",
+                  [batch.id],
+                )
+              ).rows[0]?.state !== "running"
+            )
+              return;
+
             const p = spawn(
               "python3",
               [
@@ -281,6 +317,26 @@ export async function tick(batchId?: string) {
                 env: {
                   ...process.env,
                   INGEST_PARSER_WORKERS: String(budget.parsers),
+                  ...(pressure.config.mode === "throughput-first"
+                    ? {
+                        ARCHIVE_RESERVE_BYTES: String(
+                          Math.max(
+                            pressure.config.reserve,
+                            Number(process.env.ARCHIVE_RESERVE_BYTES ?? 0),
+                          ),
+                        ),
+                        PALIMORA_STAGING_BYTES: String(
+                          Math.floor(
+                            pressure.config.staging /
+                              Math.min(
+                                sourceConcurrency,
+                                parserWorkers,
+                                commitConcurrency,
+                              ),
+                          ),
+                        ),
+                      }
+                    : {}),
                   PALIMORA_ADAPTER_ACK: "1",
                   PALIMORA_ADAPTER_CACHE: "1",
                   PALIMORA_METADATA_CACHE: join(
@@ -298,7 +354,7 @@ export async function tick(batchId?: string) {
                   ...(reconcileFile
                     ? { PALIMORA_RECONCILE_FILE: reconcileFile }
                     : {}),
-                  PALIMORA_ADAPTER_STAGING: sourceStaging,
+                  PALIMORA_ADAPTER_STAGING: adapterStaging,
                   PALIMORA_METADATA_SCOPE: JSON.stringify(batch.metadata_scope),
                 },
               },
@@ -346,9 +402,13 @@ export async function tick(batchId?: string) {
               source.checkpoint,
               source.checkpoint_detail,
             );
+            const releases: (() => void)[] = [];
             const pipeline = new IngestPipeline(
-              budget.commits,
-              () => p.stdin!.write("\n"),
+              commitConcurrency,
+              () => {
+                releases.shift()?.();
+                p.stdin!.write("\n");
+              },
               () => {
                 try {
                   process.kill(-p.pid!, "SIGTERM");
@@ -374,8 +434,7 @@ export async function tick(batchId?: string) {
             let gapState = "corrupt_source";
             try {
               for await (const line of createInterface({ input: p.stdout! })) {
-                while (!stopping && !cancelled && !(await downstreamReady()))
-                  await new Promise((resolve) => setTimeout(resolve, 250));
+                await pressure.admit(() => stopping || cancelled);
                 if (
                   stopping ||
                   (
@@ -508,6 +567,8 @@ export async function tick(batchId?: string) {
                       record.checkpoint_detail,
                     );
                   }
+                  const release = await slots.acquire();
+                  releases.push(release);
                   await pipeline.add(keys, async () => {
                     try {
                       await ingestRecords(source, e.records);
@@ -526,136 +587,145 @@ export async function tick(batchId?: string) {
                   continue;
                 }
                 await drain();
-                if (e.schema === "palimora.ingest.group.v1") {
-                  await ingestTags(source, e.records);
-                  const last = e.records[e.records.length - 1];
-                  previous = progressKey(last.cursor, last.checkpoint_detail);
-                  p.stdin!.write("\n");
-                  continue;
-                }
-                if (e.index_progress === undefined && e.total === undefined)
-                  previous = progressKey(e.cursor, e.checkpoint_detail);
-                activeLocator = e.locator;
-                if (e.index_progress !== undefined) {
-                  await pool.query(
-                    "UPDATE ingest_sources SET index_progress=$2::bigint WHERE id=$1",
-                    [source.id, e.index_progress],
-                  );
-                  p.stdin!.write("\n");
-                  continue;
-                }
-                if (e.io_error)
-                  throw Object.assign(Error(e.message), {
-                    code: e.io_error === 28 ? "ENOSPC" : "SOURCE_IO",
-                  });
-                if (e.total !== undefined) {
-                  await pool.query(
-                    "UPDATE ingest_sources SET total=$2 WHERE id=$1",
-                    [source.id, e.total],
-                  );
-                  p.stdin!.write("\n");
-                  continue;
-                }
-                if (e.tag) {
-                  await ingestTags(source, [e]);
-                  p.stdin!.write("\n");
-                  continue;
-                }
-                if (e.artifact || e.artifacts) {
-                  await archiveTransaction(async (db) => {
-                    const refs = [];
-                    for (const o of e.artifacts ?? [e.artifact]) {
-                      const bytes = await objectBytes(o, db);
-                      await preserve(db, [{ kind: o.kind, bytes }]);
-                      refs.push({ name: o.name, hash: o.hash });
-                    }
-                    await db.query(
-                      "INSERT INTO archive_outbox(event,payload) VALUES($1,$2)",
+                const releaseControl = await slots.acquire();
+                try {
+                  if (e.schema === "palimora.ingest.group.v1") {
+                    await ingestTags(source, e.records);
+                    const last = e.records[e.records.length - 1];
+                    previous = progressKey(last.cursor, last.checkpoint_detail);
+                    p.stdin!.write("\n");
+                    continue;
+                  }
+                  if (e.index_progress === undefined && e.total === undefined)
+                    previous = progressKey(e.cursor, e.checkpoint_detail);
+                  activeLocator = e.locator;
+                  if (e.index_progress !== undefined) {
+                    await pool.query(
+                      "UPDATE ingest_sources SET index_progress=$2::bigint WHERE id=$1",
+                      [source.id, e.index_progress],
+                    );
+                    p.stdin!.write("\n");
+                    continue;
+                  }
+                  if (e.io_error)
+                    throw Object.assign(Error(e.message), {
+                      code: e.io_error === 28 ? "ENOSPC" : "SOURCE_IO",
+                    });
+                  if (e.total !== undefined) {
+                    await pool.query(
+                      "UPDATE ingest_sources SET total=$2 WHERE id=$1",
+                      [source.id, e.total],
+                    );
+                    p.stdin!.write("\n");
+                    continue;
+                  }
+                  if (e.tag) {
+                    await ingestTags(source, [e]);
+                    p.stdin!.write("\n");
+                    continue;
+                  }
+                  if (e.artifact || e.artifacts) {
+                    await archiveTransaction(async (db) => {
+                      const refs = [];
+                      for (const o of e.artifacts ?? [e.artifact]) {
+                        const bytes = await objectBytes(o, db);
+                        await preserve(db, [{ kind: o.kind, bytes }]);
+                        refs.push({ name: o.name, hash: o.hash });
+                      }
+                      await db.query(
+                        "INSERT INTO archive_outbox(event,payload) VALUES($1,$2)",
+                        [
+                          "ingest.artifact.preserved",
+                          {
+                            source: source.path,
+                            locator: e.locator,
+                            objects: refs,
+                          },
+                        ],
+                      );
+                      await db.query(
+                        "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}',bytes=bytes+$3 WHERE id=$1",
+                        [source.id, e.cursor, e.bytes ?? 0],
+                      );
+                    });
+                    p.stdin!.write("\n");
+                    continue;
+                  }
+
+                  if (e.gap || e.blocked)
+                    await pool.query(
+                      "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
                       [
-                        "ingest.artifact.preserved",
+                        source.id,
+                        e.locator,
+                        e.gap ?? e.blocked.code,
+                        e.blocked ?? {
+                          cursor: e.cursor,
+                          detail: e.detail,
+                          parser: e.parser,
+                        },
+                        source.fingerprint,
+                      ],
+                    );
+                  if (e.blocked) {
+                    blocked = true;
+                    await pool.query(
+                      "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
+                      [
+                        source.id,
                         {
-                          source: source.path,
+                          ...e.blocked,
                           locator: e.locator,
-                          objects: refs,
+                          cursor: e.cursor,
+                          parser: e.parser,
                         },
                       ],
                     );
-                    await db.query(
-                      "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}',bytes=bytes+$3 WHERE id=$1",
-                      [source.id, e.cursor, e.bytes ?? 0],
+                    await pool.query(
+                      "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1 AND state='running'",
+                      [
+                        batch.id,
+                        {
+                          source: source.path,
+                          ...e.blocked,
+                          locator: e.locator,
+                          cursor: e.cursor,
+                        },
+                      ],
                     );
-                  });
-                  p.stdin!.write("\n");
-                  continue;
-                }
-
-                if (e.gap || e.blocked)
-                  await pool.query(
-                    "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-                    [
-                      source.id,
-                      e.locator,
-                      e.gap ?? e.blocked.code,
-                      e.blocked ?? {
-                        cursor: e.cursor,
-                        detail: e.detail,
-                        parser: e.parser,
-                      },
-                      source.fingerprint,
-                    ],
-                  );
-                if (e.blocked) {
-                  blocked = true;
-                  await pool.query(
-                    "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
-                    [
-                      source.id,
-                      {
-                        ...e.blocked,
-                        locator: e.locator,
-                        cursor: e.cursor,
-                        parser: e.parser,
-                      },
-                    ],
-                  );
-                  await pool.query(
-                    "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1 AND state='running'",
-                    [
-                      batch.id,
-                      {
-                        source: source.path,
-                        ...e.blocked,
-                        locator: e.locator,
-                        cursor: e.cursor,
-                      },
-                    ],
-                  );
-                  break;
-                }
-                if (e.gap) {
-                  gap = true;
-                  gapState = e.gap;
-                  await pool.query(
-                    "UPDATE ingest_sources SET gaps=gaps+1,error=$2,checkpoint=GREATEST(checkpoint,$3::bigint),checkpoint_detail=CASE WHEN checkpoint<$3::bigint THEN '{}'::jsonb ELSE checkpoint_detail END WHERE id=$1",
-                    [source.id, { code: e.gap, locator: e.locator }, e.cursor],
-                  );
-                } else if (e.record) {
-                  try {
-                    await ingestRecord(source, e);
-                  } catch (error: any) {
-                    activeLocator = error.ingestLocator ?? activeLocator;
-                    throw error;
+                    break;
                   }
-                  if (e.record.state === "partial") {
+                  if (e.gap) {
                     gap = true;
-                    gapState = "corrupt_source";
-                  }
-                } else
-                  await pool.query(
-                    "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}' WHERE id=$1",
-                    [source.id, e.cursor],
-                  );
-                p.stdin!.write("\n");
+                    gapState = e.gap;
+                    await pool.query(
+                      "UPDATE ingest_sources SET gaps=gaps+1,error=$2,checkpoint=GREATEST(checkpoint,$3::bigint),checkpoint_detail=CASE WHEN checkpoint<$3::bigint THEN '{}'::jsonb ELSE checkpoint_detail END WHERE id=$1",
+                      [
+                        source.id,
+                        { code: e.gap, locator: e.locator },
+                        e.cursor,
+                      ],
+                    );
+                  } else if (e.record) {
+                    try {
+                      await ingestRecord(source, e);
+                    } catch (error: any) {
+                      activeLocator = error.ingestLocator ?? activeLocator;
+                      throw error;
+                    }
+                    if (e.record.state === "partial") {
+                      gap = true;
+                      gapState = "corrupt_source";
+                    }
+                  } else
+                    await pool.query(
+                      "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}' WHERE id=$1",
+                      [source.id, e.cursor],
+                    );
+                  p.stdin!.write("\n");
+                } finally {
+                  releaseControl();
+                }
               }
               await drain();
               streamComplete = true;
@@ -671,7 +741,9 @@ export async function tick(batchId?: string) {
                     if (e.code !== "ESRCH") throw e;
                   }
                 await exit;
+                for (const release of releases.splice(0)) release();
                 await rm(sourceStaging, { recursive: true, force: true });
+                stagingCleaned = true;
               }
             }
             const code = await exit;
@@ -720,6 +792,13 @@ export async function tick(batchId?: string) {
               });
               return;
             }
+            if (e.code === "INGEST_CAPACITY" || e.code === "ENOSPC") {
+              await pool.query(
+                "UPDATE ingest_batches SET state='paused',error=$2,updated_at=now() WHERE id=$1 AND state='running'",
+                [batch.id, { code: e.code, reason: e.message }],
+              );
+              return;
+            }
             if (e.code === "SOURCE_IO" && activeSource) {
               const attempts = Number(activeSource.attempts) + 1;
               await pool.query(
@@ -743,8 +822,16 @@ export async function tick(batchId?: string) {
             );
           } finally {
             sourceLock?.release();
+            if (!stagingCleaned)
+              await rm(sourceStaging, { recursive: true, force: true });
           }
         },
+      );
+      console.log(
+        JSON.stringify({
+          event: "ingest_pressure_summary",
+          ...pressure.metrics,
+        }),
       );
       if (
         (

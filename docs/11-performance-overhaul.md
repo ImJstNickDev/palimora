@@ -23,6 +23,12 @@ Il target sperimentale resta 2.000 opere/s completamente elaborate, senza
 sacrificare dati o spazio. Nessun deployment definitivo o ingest reale del dump
 completo prima della conclusione di P3, P4 e P5.
 
+**P3 finale:** completata sul corpus isolato da 11.032 opere (risultati in fondo e
+in `performance-p3-final.json`). Il canonico può avanzare senza attendere
+catalogo/full-text finché i budget durevoli lo consentono. Il completamento
+canonico rimane distinto dalla ricercabilità. P4 e P5 restano da svolgere;
+nessuna importazione definitiva è autorizzata da queste prove.
+
 ## Stato e perimetro
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
@@ -3638,3 +3644,250 @@ Evidenze private di questa campagna: `/mnt/sdb/palimora-p3a-{baseline,1-repeat,m
 indicato.** Il parallelismo migliora lo stadio canonico ma non il throughput
 end-to-end in questa campagna. Default 1 confermato. Nessun deployment definitivo,
 ingest del dump completo o lavoro sul blocco P3 successivo/P4/P5 avviato.
+
+## P3 finale — throughput canonico e pressione disco, 9 novembre 2026
+
+**P3 completata: implementata, verificata e misurata sul corpus di test.**
+Riferimento `c8a75c0acfbd4cf1417c0d8b4fe4c2b2133be23e`;
+[report aggregato](performance-p3-final.json). P3A e le baseline precedenti non
+sono ricalcolate. Nessun nuovo blocco P3, intervento P4/P5, deployment definitivo
+o ingest del dump completo è stato avviato.
+
+### Comportamento consegnato
+
+Due modalità, senza migrazioni: `conservative` conserva la soglia per coda
+65.536 e rimane il default; `throughput-first` usa capacità reale dei filesystem,
+byte delle relazioni/indici di coda e prenotazioni staging. La politica completa,
+le soglie, l'isteresi e i mount richiesti sono in [04](04-ingest.md#pressione-e-capacità).
+Non serve HTTP OpenSearch né superuser PostgreSQL per leggere la capacità.
+Un mount mancante, un errore o una misura obsoleta impediscono l'ammissione.
+
+I quattro slot core sono condivisi FIFO fra sorgenti e restano occupati fino
+all'ACK ordinato, anche per commit conclusi fuori ordine. Non si moltiplicano
+parser, pool o prefetch. Uno ZIP può occupare slot liberi di un altro; i gruppi
+con meno sorgenti usano tutti i parser disponibili. Non si ridimensiona a caldo
+il pool Python di una sorgente già avviata. Limiti invariati: sei parser nel
+profilo misurato, quattro commit/gruppi core, pool 12, fino a quattro lease
+identità più leader; ogni adapter ha il proprio namespace temporaneo.
+
+Lo staging adapter prenota byte sotto `flock`, prima delle scritture, con crediti
+fino a 8 MiB. Include anche spool anonimi e copie transitorie dei membri grandi;
+le prenotazioni si liberano con le directory dopo ACK. Non è una nuova coda né
+un dato canonico. PackStore mantiene riserva, SHA-256, Zstd, verifica, fsync e
+seal. Dopo crash il worker rimuove i pack non sigillati sotto l'esistente lock
+locator, prima dell'avvio del batch; non rimuove pack pubblicati o writer attivi.
+
+La prima prova B, conservata separatamente, si è fermata correttamente a 2.071
+opere per una stima staging iniziale troppo restrittiva: il corpus comprende un
+membro da **262.421.940 byte**. La stima per singolo record è stata sostituita
+con prenotazioni reali condivise fra parser, mantenendo **4 GiB** globali. Questa
+prova interrotta non entra nel confronto. Nessun contenuto è stato saltato.
+
+### Tre profili, stesso contenuto e stesse risorse
+
+Quattro ZIP artificiali P3A, 11.032 opere, 228.732.607 byte compressi,
+598.801.143 byte dei membri decompressi, 22.928 revisioni capitolo e 107.054
+oggetti unici. Stessi sei parser, quattro commit, gruppi 256, Zstd 3, libuv 8,
+PG 17.6, OpenSearch 2.19.4 heap 1 GiB, proiezione isolata. Una misura per profilo,
+sequenziale su host condiviso senza quote e senza azzerare la cache filesystem:
+il guadagno non è una garanzia
+statistica né un throughput sostenibile già validato sull'intero dump.
+
+Tempi dal `started_at` durevole all'ultimo ritorno di `ingestRecords` dopo COMMIT.
+La chiusura del batch avviene dopo, rispettivamente a 41,899 / 39,291 / 41,912 s.
+
+| Profilo | Sorgenti | Ultimo commit s | Opere/s canoniche | GiB sorgenti/h | MiB sorgenti/s | MiB decompressi/s | Capitoli/s | Oggetti/s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A, P3A conservativa | 4 | 41,865 | 263,52 | 18,318 | 5,211 | 13,641 | 547,67 | 2.557,14 |
+| B, throughput-first e slot condivisi | 4 | 39,204 | 281,40 | 19,561 | 5,564 | 14,566 | 584,83 | 2.730,66 |
+| C, ripartizione 3+3 parser | 2 | 41,740 | 264,30 | 18,373 | 5,226 | 13,681 | 549,31 | 2.564,79 |
+
+B migliora il throughput canonico del **6,79%** rispetto ad A; C non migliora materialmente rispetto ad A e resta peggiore di B.
+I MiB/s dividono i byte verificati per il wall-clock canonico: non misurano
+la capacità isolata del decompressore. Nessuna delle tre prove raggiunge la soglia 65.536: il guadagno breve non viene
+attribuito alla rimozione di una pausa che non si è verificata. Il vantaggio sotto
+backlog è dimostrato separatamente con soglia ridotta e downstream fermo.
+
+| Profilo | Catalogo e storico finiti s | Ultimo ACK full-text s | Ricercabilità verificata s | Opere/s end-to-end | Drain e verifica dopo ultimo commit s |
+|---|---:|---:|---:|---:|---:|
+| A | 151,192 | 151,453 | 162,702 | 67,81 | 120,837 |
+| B | 146,745 | 150,923 | 160,910 | 68,56 | 121,706 |
+| C | 150,833 | 152,713 | 163,499 | 67,47 | 121,759 |
+
+La verifica end-to-end comprende refresh, tutti gli ID/generazioni e ricerca e
+lettura autenticata di campione. Include circa 10–11 secondi dopo l'ultima
+proiezione; non sono tempo CPU del catalogo. Sul proprio intervallo produttivo
+prima–ultima operazione, catalogo e testo elaborano circa **75 opere/s**;
+la capacità dell'intera pipeline rimane circa **67–68 opere/s**.
+
+Al commit canonico di B restano 9.252–9.272 opere da catalogare, 9.272 snapshot
+storici e 9.312–9.440 pubblicazioni full-text da confermare, includendo le opere
+non ancora proiettate. Gli intervalli derivano dai gruppi che attraversano
+l'istante di misura, non da un conteggio di opere parsate. Il primo campione
+SQL successivo vede 9.252 elementi corrente, 9.252 storico, 76 testo.
+
+| Profilo | Picco coda corrente | Picco storico | Picco testo | Picco fisico combinato delle code, byte |
+|---|---:|---:|---:|---:|
+| A | 9.152 | 9.152 | 780 | 3.858.432 |
+| B | 9.252 | 9.252 | 860 | 3.923.968 |
+| C | 9.112 | 9.112 | 824 | 3.817.472 |
+
+Campionamento circa 1 s; i picchi delle singole relazioni non sono necessariamente
+simultanei. Residenza stimata dall'integrale della coda: corrente/storico
+58,29 / 58,76 / 59,23 s; testo 3,19 / 2,67 / 2,38 s. Non sono timestamp per opera.
+
+### Risorse, SQL e storage
+
+| Profilo | CPU-s worker/API | Picco working set MiB | I/O worker letti/scritti MiB | Picco staging nominato MiB | Picco prenotazioni adapter MiB | WAL pipeline MiB |
+|---|---:|---:|---:|---:|---:|---:|
+| A | 133,919 | 1.174,00 | 6,80 / 606,84 | 779,25 | n.d. | 694,54 |
+| B | 129,410 | 1.172,46 | 1,68 / 373,89 | 790,86 | 1.258,06 | 683,57 |
+| C | 131,448 | 983,21 | 5,59 / 887,97 | 829,09 | 1.298,06 | 691,15 |
+
+CPU e I/O coprono la campagna fino alla verifica; dettagli per processo e ruolo
+nel JSON. Il filesystem cache aumenta il valore cgroup `memory` rispetto al
+working set. Nessun OOM osservato. I picchi dei diversi container non vengono
+sommati come simultanei. I contatori block I/O dipendono da cache/writeback;
+non equivalgono ai byte letti logicamente dagli ZIP.
+
+Lo staging nominato non include gli spool anonimi: le prenotazioni B/C includono
+anche questi e crediti prudenziali, ma escludono i pack temporanei (già inclusi
+nel nominato). Non si sommano le due colonne. Per A, l'ulteriore spazio anonimo
+ha un limite conservativo di 386.955.863 byte dalla dimensione massima dei membri
+grandi per sorgente, non un picco simultaneo misurato. Il budget adapter 4 GiB
+non è stato esaurito nelle prove finali; lo staging residuo è zero.
+
+Span inclusivi ingest A → B: SQL ordinario 83,528 → 81,340 s; COPY 4,500 →
+3,865 s; COMMIT 4,659 → 4,340 s; preparazione staging 15,110 → 14,075 s;
+append pack 23,325 → 25,115 s; finish/seal 16,795 → 14,567 s; checkpoint
+4,104 → 4,129 s. Sono attese sovrapposte di gruppi concorrenti, **non wall-clock**.
+Il massimo di gruppi osservato è quattro in tutte le modalità. Il replay
+conferma anche quattro transazioni massime, con attesa acquisizione connessione
+inclusa. B esegue 27 controlli condivisi, 5,454 s complessivi trascorsi nei probe
+(inclusi attesa SQL/event loop), zero attese o rallentamenti di pressione; C
+32 controlli / 3,960 s. I controlli avvengono in sovrapposizione agli stadi.
+
+Byte finali, prima dei probe supplementari e del replay:
+
+| Componente | A | B | C |
+|---|---:|---:|---:|
+| PackStore | 290.790.494 | 290.792.699 | 290.792.018 |
+| Packfile | 62 | 63 | 58 |
+| PostgreSQL database | 437.603.475 | 428.461.203 | 433.024.147 |
+| OpenSearch primari | 473.623.441 | 474.122.934 | 473.948.112 |
+| Filesystem PG, WAL incluso | 1.214.199.843 | 1.205.944.707 | 1.209.627.561 |
+| Filesystem OpenSearch, translog incluso | 901.235.560 | 901.896.216 | 901.839.145 |
+| Cache contenuti / staging residuo | 0 / 0 | 0 / 0 | 0 / 0 |
+| Totale filesystem persistente, Redis incluso | 2.406.619.293 | 2.399.016.770 | 2.402.638.467 |
+
+B aggiunge **2.205 byte PackStore (+0,00076%)**, mentre il totale filesystem è
+inferiore di 7.602.523 byte (−0,32%). La concorrenza modifica layout fisico, pack
+boundary, pagine e tempi di merge/retention; non i contenuti logici. Record fisici
+duplicati A/B/C: 7 / 10 / 11, per 2.783 / 4.989 / 4.700 byte; sempre **107.054
+hash unici**. Il delta PackStore B si scompone in +2.206 byte di record duplicati,
++8 byte di header del pack aggiuntivo e −9 byte negli altri record (compressione
+con UUID locali differenti). Il JSON conserva dimensioni dei singoli pack, spazio allocato,
+byte/opera e rapporti sorgente/persistente. Nessuna copia persistente degli ZIP,
+EPUB o nuova cache è stata introdotta.
+
+### Costo del backlog
+
+Probe separato su cloni logged delle tre relazioni con colonne e indici reali,
+100.000 UUID sintetici per relazione. Non include FK/trigger canonici né contenuti.
+Misure per il primo riempimento, esclusa allocazione vuota:
+
+| Coda | Byte/pendente | Indici a 100.000, byte | WAL enqueue, byte | WAL DELETE, byte |
+|---|---:|---:|---:|---:|
+| Corrente | 88,72 | 4.423.680 | 16.391.760 | 5.616.520 |
+| Snapshot storico | 88,72 | 4.423.680 | 16.391.760 | 5.616.504 |
+| Full-text | 163,43 | 9.502.720 | 29.144.888 | 5.616.480 |
+
+DELETE non riduce la dimensione fisica. VACUUM ha troncato gli heap vuoti,
+lasciando gli indici: 4.440.064 / 4.440.064 / 9.527.296 byte per relazione.
+Dopo refill le allocazioni erano 13.271.040 / 13.271.040 / 25.804.800 byte:
+la manutenzione non garantisce un ritorno immediato alla taglia iniziale.
+Per questo il limite throughput-first misura pagine allocate, non solo tuple vive.
+
+Con una voce per opera in ciascuna delle tre code: circa **34,1 MB per 100.000**
+al primo riempimento, **52,3 MB** dopo il ciclo misurato; extrapolazione a un
+milione **341–523 MB**, senza promessa che il bloat si fermi qui. Per pianificare
+prudenzialmente, prevedere almeno il doppio del ciclo osservato (circa **1 GiB
+per milione** soltanto per le code), oltre a catalogo, WAL, indici finali e
+versioni aggiuntive. Enqueue+DELETE hanno generato circa **78,8 MB WAL per
+100.000**; claim/retry, aggiornamenti e checkpoint possono aggiungerne altro.
+Non è una previsione lineare garantita del dump.
+
+Su 100.000 tuple, query dimensione fisica 0,18–0,47 ms; controllo conservativo
+bounded 3,72–4,78 ms; `COUNT(*)` 5,74–6,05 ms (media di 20 query). Le soglie di
+byte non obbligano a scandire una coda enorme o vuota. Una lettura reale delle
+capacità con ruolo PostgreSQL **non-superuser**, OpenSearch fermo e mount
+accessibili è riuscita; un mount mancante ha prodotto `capacity_unavailable`.
+
+### Integrità e ripresa
+
+**17 test mirati passati, nessun fallimento o skip**, build completa riuscita.
+Verifica su tutte le configurazioni: 11.032 opere e snapshot, 22.928 revisioni,
+107.054 oggetti letti e verificati SHA-256; metadata, bibliografia corrente e
+storica, manifest, provenienza e tutti i documenti OpenSearch equivalenti tra
+A/B/C e alla semantica P3A. La normalizzazione elimina soltanto riferimenti UUID
+locali validati e campi operativi; non si dichiara uguaglianza binaria dei manifest
+con UUID diversi. Replay integrale senza nuovi oggetti/versioni e code drenate.
+
+Fixture ridotta: soglia conservativa quattro, arresto osservato dopo un piccolo
+prefisso già ammesso (6–10 opere nelle esecuzioni); throughput-first completa
+160 opere con catalogo assente. Pressione disco iniettata soltanto dal test
+impedisce progressi e riprende automaticamente quando il margine torna sicuro.
+Esaurimento delle prenotazioni staging: pausa persistita, checkpoint zero per il
+record non acquisito, cleanup e resume dopo il ripristino del budget. Quattro
+processi parser non superano la prenotazione condivisa; ledger corrotto rifiutato.
+
+OpenSearch irraggiungibile conserva 160 invalidazioni; dopo il ripristino tutte
+si drenano con generazioni corrette. La proiezione riprende in processi distinti,
+senza un nuovo ingest. SIGTERM/SIGKILL durante ingest con backlog, kill nella
+transazione SQL e dentro il seal mantengono il prefisso durevole; il resume
+elimina staging sorgente e pack non sigillati. Passano identità sovrapposte,
+metadata conflittuali, 17 snapshot per 20 acquisizioni, ACK fuori ordine,
+sorgente lenta/veloce, pausa, sorgenti mancanti, `.part` e ZIP corrotti.
+
+### Limite residuo e configurazione
+
+Il catalogo serializzato resta dominante end-to-end: B impiega 83,253 s nei
+passaggi correnti e 51,620 s negli storici, mentre la contesa misurata sul lock
+bibliografico è 1,332 s. Il costo è soprattutto la materializzazione/SQL dentro
+il singolo esecutore, non un'attesa del parser. Il canonico mantiene costi
+sostanziali SQL, staging, compressione e seal concorrenti. Profilare e ottimizzare
+questi motori/costi appartiene a **P4**; sostenibilità prolungata, quote definitive,
+crescita WAL/indici e corpus multi-sorgente rappresentativo appartengono a **P5**.
+Non si aprono nuove sottophase P3 né tuning facet/PIT.
+
+Default invariati: **conservative, una sorgente**. Profilo esplicito candidato
+per grandi importazioni: **throughput-first, quattro sorgenti, sei parser,
+quattro commit, staging 4 GiB, backlog 8 GiB, riserva 8 GiB per mount**, Zstd 3.
+Come punto iniziale operativo restano 4 CPU e 4 GiB al worker, ma le prove qui
+non avevano quote: P5 deve validarle. Monitorare spazio effettivo per mount,
+prenotazioni e staging reale, code/indici, WAL trattenuto, memoria e tempo di
+drenaggio. Non aumentare parser/commit o dichiarare raggiunte 2.000 opere/s.
+
+Riproduzione dei tre profili, uno alla volta, su nuove directory private:
+
+```sh
+docker build -f infra/Dockerfile --target api -t palimora-p3-api .
+RELEASE_IMAGE=palimora-p3-api P3_BASELINE_IMAGE=palimora-p3-baseline \
+  ./scripts/build-p3-baseline.sh
+AO3_DUMP_ROOT=/mnt/sdb/palimora-p3a-fixture P3_PROFILE_NAME=A \
+  RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p3-final-A \
+  ./scripts/benchmark-p3-final.sh
+# Ripetere con B e C e directory nuove. BENCH_SUBNET opzionale se i pool Docker
+# automatici sono esauriti; scegliere una sottorete libera per la sola fixture.
+```
+
+`measure-p3-queues.cjs` e `check-p3a-retry.cjs` sono probe separati dopo la
+cattura dello storage; la riproduzione non li include nel tempo ingest.
+`summarize-p3-final.py` confronta tutte le fingerprint prima di produrre il JSON.
+Evidenze private `/mnt/sdb/palimora-p3-final-{A,B-final,C-final}/results/`.
+B/C usano l'implementazione finale dei permessi, compresi gli artefatti ausiliari;
+le precedenti prove B/C di coordinamento restano separate e non fanno parte dei
+risultati principali. L'ultima guardia di cleanup in caso di cancellazione prima
+dello spawn è verificata separatamente; non modifica il percorso produttivo
+misurato. Non si è riempito il disco host per simulare pressione e non si è
+modificato alcun servizio o dato di produzione.

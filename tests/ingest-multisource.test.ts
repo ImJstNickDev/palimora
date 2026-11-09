@@ -265,6 +265,69 @@ with zipfile.ZipFile(sys.argv[1],'w') as z:z.writestr('fault.txt','Title\\n\\nSt
         ).rows[0].state,
         "completed",
       );
+      // Stop inside seal, after staging was written but before publication.
+      execFileSync("python3", [
+        "-c",
+        "import zipfile,sys;z=zipfile.ZipFile(sys.argv[1],'w');z.writestr('seal.txt','Title\\n\\nStory URL: https://archiveofourown.org/works/89999998\\nChapters: 1\\n\\nSeal test');z.close()",
+        join(root, "seal.zip"),
+      ]);
+      const sealId = randomUUID(),
+        marker = join(root, "seal-ready");
+      await pool.query(
+        "INSERT INTO ingest_batches(id,state,selection) VALUES($1,'pending',$2)",
+        [sealId, ["seal.zip"]],
+      );
+      const sealing = spawn(
+        process.execPath,
+        [
+          "-e",
+          `
+        const fs=require('node:fs'),{PackWriter}=require('./apps/api/dist/pack');
+        const finish=PackWriter.prototype.finish;
+        PackWriter.prototype.finish=async function(){if(this.current?.records.length){fs.writeFileSync(${JSON.stringify(marker)},'ready');await new Promise(()=>{});}return finish.call(this);};
+        require('./apps/api/dist/ingest-worker').tick('${sealId}').finally(()=>require('./apps/api/dist/db').pool.end());
+      `,
+        ],
+        { env: process.env, stdio: "ignore" },
+      );
+      const sealExit = new Promise((r) => sealing.on("exit", r));
+      const { access } = await import("node:fs/promises");
+      let entered = false;
+      for (let i = 0; i < 500; i++) {
+        entered = await access(marker).then(
+          () => true,
+          () => false,
+        );
+        if (entered) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.ok(entered, "Crash barrier reached inside seal");
+      sealing.kill("SIGKILL");
+      await sealExit;
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT checkpoint FROM ingest_sources WHERE batch_id=$1",
+            [sealId],
+          )
+        ).rows[0].checkpoint,
+        "0",
+      );
+      assert.ok(
+        (await readdir(join(root, "storage", "staging"))).some((n) =>
+          n.endsWith(".pmpack"),
+        ),
+      );
+      await tick(sealId);
+      assert.equal(
+        (
+          await pool.query("SELECT state FROM ingest_batches WHERE id=$1", [
+            sealId,
+          ])
+        ).rows[0].state,
+        "completed",
+      );
+      assert.deepEqual(await readdir(join(root, "storage", "staging")), []);
     } finally {
       await pool.end();
       await setup.query(`DROP SCHEMA ${schema} CASCADE`);

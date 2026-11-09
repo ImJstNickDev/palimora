@@ -202,11 +202,26 @@ services:
       INGEST_GROUP_RECORDS: ${INGEST_GROUP_RECORDS:-256}
       INGEST_PARSER_WORKERS: ${INGEST_PARSER_WORKERS:-2}
       INGEST_SOURCE_CONCURRENCY: ${INGEST_SOURCE_CONCURRENCY:-1}
+      INGEST_PRESSURE_MODE: ${INGEST_PRESSURE_MODE:-conservative}
+      INGEST_DISK_RESERVE_GIB: ${INGEST_DISK_RESERVE_GIB:-8}
+      INGEST_BACKLOG_GIB: ${INGEST_BACKLOG_GIB:-8}
+      INGEST_STAGING_GIB: ${INGEST_STAGING_GIB:-4}
+      INGEST_CAPACITY_PATHS: ${INGEST_CAPACITY_PATHS:-}
       INGEST_COMMIT_CONCURRENCY: ${INGEST_COMMIT_CONCURRENCY:-2}
       UV_THREADPOOL_SIZE: ${INGEST_IO_THREADS:-8}
       ARCHIVE_ZSTD_LEVEL: ${ARCHIVE_ZSTD_LEVEL:-3}
       ARCHIVE_PACK_MIB: ${ARCHIVE_PACK_MIB:-64}
     volumes:
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/postgres
+        target: /capacity/postgres
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/opensearch
+        target: /capacity/search
+        read_only: true
+        bind: { create_host_path: false }
       - type: bind
         source: ${APP_DATA_ROOT:-/mnt/sdb/palimora-data}/secrets/auth
         target: /run/secrets/auth

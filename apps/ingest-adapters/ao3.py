@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import time
+import fcntl
 from urllib.parse import unquote
 if os.environ.get('PALIMORA_HTML_SCANNER') == 'python':
     from html_fragments import notes, notes_and_resources, resource_urls, chapters as html_chapters
@@ -38,7 +39,7 @@ def acknowledge():
     if os.environ.get('PALIMORA_ADAPTER_ACK')=='1' and not sys.stdin.readline():raise SystemExit(0)
     directories=inflight.pop(0)
     for directory in directories:
-        if directory!=active_dir and not retained(directory):shutil.rmtree(directory)
+        if directory!=active_dir and not retained(directory):cleanup_staging(directory)
 def drain():
     while inflight:acknowledge()
 def flush_records():
@@ -77,6 +78,42 @@ def ensure_space(size):
         if free<size:raise OSError(28,'Insufficient archive staging space')
         space_budget=min(free,max(size,8*1024*1024));space_checked=now
     space_budget-=size
+    reserve_staging(size)
+# Ephemeral reservations, not canonical state. Every write/copy is charged
+# before it starts; all children share the same flock-protected directory ledger.
+# Credits amortize ledger I/O over 8 MiB. ACK cleanup releases the whole directory.
+staging_credit=0
+staging_credit_dir=None
+def staging_ledger(change):
+    with open(os.path.join(STAGING,'.quota'),'r+') as f:
+        fcntl.flock(f,fcntl.LOCK_EX)
+        try:data=json.load(f)
+        except (ValueError,TypeError):raise OSError(28,'Staging reservation ledger unavailable')
+        change(data)
+        f.seek(0);json.dump(data,f,separators=(',',':'));f.truncate()
+def reserve_staging(size):
+    global staging_credit,staging_credit_dir
+    quota=int(os.environ.get('PALIMORA_STAGING_BYTES','0'))
+    if not quota or not size:return
+    if staging_credit_dir!=active_dir:
+        staging_credit=0;staging_credit_dir=active_dir
+    if staging_credit<size:
+        requested=size-staging_credit
+        granted=0
+        def reserve(data):
+            nonlocal granted
+            remaining=quota-sum(data.values())
+            if remaining<requested:raise OSError(28,'Staging reservation budget exhausted')
+            granted=min(remaining,max(requested,8*1024*1024))
+            key=os.path.basename(active_dir)
+            data[key]=data.get(key,0)+granted
+        staging_ledger(reserve)
+        staging_credit+=granted
+    staging_credit-=size
+def cleanup_staging(directory,**kwargs):
+    shutil.rmtree(directory,**kwargs)
+    if int(os.environ.get('PALIMORA_STAGING_BYTES','0')):
+        staging_ledger(lambda data:data.pop(os.path.basename(directory),None))
 def close_segment():
     global segment
     if segment:segment.close();segment=None
@@ -321,12 +358,12 @@ def run_zip(path,start):
                     active_dir=directory
                     result=future.result() if future else dict(cursor=i+1,locator=name,bytes=size,record=cache[digest])
                     emit(result)
-                    if active_dir and not retained(active_dir):shutil.rmtree(active_dir)
+                    if active_dir and not retained(active_dir):cleanup_staging(active_dir)
                     active_dir=None
                     if 'blocked' in result:return True
                 for directory in {t[5] for t in window}:
                     parsing_dirs.discard(directory)
-                    if not retained(directory):shutil.rmtree(directory,ignore_errors=True)
+                    if not retained(directory):cleanup_staging(directory,ignore_errors=True)
                 return False
             finally:
                 # Each process owns its segment until its result is consumed.
@@ -362,13 +399,14 @@ def run_zip(path,start):
                             resume=json.loads(os.environ.get('PALIMORA_ENTRY_CURSOR','{}')).get('row',0) if i==start else 0
                             # csv_records owns its TextIOWrapper; use a separate view.
                             with tempfile.TemporaryFile(dir=directory) as csv_data:
-                                shutil.copyfileobj(data,csv_data);csv_data.seek(0);csv_records(csv_data,entry.filename,i,resume)
+                                ensure_space(entry.file_size);shutil.copyfileobj(data,csv_data);csv_data.seek(0);csv_records(csv_data,entry.filename,i,resume)
                             data.seek(0)
                             emit(dict(cursor=i+1,locator=entry.filename,artifacts=stream_asset(data,entry.filename),bytes=entry.file_size))
                         else:
                             if entry.file_size<=8*1024*1024:payload=data.read()
                             else:
                                 payload=os.path.join(directory,'source-'+str(i)+'.member')
+                                ensure_space(entry.file_size)
                                 with open(payload,'xb') as out:shutil.copyfileobj(data,out)
                             window.append((i,entry.filename,entry.file_size,digest.hexdigest(),payload,directory));window_bytes+=entry.file_size
                 except (zipfile.BadZipFile,EOFError,UnicodeDecodeError) as e:
@@ -382,7 +420,7 @@ def run_zip(path,start):
                     emit(dict(cursor=i,locator=entry.filename,blocked=dict(code='parser_unsupported',trace=traceback.format_exc())));return
                 finally:
                     close_segment()
-                    if directory and not retained(directory) and not any(t[5]==directory for t in window):shutil.rmtree(directory,ignore_errors=True)
+                    if directory and not retained(directory) and not any(t[5]==directory for t in window):cleanup_staging(directory,ignore_errors=True)
                     active_dir=None
             consume()
         finally:
@@ -390,9 +428,9 @@ def run_zip(path,start):
             executor.shutdown(wait=True,cancel_futures=True)
             for directory in list(parsing_dirs):
                 parsing_dirs.discard(directory)
-                if not retained(directory):shutil.rmtree(directory,ignore_errors=True)
+                if not retained(directory):cleanup_staging(directory,ignore_errors=True)
             for task in window:
-                if not retained(task[5]):shutil.rmtree(task[5],ignore_errors=True)
+                if not retained(task[5]):cleanup_staging(task[5],ignore_errors=True)
 if __name__=='__main__':
     try:
         run(sys.argv[1],int(sys.argv[2]))

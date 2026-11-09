@@ -22,16 +22,18 @@ cleanup() {
 }
 trap cleanup EXIT
 # No CPU/RAM limits: this run measures unconstrained throughput on a shared host.
-docker network create --internal "$release_name" >/dev/null
+network_args=()
+if [[ -n "${BENCH_SUBNET:-}" ]]; then network_args+=(--subnet "$BENCH_SUBNET"); fi
+docker network create --internal "${network_args[@]}" "$release_name" >/dev/null
 docker run -d --name "$release_name-pg" --network "$release_name" --network-alias postgres --label palimora.test=true --mount "type=bind,source=$release_root/postgres,destination=/var/lib/postgresql/data" -e POSTGRES_PASSWORD=release-test -e POSTGRES_DB=palimora_release_test postgres:17.6-bookworm postgres -c shared_preload_libraries=pg_stat_statements -c track_io_timing=on >/dev/null
 docker run -d --name "$release_name-redis" --network "$release_name" --network-alias redis --label palimora.test=true --mount "type=bind,source=$release_root/redis,destination=/data" redis:7.4.6-alpine redis-server --appendonly yes >/dev/null
 docker run -d --name "$release_name-search" --network "$release_name" --network-alias opensearch --label palimora.test=true --mount "type=bind,source=$release_root/search,destination=/usr/share/opensearch/data" -e discovery.type=single-node -e node.store.allow_mmap=false -e DISABLE_INSTALL_DEMO_CONFIG=true -e DISABLE_SECURITY_PLUGIN=true -e 'OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g' opensearchproject/opensearch:2.19.4 >/dev/null
 for attempt in {1..90}; do if docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null 2>&1 && docker exec "$release_name-pg" pg_isready -U postgres >/dev/null 2>&1; then break; fi; sleep 1; done
 docker exec "$release_name-search" curl -fsS localhost:9200/_cluster/health >/dev/null
 docker exec "$release_name-pg" pg_isready -U postgres >/dev/null
-docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis -e INGEST_SOURCE_CONCURRENCY=${INGEST_SOURCE_CONCURRENCY:-1} -e BENCH_SOURCES="${BENCH_SOURCES:-}" -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:-}" -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 \
+docker run -d --name "$release_name-worker" --network "$release_name" --label palimora.test=true --mount "type=bind,source=$release_root/storage,destination=/benchmark" --mount "type=bind,source=$release_root/results,destination=/results" --mount "type=bind,source=$release_dump,destination=/dumps/ao3_stories,readonly" --mount "type=bind,source=$PWD/scripts,destination=/app/scripts,readonly" -e DATABASE_URL=postgresql://postgres:release-test@postgres/palimora_release_test -e ARCHIVE_ROOT=/benchmark/main -e AUTH_KEY="$(printf 'ab%.0s' {1..32})" -e APP_ORIGIN=https://release.invalid -e REDIS_HOST=redis --mount "type=bind,source=$release_root/postgres,destination=/capacity/postgres,readonly" --mount "type=bind,source=$release_root/search,destination=/capacity/search,readonly" -e INGEST_PRESSURE_MODE=${INGEST_PRESSURE_MODE:-conservative} -e INGEST_SOURCE_CONCURRENCY=${INGEST_SOURCE_CONCURRENCY:-1} -e BENCH_SOURCES="${BENCH_SOURCES:-}" -e INGEST_GROUP_RECORDS=256 -e INGEST_PARSER_WORKERS=${P0_PARSERS:-2} -e INGEST_COMMIT_CONCURRENCY=${P0_COMMITS:-2} -e NODE_OPTIONS="${BENCH_NODE_OPTIONS:-}" -e UV_THREADPOOL_SIZE=8 -e ARCHIVE_ZSTD_LEVEL=3 \
  -e PROJECTION_MODE=${BENCH_PROJECTION_MODE:-inline} \
- -e P2D_DIAGNOSTICS=${P2D_DIAGNOSTICS:-0} -e P2C_EVENT_LOOP=${P2C_EVENT_LOOP:-0} \
+ -e P3_PROFILE=${P3_PROFILE:-0} -e P2D_DIAGNOSTICS=${P2D_DIAGNOSTICS:-0} -e P2C_EVENT_LOOP=${P2C_EVENT_LOOP:-0} \
  -e PROJECTION_TEXT_BATCH=${PROJECTION_TEXT_BATCH:-16} \
  -e PROJECTION_TEXT_PREPARE_LANES=${PROJECTION_TEXT_PREPARE_LANES:-1} \
  -e PROJECTION_TEXT_PUBLISH_LANES=${PROJECTION_TEXT_PUBLISH_LANES:-1} \

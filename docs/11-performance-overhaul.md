@@ -2933,3 +2933,156 @@ Per abilitare la raccolta, aggiungere esplicitamente il preload a `NODE_OPTIONS`
 della sola fixture API; destinazione default `/results/search-spans.jsonl`,
 oppure `P2E_SEARCH_SPANS` con percorso privato. Gli span iniziano alla ricezione
 Node e terminano a `finish`, che non equivale alla ricezione sul client.
+
+
+
+## P2E.1a — Ablazioni query e PIT (2026-11-09)
+
+**P2E.1a completata. P2E.1 complessiva e P2 restano aperte.** Nessuna modifica
+applicativa, alle proiezioni, ai documenti, al mapping o alla durabilità.
+La raccolta esplorativa P2E.1 e il relativo preload rimangono invariati.
+
+Il runner cattura la query effettiva di `searchWorks(db, {})`: dieci facet,
+`track_total_hits=true`, tre ordinamenti, PIT e generazione in docvalues.
+Le ablazioni operano soltanto su copie nel runner. Il preload esistente traccia
+anche il probe HTTP autenticato originale a code vuote, prima delle ablazioni.
+Le misure seguenti sono chiamate dirette OpenSearch, non latenze API complete.
+
+Due fixture indipendenti clonano lo stesso PostgreSQL/indice P2C B1 fermato e
+usano gli stessi pack readonly: 11.032 opere. Stessa immagine P2D, PostgreSQL 17.6,
+OpenSearch 2.19.4/heap 1 GiB, Redis 7.4.6, nessuna quota CPU/RAM, nessuna build
+concorrente. API e projection sono processi Node distinti nel container della
+fixture; il worker mantiene 16/1/1. Non viene avviato ingest.
+
+Ogni variante ha 103 richieste: tre warmup prestabiliti e cento misurate.
+L'ordine è invertito nella seconda fixture. Prima di ogni esperimento backlog
+si accodano 2.000 opere e si riprende il worker senza limiti artificiali; la prova
+successiva attende il drenaggio. I contenuti reindicizzati sono identici, ma
+segmenti/cache/merge evolvono fra esperimenti: l'inversione d'ordine non rende
+identico il carico. Il throughput include warmup, apertura PIT e campionamenti,
+ma esclude la chiusura finale. I campioni grezzi, inclusi gli outlier, sono
+conservati nelle radici private indicate nel [report](performance-p2e1a.json).
+
+### Latenze e throughput concorrente
+
+Client include ricezione e parsing del corpo; `took` è tempo server incluso
+nella latenza client, non CPU e non additivo. Valori P50/P95 in ms; nessuna
+sottrazione di percentili indipendenti per attribuire il costo di una fase.
+`full-retain` è la query originale; `simple-sort` usa solo `id asc` e cambia
+semantica. Le altre ablazioni mantengono filtri, pagina e ordinamento originali.
+
+| Passata | Carico | Variante | Client P50/P95 | took P50/P95 | Indicizzati/s nella finestra |
+|---|---|---|---:|---:|---:|
+| forward | idle | full-retain | 42.49/78.54 | 36/69 | 0.00 |
+| forward | idle | no-aggs | 19.25/27.57 | 14/21 | 0.00 |
+| forward | idle | no-total | 43.03/63.27 | 37/56 | 0.00 |
+| forward | idle | simple-sort | 32.11/53.16 | 28/48 | 0.00 |
+| forward | idle | full-close | 35.33/58.56 | 31/54 | 0.00 |
+| forward | idle | full-reuse | 38.25/60.78 | 34/52 | 0.00 |
+| forward | backlog | full-retain | 54.92/108.03 | 49/95 | 57.31 |
+| forward | backlog | no-aggs | 18.50/29.78 | 15/25 | 49.69 |
+| forward | backlog | no-total | 59.36/113.51 | 54/108 | 79.35 |
+| forward | backlog | simple-sort | 45.91/85.36 | 41/76 | 90.58 |
+| forward | backlog | full-close | 57.39/97.04 | 52/92 | 91.59 |
+| forward | backlog | full-reuse | 45.60/74.34 | 41/69 | 84.82 |
+| reverse | idle | full-reuse | 40.25/64.27 | 33/57 | 0.00 |
+| reverse | idle | full-close | 40.73/61.77 | 34/55 | 0.00 |
+| reverse | idle | simple-sort | 32.31/53.09 | 27/47 | 0.00 |
+| reverse | idle | no-total | 38.55/65.50 | 34/60 | 0.00 |
+| reverse | idle | no-aggs | 16.37/21.30 | 12/17 | 0.00 |
+| reverse | idle | full-retain | 37.62/60.30 | 33/52 | 0.00 |
+| reverse | backlog | full-reuse | 51.89/94.70 | 46/90 | 65.40 |
+| reverse | backlog | full-close | 54.41/102.65 | 49/96 | 84.88 |
+| reverse | backlog | simple-sort | 57.07/103.96 | 52/98 | 75.21 |
+| reverse | backlog | no-total | 49.66/101.39 | 46/96 | 85.98 |
+| reverse | backlog | no-aggs | 16.65/25.61 | 13/19 | 56.21 |
+| reverse | backlog | full-retain | 73.90/168.02 | 68/162 | 79.01 |
+
+### Componenti della query
+
+- **Facet:** a vuoto la media client completa/senza facet è 46,72/19,83 ms
+  nell'ordine diretto e 40,19/16,44 ms nell'inverso; `took` 40,29/14,51 e 35,56/12,43 ms.
+  È il costo intrinseco più grande e ripetibile osservato per questa query.
+  Sotto backlog le medie client sono 62,05/20,14 e 86,22/17,91 ms, con `took`
+  54,98/15,73 e 80,45/13,89 ms. Il miglioramento riguarda anche il server, ma
+  la sua dimensione sotto carico non è una stima a throughput equivalente.
+- **Conteggio completo:** medie client a vuoto 46,72→45,68 e 40,19→40,77 ms;
+  nessun beneficio stabile rilevante. Sotto backlog 62,05→67,82 e 86,22→57,43 ms:
+  variabilità, segmenti e lavoro concorrente impediscono attribuzioni isolate.
+- **Sort:** medie a vuoto 34,82/34,96 ms contro 46,72/40,19 ms della query completa.
+  Cambiano gli ID ordinati restituiti: non è una sostituzione equivalente.
+- **Risposta:**21 hit in ogni query; circa 9.975 byte con query completa,
+  5.682 senza facet, 9.935 senza conteggio e 9.492 con sort semplificato.
+  Sono byte UTF-8 del corpo, non traffico totale di rete. Senza conteggio manca
+  `total`; senza facet mancano le aggregazioni. Nessuna modifica al contratto API.
+
+Tutte le varianti salvo il sort semplificato preservano gli stessi 21 ID ordinati
+nelle prove. Questo corpus reindicizza gli stessi contenuti: non dimostra parità
+di freschezza tra PIT differenti in presenza di aggiornamenti reali.
+
+### PIT: apertura, chiusura e contesti
+
+| Passata/carico | Conservati: apertura media ms | Chiusura batch 103 ms | Chiusura immediata: apertura/chiusura medie ms | Riuso: unica apertura/chiusura ms |
+|---|---:|---:|---:|---:|
+| forward/idle | 5.92 | 6.31 | 5.21/3.38 | 2.65/2.92 |
+| forward/backlog | 5.64 | 12.23 | 6.10/4.32 | 3.57/5.33 |
+| reverse/idle | 3.66 | 5.35 | 6.40/4.19 | 6.74/3.24 |
+| reverse/backlog | 5.41 | 29.74 | 7.13/5.24 | 4.77/5.55 |
+
+Il numero di contesti passa **0→103→0** conservando i PIT e **0→1→0**
+riusandone uno. Con chiusura immediata i campioni presi dopo ogni chiusura sono
+zero: durante la richiesta esiste un PIT, non un picco misurato di zero.
+Le aperture sono 103 per le prime due modalità e 1 per il riuso, inclusi warmup.
+La riduzione dopo DELETE verifica che l'accumulo osservato dipende dai PIT.
+
+Il preload/probe storico crea 104 PIT (include anche il setup), conservandoli
+fino a dopo dettaglio e lettore; questa ablazione ha 103 e termina con la fase
+ricerca. Il frontend pagina tramite cursor e refetcha ogni 2 s sotto indicizzazione:
+il ritmo di aperture del probe sequenziale è diverso. Un PIT riusato fissa uno
+snapshot precedente: non è equivalente a un PIT nuovo durante modifiche reali.
+
+La chiusura immediata non riduce uniformemente la latenza query: a vuoto
+38,35/43,62 ms medi contro 46,72/40,19 ms con conservazione. Il riuso misura
+40,46/43,27 ms a vuoto e 49,23/58,11 ms sotto backlog. Rimuove il costo delle aperture
+ripetute, ma non dimostra da solo quanto della regressione API sia causato dalla
+ritenzione dei segmenti. La chiusura ha un costo proprio e invalida il cursore.
+
+### Risorse disponibili e limiti
+
+Durante backlog, conservazione/chiusura immediata/riuso registrano CPU OpenSearch
+media 419/279/193% nell'ordine diretto e 338/345/402% nell'inverso (100%=un core).
+Heap campionato massimo 713/619/471 MiB e 714/757/670 MiB. Questi contatori comprendono
+indicizzazione, ricerca, GC e osservazione: non sono CPU della singola query.
+
+I segmenti osservati crescono 18→22 nel primo retain e 31→38 nel retain ripetuto;
+nel primo reuse 22→27 e nel reuse ripetuto 18→22. Merge misurati nelle finestre
+close: 7.067/4.198 ms; nelle finestre retain/reuse riportate: 0 ms. Il maggior costo
+del retain finale coesiste con uno stato dei segmenti diverso: non viene scartato,
+né attribuito integralmente ai PIT. GC, refresh, flush, thread pool, bulk client,
+working set e I/O disponibili sono nel JSON; mancano attribuzione per query e
+controllo del throughput concorrente, rinviati a P2E.1b. La liberazione immediata
+dei contesti non dimostra liberazione immediata di heap o spazio su disco.
+
+**Conclusione circoscritta:** i facet sono il componente più costoso e ripetibile
+nella query predefinita studiata. PIT aggiungono round-trip e contesti misurabili;
+conteggio e sort hanno effetti minori o non semanticamente equivalenti. Non si
+estende il risultato a ogni filtro/full-text, non si dichiara una spiegazione
+completa della regressione e non si seleziona definitivamente P2E.2.
+
+### Verifica e riproduzione
+
+24 esperimenti, 2.400 query misurate e 72 warmup; due probe HTTP autenticati
+originali con 104 ricerche tracciate ciascuno. Controllati query catturata identica,
+ordine atteso degli ID, cleanup PIT, 11.032 documenti e code drenate in entrambe
+le fixture. Build completa e controlli sintattici passati. I container temporanei
+sono rimossi; fixture/evidenze restano private. Nessuna baseline precedente cambia.
+
+```sh
+P2C_SOURCE=/mnt/sdb/palimora-p2c-b1-20261109 \
+ P2C_ROOT=/mnt/sdb/palimora-p2e1a-new-forward \
+ P2C_IMAGE=palimora-p2d-api BENCH_PROJECTION_MODE=isolated \
+ P2D_DIAGNOSTICS=1 P2C_EVENT_LOOP=1 P2E_ORDER=forward \
+ ./scripts/benchmark-search-ablations.sh
+# Ripetere con root nuova e P2E_ORDER=reverse, senza campagne/build concorrenti.
+python3 scripts/summarize-search-ablations.py /root/forward /root/reverse
+```

@@ -1,12 +1,36 @@
 # 11 — Performance overhaul, riferimento P0–P5
 
+## Priorità vincolanti aggiornate — P3–P5
+
+Palimora serve 2–3 utenti contemporanei. La priorità è importare e rendere
+ricercabile l'intero dump di oltre 900 GiB nel minor tempo possibile, conservando
+integralmente informazioni, durabilità e deduplicazione senza aumentare
+inutilmente lo spazio persistente. Il throughput end-to-end termina soltanto con
+canonico, versioni, catalogo, full-text, leggibilità e checkpoint durevoli.
+Opere parsate e commit canonici sono metriche di stadio, non completamento.
+
+- **P3 — Parallel Ingestion & Pipeline Throughput:** concorrenza fra sorgenti e
+  stadi; alimentazione continua di catalogo e full-text.
+- **P4 — Archive/Ingest Engine Optimization:** profiling di parsing, CRC/hash,
+  decompressione, compressione, PackStore, SQL e I/O, preservando lo storage.
+- **P5 — Scale, Integrity & Final Validation:** throughput sostenibile, crescita
+  dello storage, crash recovery e completezza; configurazione del primo ingest.
+
+P0–P2 costituiscono la base implementata. Le conclusioni storiche sottostanti non
+riaprono P1B.2/P2E né subordinano P3 al P95 interattivo. Verificare usabilità per
+2–3 utenti e regressioni gravi; `SEARCH_PARALLEL_FACETS` resta disabilitato.
+Il target sperimentale resta 2.000 opere/s completamente elaborate, senza
+sacrificare dati o spazio. Nessun deployment definitivo o ingest reale del dump
+completo prima della conclusione di P3, P4 e P5.
+
 ## Stato e perimetro
 
 P0 misura il checkpoint 1.0.0 (`23afe66d36ac06c9716936987afdcdf05ffbfaa0`),
 non un'installazione in produzione. Le sezioni P0 conservano la baseline originale;
 le implementazioni P1A/P1B.1/P2A/P2B.1/P2B.2 e le misure P2C sono documentate in fondo.
 P2C completa le campagne A/B/C. P2D isola le proiezioni e verifica throughput,
-recovery e latenze; P2 resta aperta per la regressione residua della ricerca sotto backlog.
+recovery e latenze. La regressione residua della ricerca sotto backlog resta
+documentata, ma non blocca P3 secondo le priorità aggiornate sopra.
 Il target **2.000 opere/s** è sperimentale: include canonico durevole,
 provenienza/versioni/capitoli, catalogo, indicizzazione e visibilità nella ricerca.
 Le prove riguardano soltanto `queue119_archive05.zip`, mai il dump completo.
@@ -3444,3 +3468,173 @@ P2E_FUNCTIONAL_ROOT=/root/functional \
  python3 scripts/summarize-search-parallel.py \
  /root/off1 /root/on1 /root/on2 /root/off2 /root/offmax /root/onmax
 ```
+
+## P3A — ZIP concorrenti, verifica del 9 novembre 2026
+
+Il coordinatore è nello stesso ingest worker, sotto il leader `70210403`.
+`INGEST_SOURCE_CONCURRENCY=1–4`, default **1**, ripartisce i budget esistenti:
+con 6 parser/4 commit le corsie sono rispettivamente 1, 2 o 4; con 2/2 il massimo
+effettivo è 2. Ogni sorgente possiede pipeline, ACK, checkpoint, errori, staging e
+connessione lease identità. SQLite costituisce una barriera rispetto ai ZIP.
+Nessun nuovo servizio, formato, indice SQL, coda o cache persistente.
+Il controllo downstream condiviso ferma l'alimentazione a 65.536 elementi per
+coda corrente/storica/full-text; la campagna non raggiunge questa soglia.
+Dettagli operativi in [04](04-ingest.md#coordinamento-multi-sorgente-p3a).
+
+### Confronto end-to-end
+
+Quattro ZIP disgiunti, ottenuti dall'unico corpus autorizzato
+`queue119_archive05.zip`: **11.032 opere**, **228.732.607 byte** di sorgenti.
+Partizioni artificiali, non un campione della distribuzione degli oltre 900 GiB.
+Stessi contenuti, parser 6, commit 4, gruppi 256, Zstd 3, libuv 8,
+OpenSearch 2.19.4/heap 1 GiB, proiezioni isolate. Host condiviso senza quote.
+Baseline: worker del commit `6928e8844345f5b28ddddfb556c908aa32f4d897`,
+ricompilato con le stesse dipendenze; gli altri moduli prodotto sono invariati.
+
+| Modalità | Canonico s | Opere/s canoniche | GiB sorgenti/ora | End-to-end s | Opere/s ricercabili |
+|---|---:|---:|---:|---:|---:|
+| Worker precedente sequenziale | 52,639 | 209,58 | 14,569 | 161,656 | 68,24 |
+| Nuovo, sorgenti 1 | 51,041 | 216,14 | 15,025 | 164,667 | 67,00 |
+| Nuovo, sorgenti 2 | 44,420 | 248,35 | 17,264 | 163,451 | 67,49 |
+| Nuovo, sorgenti 4 | 42,131 | 261,85 | 18,202 | 166,102 | 66,42 |
+
+End-to-end da `started_at` durevole a code drenate, refresh, verifica di tutti
+ID/generazioni e richieste autenticate di ricerca/lettura. Il canonico termina
+alla chiusura del batch dopo tutti i commit: non viene confuso con la ricerca.
+Una prova per modalità; il JSON conserva anche un run esplorativo di sorgenti 1
+(49,797 s canonico, 164,748 s end-to-end), escluso dal confronto principale perché
+il campionamento staging è iniziato tardi e piccoli test si sovrapponevano.
+Nessuna significatività statistica attribuita alle differenze di pochi secondi.
+Le ultime protezioni dello stato batch nei percorsi di errore/connessione sono
+state verificate dopo l'immagine benchmark; non cambiano il percorso riuscito.
+
+Il guadagno canonico 1→4 è **21,1%**; quello end-to-end non è dimostrato.
+Dopo l'ultimo commit servono ancora circa **109 / 114 / 119 / 124 s** nelle
+quattro modalità, inclusa la verifica della visibilità. Le code e la stima della
+residenza, integrata dai campioni a circa 1 s, sono in `performance-p3a.json`:
+non sono timestamp individuali di enqueue/dequeue.
+
+### Risorse e storage
+
+| Modalità | CPU-secondi worker/API | Picco working set worker MiB | Picco staging MiB | I/O worker letti/scritti MiB |
+|---|---:|---:|---:|---:|
+| Precedente | 134,64 | 1.000,36 | 520,70 | 5,31 / 803,13 |
+| Nuovo 1 | 134,37 | 861,54 | 520,70 | 1,13 / 818,57 |
+| Nuovo 2 | 134,65 | 1.000,02 | 816,63 | 44,34 / 679,27 |
+| Nuovo 4 | 131,47 | 1.089,52 | 825,64 | 6,85 / 1.435,00 |
+
+CPU-secondi e I/O coprono il container della campagna, non sono wall-clock né
+solo parsing. La cache OS spiega perché letture block-device non equivalgono ai
+byte sorgenti. Il JSON conserva CPU/RAM per processo campionato e per container,
+PG, OpenSearch e proiettore inclusi. I/O del proiettore non disponibile nel sampler:
+non viene sostituito da zero. Picchi di container differenti non sono sommati.
+Il picco CPU worker arriva a 7,34 core con quattro sorgenti; nessuna quota è stata
+misurata. La memoria e lo staging aggiuntivi non giustificano la promozione del default.
+
+| Modalità | Pack byte / numero | PostgreSQL database byte | OpenSearch primario byte | Filesystem persistente totale byte |
+|---|---:|---:|---:|---:|
+| Precedente | 290.790.286 / 55 | 433.925.267 | 473.918.436 | 1.976.334.011 |
+| Nuovo 1 | 290.791.378 / 56 | 430.247.059 | 474.242.657 | 1.973.060.328 |
+| Nuovo 2 | 290.793.039 / 57 | 433.769.619 | 473.476.586 | 1.958.750.309 |
+| Nuovo 4 | 290.789.046 / 59 | 440.282.259 | 489.952.430 | 1.965.117.726 |
+
+Byte apparenti; allocati e componenti separati nel JSON. Il totale filesystem
+include cluster PG/WAL, OpenSearch/translog, Redis e storage; esclude fixture
+sorgenti e risultati. Il primario OpenSearch è misurato alla fine del timing,
+il filesystem dopo la verifica. Cache filesystem persistenti **0 byte**, staging
+finale **0 byte** in tutti i run. Nessuna compattazione/force-merge aggiuntiva.
+
+I pack variano al massimo **+2.753 byte (+0,00095%)** rispetto al precedente:
+UUID locali nei manifest compressi, confini dei gruppi e record fisici concorrenti
+spiegano differenze che i soli conteggi non mostrano. **107.054 hash unici** in ogni
+run; record fisici duplicati **6 / 8 / 12 / 4**, rispettivamente
+**2.449 / 3.213 / 5.631 / 1.646 byte**. Non sono snapshot aggiuntivi.
+PG a quattro sorgenti cresce di **6.356.992 byte (+1,47%)**; nel rilevamento delle
+relazioni `catalog_work_filters` e `catalog_work_tags` crescono rispettivamente
+3.694.592 e 3.686.400 byte, compensati in parte da altre relazioni.
+Il primario OpenSearch varia fino a **+3,38%**, con documenti semanticamente
+identici: layout di pagine/segmenti e tempi dei merge differiscono fra database
+nuovi. Queste singole prove non isolano ogni causa fisica. Il totale persistente
+misurato non aumenta; non si dichiara identità byte-per-byte dello storage.
+
+### Integrità, recovery e nuovo limite
+
+Ogni run verifica SHA-256 di **107.054 oggetti**, **11.032 snapshot**, **22.928
+revisioni/associazioni capitolo**, catalogo corrente e storico e tutti gli ID e
+le generazioni OpenSearch. Confronto dei manifest dopo normalizzazione dei soli
+UUID locali, degli hash degli oggetti sorgenti e di tutto il contenuto del catalogo.
+Le osservazioni preservate vengono confrontate normalizzando i riferimenti
+work/snapshot/manifest dopo averli verificati contro SQL; provenienza ed evidenze
+restano integralmente nel confronto.
+Gli ID bibliografici senza sorgente, derivati dall'UUID dell'opera, sono prima
+verificati contro la funzione di produzione e poi normalizzati per ID AO3.
+Nel confronto OpenSearch si escludono ID locali, generazioni/epoch e timestamp
+di acquisizione; si ordina soltanto l'insieme dei tag keyword, il cui ordine SQL
+può variare fra database. Testi, metadata e valori bibliografici restano confrontati.
+
+Dieci test mirati passano, senza skip. Fixture EPUB sovrapposta con ID capitolo
+espliciti, revisioni e metadata discordanti: **20 acquisizioni, 15 opere, 17
+snapshot**, evidenze di conflitto preservate. Replay senza nuove versioni/oggetti;
+SIGTERM/SIGKILL su due sorgenti; crash dentro una transazione SQL senza avanzare
+il checkpoint; pausa/ripresa multi-sorgente; staging liberato dopo resume.
+Suite worker: assenze, `.part`, corruzione, parser non supportato e checkpoint.
+Test scheduler/pipeline: completamento fuori ordine, sorgente lenta/veloce,
+barriera SQLite e drenaggio degli errori. Il replay supplementare dell'intero
+corpus preserva conteggi di opere/snapshot/revisioni/oggetti: osservati fino a
+**3 / 4 / 4** gruppi/transazioni concorrenti e **1 / 2 / 4** sorgenti in commit;
+la misura della transazione include l'acquisizione dal pool.
+
+Tre lettori concorrenti dopo il drenaggio: 30 richieste ricerca/lettura per
+modalità, zero errori, P95 **222 / 180 / 179 ms** (sorgenti 1/2/4), HTTP interno.
+È una verifica d'uso, non una campagna P95 né una misura con backlog simultaneo.
+
+Il limite dominante è il **catalogo serializzato**, non l'alimentazione ZIP.
+Nel run esplorativo il profilo registra 552 lotti correnti e 552 storici:
+`current_slice` **86,315 s**, `historical_slice` **55,191 s**, SQL corrente
+**60,172 s**, SQL storico **28,905 s**; intervalli inclusivi/nidificati, non
+additivi al wall-clock. L'attesa/acquisizione del lock bibliografico è **1,642 s**:
+il costo è soprattutto il lavoro svolto serialmente sotto quel lock, inclusi
+proiezione corrente/storica, arricchimento, tag/entità e materializzazione, non
+una prova di forte contesa del lock. Questo individua il successivo problema P3;
+qui non si riaprono bibliografia P1B.1 o facet e non si implementa il blocco successivo.
+
+**Configurazione consigliata: `INGEST_SOURCE_CONCURRENCY=1`.** I budget Compose
+restano invariati; 6/4 è il profilo comparativo, non una nuova configurazione
+produttiva validata con quote. P4/P5 dovranno stabilire quella definitiva.
+
+### Riproduzione P3A
+
+```sh
+docker build -f infra/Dockerfile --target api -t palimora-p3a-api .
+RELEASE_IMAGE=palimora-p3a-api P3A_BASELINE_IMAGE=palimora-p3a-baseline \
+ ./scripts/build-p3a-baseline.sh
+python3 scripts/prepare-p3a-fixture.py \
+ /mnt/teratron_data/AO3_dumper/ao3_dump/data/ao3_stories/queue119_archive05.zip \
+ /mnt/sdb/palimora-p3a-fixture-nuova
+# Avviare il sampler prima della prova; richiede directory private con prefisso P3A.
+python3 scripts/sample-p3a-storage.py /mnt/sdb/palimora-p3a-nuova-mode2 &
+AO3_DUMP_ROOT=/mnt/sdb/palimora-p3a-fixture-nuova \
+ BENCH_SOURCES='["part0.zip","part1.zip","part2.zip","part3.zip"]' \
+ P0_SCENARIO=B P0_PARSERS=6 P0_COMMITS=4 BENCH_PROJECTION_MODE=isolated \
+ INGEST_SOURCE_CONCURRENCY=2 RELEASE_IMAGE=palimora-p3a-api RELEASE_KEEP=1 \
+ RELEASE_BENCH_ROOT=/mnt/sdb/palimora-p3a-nuova-mode2 ./scripts/benchmark-p0.sh
+```
+
+Ripetere **in sequenza** per baseline, nuovo 1 e 4 su directory nuove, cambiando
+solo immagine/concorrenza. Nel worker di ogni fixture, dopo il timing:
+`collect-p3a-storage.cjs` verifica tutti gli oggetti/pack;
+`normalize-p3a-catalog.cjs` confronta i contenuti indipendentemente dagli ID locali;
+`normalize-p3a-observations.cjs` verifica e confronta le evidenze preservate.
+`p3a-disk-sizes.py` misura i bind mount prima del replay supplementare;
+`check-p3a-readers.cjs` verifica tre lettori e `check-p3a-retry.cjs` il replay.
+Gli script richiedono database `_test`, storage `/benchmark/` e fixture private.
+Conservare i servizi della fixture finché queste verifiche terminano, poi fermarli.
+Lo script di aggregazione è
+`scripts/summarize-p3a.py PREFIX FIXTURE`, che richiede suffissi `-baseline`,
+`-1-repeat`, `-mode2`, `-mode4` e confronta gli hash prima di produrre il JSON.
+Evidenze private di questa campagna: `/mnt/sdb/palimora-p3a-{baseline,1-repeat,mode1,mode2,mode4}/results/`.
+
+**Stato P3A: implementata, verificata e misurata; completata sul corpus di test
+indicato.** Il parallelismo migliora lo stadio canonico ma non il throughput
+end-to-end in questa campagna. Default 1 confermato. Nessun deployment definitivo,
+ingest del dump completo o lavoro sul blocco P3 successivo/P4/P5 avviato.

@@ -1,9 +1,10 @@
+import { scheduleSources, sourceBudgets } from "./ingest-sources";
 import { startPersonalWorker, stopPersonalWorker } from "./personal-worker";
 import { readParseCache } from "./archive-catalog";
 import { IngestPipeline } from "./ingest-pipeline";
 import { progressKey } from "./ingest-progress";
 import { runQueue } from "./archive-queue";
-import { readdir, stat, mkdir, writeFile, unlink } from "node:fs/promises";
+import { readdir, stat, mkdir, writeFile, unlink, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -57,6 +58,16 @@ async function ingestTags(source: any, records: any[]) {
     );
   });
 }
+const sourceConcurrency = Number(process.env.INGEST_SOURCE_CONCURRENCY ?? 1);
+if (
+  !Number.isInteger(sourceConcurrency) ||
+  sourceConcurrency < 1 ||
+  sourceConcurrency > 4
+)
+  throw Error("INGEST_SOURCE_CONCURRENCY must be 1–4");
+const parserWorkers = Number(process.env.INGEST_PARSER_WORKERS ?? 2);
+if (!Number.isInteger(parserWorkers) || parserWorkers < 1 || parserWorkers > 16)
+  throw Error("INGEST_PARSER_WORKERS must be 1–16");
 const commitConcurrency = Number(process.env.INGEST_COMMIT_CONCURRENCY ?? 2);
 if (
   !Number.isInteger(commitConcurrency) ||
@@ -96,8 +107,6 @@ export async function tick(batchId?: string) {
       )
     ).rows[0];
     if (!batch) return;
-    let activeSource: any;
-    let activeLocator: string | undefined;
     let reconcileFile: string | undefined;
     try {
       await mkdir(join(store.root, "staging"), { recursive: true });
@@ -193,132 +202,37 @@ export async function tick(batchId?: string) {
           [batch.id],
         )
       ).rows;
-      for (const source of sources) {
-        activeSource = source;
-        if (
-          stopping ||
-          (
-            await pool.query("SELECT state FROM ingest_batches WHERE id=$1", [
-              batch.id,
-            ])
-          ).rows[0].state !== "running"
-        )
-          return;
-        try {
-          const current = await stat(join(root, source.path));
-          const fingerprint = `${current.size}:${current.mtimeMs}`;
-          if (fingerprint !== source.fingerprint) {
-            await pool.query(
-              "UPDATE ingest_sources SET fingerprint=$2,checkpoint=0,checkpoint_detail='{}',imported=0,gaps=0,bytes=0,duplicates=0 WHERE id=$1",
-              [source.id, fingerprint],
-            );
-            source.fingerprint = fingerprint;
-            source.checkpoint = 0;
-            source.checkpoint_detail = {};
-            source.gaps = 0;
-          }
-        } catch (e: any) {
-          if (e.code !== "ENOENT")
-            throw Object.assign(Error("Source I/O unavailable"), {
-              code: "SOURCE_IO",
-            });
+      // Shared downstream gate: no per-source multiplication of the backlog budget.
+      let pressureCheck: Promise<boolean> | undefined;
+      let pressureCheckedAt = 0;
+      const downstreamReady = async () => {
+        if (!pressureCheck || Date.now() - pressureCheckedAt > 1000) {
+          pressureCheckedAt = Date.now();
+          pressureCheck = pool
+            .query(
+              `SELECT
+            (SELECT count(*) FROM catalog_pending) < 65536 AND
+            (SELECT count(*) FROM catalog_snapshot_pending) < 65536 AND
+            (SELECT count(*) FROM catalog_text_pending) < 65536 AS ready`,
+            )
+            .then((r) => r.rows[0].ready as boolean);
         }
-        await pool.query(
-          "UPDATE ingest_sources SET state='valid',error=NULL WHERE id=$1",
-          [source.id],
-        );
-        const p = spawn(
-          "python3",
-          [
-            "-u",
-            resolve(__dirname, "../../ingest-adapters/ao3.py"),
-            join(root, source.path),
-            String(source.checkpoint),
-          ],
-          {
-            stdio: ["pipe", "pipe", "pipe", "pipe"],
-            detached: true,
-            env: {
-              ...process.env,
-              PALIMORA_ADAPTER_ACK: "1",
-              PALIMORA_ADAPTER_CACHE: "1",
-              PALIMORA_METADATA_CACHE: join(store.root, "cache", "metadata"),
-              PALIMORA_ADAPTER_PREFETCH: String(commitConcurrency + 1),
-              PALIMORA_CACHE_FD: "3",
-              PALIMORA_ADAPTER_GROUP_SIZE: String(groupRecords),
-              PALIMORA_ADAPTER_GROUP_BYTES: String(16 * 1024 * 1024),
-              PALIMORA_ENTRY_CURSOR: JSON.stringify(
-                source.checkpoint_detail ?? {},
-              ),
-              ...(reconcileFile
-                ? { PALIMORA_RECONCILE_FILE: reconcileFile }
-                : {}),
-              PALIMORA_ADAPTER_STAGING: join(store.root, "staging"),
-              PALIMORA_METADATA_SCOPE: JSON.stringify(batch.metadata_scope),
-            },
-          },
-        );
-        const exit = new Promise<number | null>((yes, no) => {
-          p.on("close", yes);
-          p.on("error", no);
-        });
-        p.stdin!.on("error", () => {});
-        p.stderr!.resume();
-        (p.stdio[3] as import("node:stream").Writable).on("error", () => {});
-        void exit.catch(() => {});
-        let streamComplete = false;
-        let cancelled = false;
-        const control = setInterval(() => {
-          void pool
-            .query("SELECT state FROM ingest_batches WHERE id=$1", [batch.id])
-            .then((r) => {
-              if (stopping || r.rows[0]?.state !== "running") {
-                cancelled = true;
-                try {
-                  process.kill(-p.pid!, "SIGTERM");
-                } catch (e: any) {
-                  if (e.code !== "ESRCH") throw e;
-                }
-              }
-            })
-            .catch(() => {
-              cancelled = true;
-              try {
-                process.kill(-p.pid!, "SIGTERM");
-              } catch (e: any) {
-                if (e.code !== "ESRCH") throw e;
-              }
-            });
-        }, 1000);
-        control.unref();
-        let leased = false;
-        let previous = progressKey(source.checkpoint, source.checkpoint_detail);
-        const pipeline = new IngestPipeline(
-          commitConcurrency,
-          () => p.stdin!.write("\n"),
-          () => {
-            try {
-              process.kill(-p.pid!, "SIGTERM");
-            } catch (e: any) {
-              if (e.code !== "ESRCH") throw e;
-            }
-          },
-        );
-        const drain = async () => {
+        return pressureCheck;
+      };
+      await scheduleSources(
+        sources,
+        sourceBudgets(sourceConcurrency, parserWorkers, commitConcurrency),
+        async (source, budget) => {
+          const activeSource = source;
+          let activeLocator: string | undefined;
+          let sourceLock: import("./db").DB | undefined;
+          const sourceStaging = join(
+            store.root,
+            "staging",
+            "source-" + source.id,
+          );
           try {
-            await pipeline.drain();
-          } finally {
-            if (leased) {
-              await lock.query("SELECT pg_advisory_unlock_shared(70210405)");
-              leased = false;
-            }
-          }
-        };
-        let blocked = false;
-        let gap = Number(source.gaps) > 0;
-        let gapState = "corrupt_source";
-        try {
-          for await (const line of createInterface({ input: p.stdout! })) {
+            sourceLock = await pool.connect();
             if (
               stopping ||
               (
@@ -327,281 +241,511 @@ export async function tick(batchId?: string) {
                   [batch.id],
                 )
               ).rows[0].state !== "running"
-            ) {
-              try {
-                process.kill(-p.pid!, "SIGTERM");
-              } catch (e: any) {
-                if (e.code !== "ESRCH") throw e;
-              }
+            )
               return;
-            }
-            let e: any;
             try {
-              e = JSON.parse(line);
-              if (e.schema === "palimora.ingest.cache.v1") {
-                if (
-                  e.parser !== "ao3-dump-4" ||
-                  !Array.isArray(e.hashes) ||
-                  e.hashes.length > 1024 ||
-                  e.hashes.some(
-                    (h: any) =>
-                      typeof h !== "string" || !/^[a-f0-9]{64}$/.test(h),
-                  )
-                )
-                  throw Error("Invalid cache request");
-                const cacheDb = await pool.connect();
-                let cached;
-                try {
-                  cached = await readParseCache(cacheDb, e.parser, e.hashes);
-                } finally {
-                  cacheDb.release();
-                }
-                (p.stdio[3] as import("node:stream").Writable).write(
-                  JSON.stringify(
-                    Object.fromEntries(
-                      cached.map((r) => [r.source_hash, r.record]),
-                    ),
-                  ) + "\n",
+              const current = await stat(join(root, source.path));
+              const fingerprint = `${current.size}:${current.mtimeMs}`;
+              if (fingerprint !== source.fingerprint) {
+                await pool.query(
+                  "UPDATE ingest_sources SET fingerprint=$2,checkpoint=0,checkpoint_detail='{}',imported=0,gaps=0,bytes=0,duplicates=0 WHERE id=$1",
+                  [source.id, fingerprint],
                 );
-                continue;
+                source.fingerprint = fingerprint;
+                source.checkpoint = 0;
+                source.checkpoint_detail = {};
+                source.gaps = 0;
               }
-              if (e.schema === "palimora.ingest.group.v1") {
-                if (
-                  e.parser !== "ao3-dump-4" ||
-                  !Array.isArray(e.records) ||
-                  !e.records.length ||
-                  e.records.length > 1024
-                )
-                  throw Error("Invalid adapter group");
-                for (const record of e.records) {
-                  validateEnvelope(record);
-                  if (!record.record && !record.tag)
-                    throw Error("Invalid grouped record");
-                  if (Boolean(record.tag) !== Boolean(e.records[0].tag))
-                    throw Error("Mixed adapter group");
-                }
-              } else validateEnvelope(e);
-            } catch (error: any) {
-              throw Object.assign(error, { code: "PARSER_CONTRACT" });
+            } catch (e: any) {
+              if (e.code !== "ENOENT")
+                throw Object.assign(Error("Source I/O unavailable"), {
+                  code: "SOURCE_IO",
+                });
             }
-            if (e.schema === "palimora.ingest.group.v1" && !e.records[0].tag) {
-              if (!leased) {
-                await lock.query("SELECT pg_advisory_lock_shared(70210405)");
-                leased = true;
+            await pool.query(
+              "UPDATE ingest_sources SET state='valid',error=NULL WHERE id=$1",
+              [source.id],
+            );
+            await mkdir(sourceStaging, { recursive: true });
+            const p = spawn(
+              "python3",
+              [
+                "-u",
+                resolve(__dirname, "../../ingest-adapters/ao3.py"),
+                join(root, source.path),
+                String(source.checkpoint),
+              ],
+              {
+                stdio: ["pipe", "pipe", "pipe", "pipe"],
+                detached: true,
+                env: {
+                  ...process.env,
+                  INGEST_PARSER_WORKERS: String(budget.parsers),
+                  PALIMORA_ADAPTER_ACK: "1",
+                  PALIMORA_ADAPTER_CACHE: "1",
+                  PALIMORA_METADATA_CACHE: join(
+                    store.root,
+                    "cache",
+                    "metadata",
+                  ),
+                  PALIMORA_ADAPTER_PREFETCH: String(budget.commits + 1),
+                  PALIMORA_CACHE_FD: "3",
+                  PALIMORA_ADAPTER_GROUP_SIZE: String(groupRecords),
+                  PALIMORA_ADAPTER_GROUP_BYTES: String(16 * 1024 * 1024),
+                  PALIMORA_ENTRY_CURSOR: JSON.stringify(
+                    source.checkpoint_detail ?? {},
+                  ),
+                  ...(reconcileFile
+                    ? { PALIMORA_RECONCILE_FILE: reconcileFile }
+                    : {}),
+                  PALIMORA_ADAPTER_STAGING: sourceStaging,
+                  PALIMORA_METADATA_SCOPE: JSON.stringify(batch.metadata_scope),
+                },
+              },
+            );
+            const exit = new Promise<number | null>((yes, no) => {
+              p.on("close", yes);
+              p.on("error", no);
+            });
+            p.stdin!.on("error", () => {});
+            p.stderr!.resume();
+            (p.stdio[3] as import("node:stream").Writable).on(
+              "error",
+              () => {},
+            );
+            void exit.catch(() => {});
+            let streamComplete = false;
+            let cancelled = false;
+            const control = setInterval(() => {
+              void pool
+                .query("SELECT state FROM ingest_batches WHERE id=$1", [
+                  batch.id,
+                ])
+                .then((r) => {
+                  if (stopping || r.rows[0]?.state !== "running") {
+                    cancelled = true;
+                    try {
+                      process.kill(-p.pid!, "SIGTERM");
+                    } catch (e: any) {
+                      if (e.code !== "ESRCH") throw e;
+                    }
+                  }
+                })
+                .catch(() => {
+                  cancelled = true;
+                  try {
+                    process.kill(-p.pid!, "SIGTERM");
+                  } catch (e: any) {
+                    if (e.code !== "ESRCH") throw e;
+                  }
+                });
+            }, 1000);
+            control.unref();
+            let leased = false;
+            let previous = progressKey(
+              source.checkpoint,
+              source.checkpoint_detail,
+            );
+            const pipeline = new IngestPipeline(
+              budget.commits,
+              () => p.stdin!.write("\n"),
+              () => {
+                try {
+                  process.kill(-p.pid!, "SIGTERM");
+                } catch (e: any) {
+                  if (e.code !== "ESRCH") throw e;
+                }
+              },
+            );
+            const drain = async () => {
+              try {
+                await pipeline.drain();
+              } finally {
+                if (leased) {
+                  await sourceLock!.query(
+                    "SELECT pg_advisory_unlock_shared(70210405)",
+                  );
+                  leased = false;
+                }
               }
-              const keys = e.records.flatMap((r: any) => [
-                "provisional:" +
-                  source.path +
-                  ":" +
-                  (r.record.source_entry || r.locator),
-                ...(r.record.external_id
-                  ? ["external:" + r.record.external_id]
-                  : []),
-              ]);
-              // Resolve both direct and linked identities through indexed keys.
-              const identities = await pool.query(
-                `SELECT w.id,l.canonical_work_id FROM archive_work_heads w
+            };
+            let blocked = false;
+            let gap = Number(source.gaps) > 0;
+            let gapState = "corrupt_source";
+            try {
+              for await (const line of createInterface({ input: p.stdout! })) {
+                while (!stopping && !cancelled && !(await downstreamReady()))
+                  await new Promise((resolve) => setTimeout(resolve, 250));
+                if (
+                  stopping ||
+                  (
+                    await pool.query(
+                      "SELECT state FROM ingest_batches WHERE id=$1",
+                      [batch.id],
+                    )
+                  ).rows[0].state !== "running"
+                ) {
+                  try {
+                    process.kill(-p.pid!, "SIGTERM");
+                  } catch (e: any) {
+                    if (e.code !== "ESRCH") throw e;
+                  }
+                  return;
+                }
+                let e: any;
+                try {
+                  e = JSON.parse(line);
+                  if (e.schema === "palimora.ingest.cache.v1") {
+                    if (
+                      e.parser !== "ao3-dump-4" ||
+                      !Array.isArray(e.hashes) ||
+                      e.hashes.length > 1024 ||
+                      e.hashes.some(
+                        (h: any) =>
+                          typeof h !== "string" || !/^[a-f0-9]{64}$/.test(h),
+                      )
+                    )
+                      throw Error("Invalid cache request");
+                    const cacheDb = await pool.connect();
+                    let cached;
+                    try {
+                      cached = await readParseCache(
+                        cacheDb,
+                        e.parser,
+                        e.hashes,
+                      );
+                    } finally {
+                      cacheDb.release();
+                    }
+                    (p.stdio[3] as import("node:stream").Writable).write(
+                      JSON.stringify(
+                        Object.fromEntries(
+                          cached.map((r) => [r.source_hash, r.record]),
+                        ),
+                      ) + "\n",
+                    );
+                    continue;
+                  }
+                  if (e.schema === "palimora.ingest.group.v1") {
+                    if (
+                      e.parser !== "ao3-dump-4" ||
+                      !Array.isArray(e.records) ||
+                      !e.records.length ||
+                      e.records.length > 1024
+                    )
+                      throw Error("Invalid adapter group");
+                    for (const record of e.records) {
+                      validateEnvelope(record);
+                      if (!record.record && !record.tag)
+                        throw Error("Invalid grouped record");
+                      if (Boolean(record.tag) !== Boolean(e.records[0].tag))
+                        throw Error("Mixed adapter group");
+                    }
+                  } else validateEnvelope(e);
+                } catch (error: any) {
+                  throw Object.assign(error, { code: "PARSER_CONTRACT" });
+                }
+                if (
+                  e.schema === "palimora.ingest.group.v1" &&
+                  !e.records[0].tag
+                ) {
+                  if (!leased) {
+                    await sourceLock!.query(
+                      "SELECT pg_advisory_lock_shared(70210405)",
+                    );
+                    leased = true;
+                  }
+                  const keys = e.records.flatMap((r: any) => [
+                    "provisional:" +
+                      source.path +
+                      ":" +
+                      (r.record.source_entry || r.locator),
+                    ...(r.record.external_id
+                      ? ["external:" + r.record.external_id]
+                      : []),
+                  ]);
+                  // Resolve both direct and linked identities through indexed keys.
+                  const identities = await pool.query(
+                    `SELECT w.id,l.canonical_work_id FROM archive_work_heads w
                 LEFT JOIN archive_identity_links l ON l.work_id=w.id
                 WHERE w.external_id=ANY($1::text[]) OR w.provisional_entry_id IN (
                   SELECT e.id FROM archive_entries e JOIN archive_paths p ON p.id=e.path_id
                   WHERE p.path=$2 AND e.locator=ANY($3::text[]))`,
-                [
-                  e.records
-                    .map((r: any) => r.record.external_id)
-                    .filter(Boolean),
-                  source.path,
-                  e.records.map((r: any) => r.record.source_entry || r.locator),
-                ],
-              );
-              keys.push(
-                ...identities.rows.flatMap((r) => [
-                  "work:" + r.id,
-                  ...(r.canonical_work_id
-                    ? ["work:" + r.canonical_work_id]
-                    : []),
-                ]),
-              );
-              for (const record of e.records) {
-                const [cursor, row] = previous.split(":").map(Number);
-                const nextRow = record.checkpoint_detail?.row ?? 0;
-                if (
-                  !Number.isSafeInteger(nextRow) ||
-                  nextRow < 0 ||
-                  record.cursor < cursor ||
-                  (record.cursor === cursor && nextRow <= row)
-                )
-                  throw Object.assign(
-                    Error("Non-monotonic adapter checkpoint"),
-                    { code: "PARSER_CONTRACT" },
+                    [
+                      e.records
+                        .map((r: any) => r.record.external_id)
+                        .filter(Boolean),
+                      source.path,
+                      e.records.map(
+                        (r: any) => r.record.source_entry || r.locator,
+                      ),
+                    ],
                   );
-                record.previous = previous;
-                previous = progressKey(record.cursor, record.checkpoint_detail);
-              }
-              await pipeline.add(keys, async () => {
-                try {
-                  await ingestRecords(source, e.records);
-                } catch (error: any) {
-                  activeLocator = error.ingestLocator ?? e.records[0].locator;
-                  throw error;
+                  keys.push(
+                    ...identities.rows.flatMap((r) => [
+                      "work:" + r.id,
+                      ...(r.canonical_work_id
+                        ? ["work:" + r.canonical_work_id]
+                        : []),
+                    ]),
+                  );
+                  for (const record of e.records) {
+                    const [cursor, row] = previous.split(":").map(Number);
+                    const nextRow = record.checkpoint_detail?.row ?? 0;
+                    if (
+                      !Number.isSafeInteger(nextRow) ||
+                      nextRow < 0 ||
+                      record.cursor < cursor ||
+                      (record.cursor === cursor && nextRow <= row)
+                    )
+                      throw Object.assign(
+                        Error("Non-monotonic adapter checkpoint"),
+                        { code: "PARSER_CONTRACT" },
+                      );
+                    record.previous = previous;
+                    previous = progressKey(
+                      record.cursor,
+                      record.checkpoint_detail,
+                    );
+                  }
+                  await pipeline.add(keys, async () => {
+                    try {
+                      await ingestRecords(source, e.records);
+                    } catch (error: any) {
+                      activeLocator =
+                        error.ingestLocator ?? e.records[0].locator;
+                      throw error;
+                    }
+                  });
+                  if (
+                    e.records.some((v: any) => v.record.state === "partial")
+                  ) {
+                    gap = true;
+                    gapState = "corrupt_source";
+                  }
+                  continue;
                 }
-              });
-              if (e.records.some((v: any) => v.record.state === "partial")) {
-                gap = true;
-                gapState = "corrupt_source";
-              }
-              continue;
-            }
-            await drain();
-            if (e.schema === "palimora.ingest.group.v1") {
-              await ingestTags(source, e.records);
-              const last = e.records[e.records.length - 1];
-              previous = progressKey(last.cursor, last.checkpoint_detail);
-              p.stdin!.write("\n");
-              continue;
-            }
-            if (e.index_progress === undefined && e.total === undefined)
-              previous = progressKey(e.cursor, e.checkpoint_detail);
-            activeLocator = e.locator;
-            if (e.index_progress !== undefined) {
-              await pool.query(
-                "UPDATE ingest_sources SET index_progress=$2::bigint WHERE id=$1",
-                [source.id, e.index_progress],
-              );
-              p.stdin!.write("\n");
-              continue;
-            }
-            if (e.io_error)
-              throw Object.assign(Error(e.message), {
-                code: e.io_error === 28 ? "ENOSPC" : "SOURCE_IO",
-              });
-            if (e.total !== undefined) {
-              await pool.query(
-                "UPDATE ingest_sources SET total=$2 WHERE id=$1",
-                [source.id, e.total],
-              );
-              p.stdin!.write("\n");
-              continue;
-            }
-            if (e.tag) {
-              await ingestTags(source, [e]);
-              p.stdin!.write("\n");
-              continue;
-            }
-            if (e.artifact || e.artifacts) {
-              await archiveTransaction(async (db) => {
-                const refs = [];
-                for (const o of e.artifacts ?? [e.artifact]) {
-                  const bytes = await objectBytes(o, db);
-                  await preserve(db, [{ kind: o.kind, bytes }]);
-                  refs.push({ name: o.name, hash: o.hash });
+                await drain();
+                if (e.schema === "palimora.ingest.group.v1") {
+                  await ingestTags(source, e.records);
+                  const last = e.records[e.records.length - 1];
+                  previous = progressKey(last.cursor, last.checkpoint_detail);
+                  p.stdin!.write("\n");
+                  continue;
                 }
+                if (e.index_progress === undefined && e.total === undefined)
+                  previous = progressKey(e.cursor, e.checkpoint_detail);
+                activeLocator = e.locator;
+                if (e.index_progress !== undefined) {
+                  await pool.query(
+                    "UPDATE ingest_sources SET index_progress=$2::bigint WHERE id=$1",
+                    [source.id, e.index_progress],
+                  );
+                  p.stdin!.write("\n");
+                  continue;
+                }
+                if (e.io_error)
+                  throw Object.assign(Error(e.message), {
+                    code: e.io_error === 28 ? "ENOSPC" : "SOURCE_IO",
+                  });
+                if (e.total !== undefined) {
+                  await pool.query(
+                    "UPDATE ingest_sources SET total=$2 WHERE id=$1",
+                    [source.id, e.total],
+                  );
+                  p.stdin!.write("\n");
+                  continue;
+                }
+                if (e.tag) {
+                  await ingestTags(source, [e]);
+                  p.stdin!.write("\n");
+                  continue;
+                }
+                if (e.artifact || e.artifacts) {
+                  await archiveTransaction(async (db) => {
+                    const refs = [];
+                    for (const o of e.artifacts ?? [e.artifact]) {
+                      const bytes = await objectBytes(o, db);
+                      await preserve(db, [{ kind: o.kind, bytes }]);
+                      refs.push({ name: o.name, hash: o.hash });
+                    }
+                    await db.query(
+                      "INSERT INTO archive_outbox(event,payload) VALUES($1,$2)",
+                      [
+                        "ingest.artifact.preserved",
+                        {
+                          source: source.path,
+                          locator: e.locator,
+                          objects: refs,
+                        },
+                      ],
+                    );
+                    await db.query(
+                      "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}',bytes=bytes+$3 WHERE id=$1",
+                      [source.id, e.cursor, e.bytes ?? 0],
+                    );
+                  });
+                  p.stdin!.write("\n");
+                  continue;
+                }
+
+                if (e.gap || e.blocked)
+                  await pool.query(
+                    "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+                    [
+                      source.id,
+                      e.locator,
+                      e.gap ?? e.blocked.code,
+                      e.blocked ?? {
+                        cursor: e.cursor,
+                        detail: e.detail,
+                        parser: e.parser,
+                      },
+                      source.fingerprint,
+                    ],
+                  );
+                if (e.blocked) {
+                  blocked = true;
+                  await pool.query(
+                    "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
+                    [
+                      source.id,
+                      {
+                        ...e.blocked,
+                        locator: e.locator,
+                        cursor: e.cursor,
+                        parser: e.parser,
+                      },
+                    ],
+                  );
+                  await pool.query(
+                    "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1 AND state='running'",
+                    [
+                      batch.id,
+                      {
+                        source: source.path,
+                        ...e.blocked,
+                        locator: e.locator,
+                        cursor: e.cursor,
+                      },
+                    ],
+                  );
+                  break;
+                }
+                if (e.gap) {
+                  gap = true;
+                  gapState = e.gap;
+                  await pool.query(
+                    "UPDATE ingest_sources SET gaps=gaps+1,error=$2,checkpoint=GREATEST(checkpoint,$3::bigint),checkpoint_detail=CASE WHEN checkpoint<$3::bigint THEN '{}'::jsonb ELSE checkpoint_detail END WHERE id=$1",
+                    [source.id, { code: e.gap, locator: e.locator }, e.cursor],
+                  );
+                } else if (e.record) {
+                  try {
+                    await ingestRecord(source, e);
+                  } catch (error: any) {
+                    activeLocator = error.ingestLocator ?? activeLocator;
+                    throw error;
+                  }
+                  if (e.record.state === "partial") {
+                    gap = true;
+                    gapState = "corrupt_source";
+                  }
+                } else
+                  await pool.query(
+                    "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}' WHERE id=$1",
+                    [source.id, e.cursor],
+                  );
+                p.stdin!.write("\n");
+              }
+              await drain();
+              streamComplete = true;
+            } finally {
+              clearInterval(control);
+              try {
+                await drain();
+              } finally {
+                if (!streamComplete || blocked || cancelled || stopping)
+                  try {
+                    process.kill(-p.pid!, "SIGTERM");
+                  } catch (e: any) {
+                    if (e.code !== "ESRCH") throw e;
+                  }
+                await exit;
+                await rm(sourceStaging, { recursive: true, force: true });
+              }
+            }
+            const code = await exit;
+            if (blocked || cancelled || stopping) return;
+            if (code !== 0) throw Error("ADAPTER_PROCESS_FAILED");
+            await pool.query(
+              "UPDATE ingest_sources SET state=$2,index_progress=NULL WHERE id=$1",
+              [source.id, gap ? gapState : "ingested"],
+            );
+          } catch (e: any) {
+            if (
+              activeSource &&
+              (e.code === "PARSER_CONTRACT" ||
+                [
+                  "ADAPTER_PATH",
+                  "ADAPTER_HASH",
+                  "ADAPTER_RANGE",
+                  "CHAPTER_OBJECT_MISSING",
+                ].includes(e.message))
+            ) {
+              const detail = {
+                code: e.code ?? e.message,
+                locator: activeLocator,
+                source: activeSource.path,
+                parser: "ao3-dump-4",
+                trace: e.stack,
+              };
+              await transaction(async (db) => {
                 await db.query(
-                  "INSERT INTO archive_outbox(event,payload) VALUES($1,$2)",
+                  "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
+                  [activeSource.id, detail],
+                );
+                await db.query(
+                  "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,'parser_unsupported',$3,$4) ON CONFLICT DO NOTHING",
                   [
-                    "ingest.artifact.preserved",
-                    { source: source.path, locator: e.locator, objects: refs },
+                    activeSource.id,
+                    activeLocator ?? "source",
+                    detail,
+                    activeSource.fingerprint,
                   ],
                 );
                 await db.query(
-                  "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}',bytes=bytes+$3 WHERE id=$1",
-                  [source.id, e.cursor, e.bytes ?? 0],
+                  "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1 AND state='running'",
+                  [batch.id, detail],
                 );
               });
-              p.stdin!.write("\n");
-              continue;
+              return;
             }
-
-            if (e.gap || e.blocked)
+            if (e.code === "SOURCE_IO" && activeSource) {
+              const attempts = Number(activeSource.attempts) + 1;
               await pool.query(
-                "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+                "UPDATE ingest_sources SET attempts=$2,state=$3,next_retry_at=now()+($4::text||' seconds')::interval,gaps=CASE WHEN $2>=5 THEN gaps+1 ELSE gaps END,error=$5 WHERE id=$1",
                 [
-                  source.id,
-                  e.locator,
-                  e.gap ?? e.blocked.code,
-                  e.blocked ?? {
-                    cursor: e.cursor,
-                    detail: e.detail,
-                    parser: e.parser,
-                  },
-                  source.fingerprint,
+                  activeSource.id,
+                  attempts,
+                  attempts >= 5 ? "corrupt_source" : "retry_pending",
+                  Math.min(300, 2 ** attempts),
+                  { code: "SOURCE_IO" },
                 ],
               );
-            if (e.blocked) {
-              blocked = true;
-              await pool.query(
-                "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
-                [
-                  source.id,
-                  {
-                    ...e.blocked,
-                    locator: e.locator,
-                    cursor: e.cursor,
-                    parser: e.parser,
-                  },
-                ],
-              );
-              await pool.query(
-                "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1",
-                [
-                  batch.id,
-                  {
-                    source: source.path,
-                    ...e.blocked,
-                    locator: e.locator,
-                    cursor: e.cursor,
-                  },
-                ],
-              );
-              break;
+              return;
             }
-            if (e.gap) {
-              gap = true;
-              gapState = e.gap;
-              await pool.query(
-                "UPDATE ingest_sources SET gaps=gaps+1,error=$2,checkpoint=GREATEST(checkpoint,$3::bigint),checkpoint_detail=CASE WHEN checkpoint<$3::bigint THEN '{}'::jsonb ELSE checkpoint_detail END WHERE id=$1",
-                [source.id, { code: e.gap, locator: e.locator }, e.cursor],
-              );
-            } else if (e.record) {
-              try {
-                await ingestRecord(source, e);
-              } catch (error: any) {
-                activeLocator = error.ingestLocator ?? activeLocator;
-                throw error;
-              }
-              if (e.record.state === "partial") {
-                gap = true;
-                gapState = "corrupt_source";
-              }
-            } else
-              await pool.query(
-                "UPDATE ingest_sources SET checkpoint=$2,checkpoint_detail='{}' WHERE id=$1",
-                [source.id, e.cursor],
-              );
-            p.stdin!.write("\n");
-          }
-          await drain();
-          streamComplete = true;
-        } finally {
-          clearInterval(control);
-          try {
-            await drain();
+            await pool.query(
+              "UPDATE ingest_batches SET state='failed_global',error=$2,updated_at=now() WHERE id=$1 AND state='running'",
+              [
+                batch.id,
+                { code: e.code ?? "INGEST_FAILURE", message: e.message },
+              ],
+            );
           } finally {
-            if (!streamComplete || blocked || cancelled || stopping)
-              try {
-                process.kill(-p.pid!, "SIGTERM");
-              } catch (e: any) {
-                if (e.code !== "ESRCH") throw e;
-              }
+            sourceLock?.release();
           }
-        }
-        const code = await exit;
-        if (blocked || cancelled || stopping) return;
-        if (code !== 0) throw Error("ADAPTER_PROCESS_FAILED");
-        await pool.query(
-          "UPDATE ingest_sources SET state=$2,index_progress=NULL WHERE id=$1",
-          [source.id, gap ? gapState : "ingested"],
-        );
-      }
+        },
+      );
       if (
         (
           await pool.query(
@@ -616,60 +760,8 @@ export async function tick(batchId?: string) {
         [batch.id],
       );
     } catch (e: any) {
-      if (
-        activeSource &&
-        (e.code === "PARSER_CONTRACT" ||
-          [
-            "ADAPTER_PATH",
-            "ADAPTER_HASH",
-            "ADAPTER_RANGE",
-            "CHAPTER_OBJECT_MISSING",
-          ].includes(e.message))
-      ) {
-        const detail = {
-          code: e.code ?? e.message,
-          locator: activeLocator,
-          source: activeSource.path,
-          parser: "ao3-dump-4",
-          trace: e.stack,
-        };
-        await transaction(async (db) => {
-          await db.query(
-            "UPDATE ingest_sources SET state='parser_unsupported',error=$2 WHERE id=$1",
-            [activeSource.id, detail],
-          );
-          await db.query(
-            "INSERT INTO ingest_issues(source_id,locator,code,detail,fingerprint) VALUES($1,$2,'parser_unsupported',$3,$4) ON CONFLICT DO NOTHING",
-            [
-              activeSource.id,
-              activeLocator ?? "source",
-              detail,
-              activeSource.fingerprint,
-            ],
-          );
-          await db.query(
-            "UPDATE ingest_batches SET state='parser_blocked',error=$2 WHERE id=$1",
-            [batch.id, detail],
-          );
-        });
-        return;
-      }
-      if (e.code === "SOURCE_IO" && activeSource) {
-        const attempts = Number(activeSource.attempts) + 1;
-        await pool.query(
-          "UPDATE ingest_sources SET attempts=$2,state=$3,next_retry_at=now()+($4::text||' seconds')::interval,gaps=CASE WHEN $2>=5 THEN gaps+1 ELSE gaps END,error=$5 WHERE id=$1",
-          [
-            activeSource.id,
-            attempts,
-            attempts >= 5 ? "corrupt_source" : "retry_pending",
-            Math.min(300, 2 ** attempts),
-            { code: "SOURCE_IO" },
-          ],
-        );
-        throw e;
-      }
       await pool.query(
-        "UPDATE ingest_batches SET state='failed_global',error=$2,updated_at=now() WHERE id=$1",
+        "UPDATE ingest_batches SET state='failed_global',error=$2,updated_at=now() WHERE id=$1 AND state IN ('pending','scanning','running')",
         [batch.id, { code: e.code ?? "INGEST_FAILURE", message: e.message }],
       );
     } finally {

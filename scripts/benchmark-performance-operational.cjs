@@ -72,7 +72,12 @@ function launch(name, file) {
     timeline = [];
   await pool.query(
     "INSERT INTO ingest_batches(id,state,selection,reprocess) VALUES($1,'pending',$2,false)",
-    [id, ["queue119_archive05.zip"]],
+    [
+      id,
+      process.env.BENCH_SOURCES
+        ? JSON.parse(process.env.BENCH_SOURCES)
+        : ["queue119_archive05.zip"],
+    ],
   );
   let complete = false;
   while (performance.now() - start < 3600000) {

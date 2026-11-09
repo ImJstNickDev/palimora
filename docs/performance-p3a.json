@@ -1,0 +1,3323 @@
+{
+  "schema": "palimora.performance.p3a.v1",
+  "reference_commit": "6928e8844345f5b28ddddfb556c908aa32f4d897",
+  "status": "implemented_verified_measured",
+  "configuration": {
+    "source_default": 1,
+    "parsers": 6,
+    "commits": 4,
+    "group_records": 256,
+    "zstd_level": 3,
+    "postgres_pool": 12,
+    "projection_mode": "isolated",
+    "search_parallel_facets": false,
+    "queue_gate_per_queue": 65536
+  },
+  "corpus": {
+    "works": 11032,
+    "sources": 4,
+    "source_bytes": 228732607,
+    "decompressed_bytes": 598801143,
+    "limitation": "Artificial partitions of the single authorized reference ZIP; not representative of the entire dump.",
+    "reference_zip_sha256": "fd8e01e155c1a668c91bd86bc67cfc9b2ac3ad9da1322a35925a74c226e85429"
+  },
+  "runs": {
+    "baseline": {
+      "canonical_seconds": 52.639144,
+      "canonical_works_per_second": 209.5778761143988,
+      "source_gib_per_hour": 14.568736634833982,
+      "decompressed_mib_per_second": 10.848604808501563,
+      "chapters_per_second": 435.5693929977281,
+      "objects_per_second": 2033.7336792558783,
+      "end_to_end_seconds": 161.65635009765626,
+      "end_to_end_works_per_second": 68.24353013868983,
+      "drain_and_visibility_seconds": 109.01720609765626,
+      "catalog_done_seconds_from_batch_creation": 150.08843082099997,
+      "all_queues_empty_seconds_from_batch_creation": 153.11043564,
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 8332,
+          "mean_residence_seconds_estimate": 51.777861923655635
+        },
+        "historical": {
+          "max_sampled": 8332,
+          "mean_residence_seconds_estimate": 51.777861923655635
+        },
+        "text": {
+          "max_sampled": 820,
+          "mean_residence_seconds_estimate": 3.266528973046048
+        }
+      },
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 169,
+            "seconds": 168.0202362537384,
+            "cpu_seconds": 134.640162,
+            "cpu_mean_percent": 80.1333012034759,
+            "cpu_max_percent": 441.24342121195633,
+            "working_mean_mib": 839.4427699704142,
+            "working_max_mib": 1000.35546875,
+            "memory_max_mib": 1429.00390625,
+            "read_mib": 5.30859375,
+            "write_mib": 803.1328125,
+            "rx_mib": 28.72567081451416,
+            "tx_mib": 171.37717247009277
+          },
+          "pg": {
+            "samples": 169,
+            "seconds": 168.0191249847412,
+            "cpu_seconds": 141.749069,
+            "cpu_mean_percent": 84.36484180766509,
+            "cpu_max_percent": 281.41805099145296,
+            "working_mean_mib": 337.5194850221894,
+            "working_max_mib": 446.421875,
+            "memory_max_mib": 1299.03125,
+            "read_mib": 11.20703125,
+            "write_mib": 2289.3671875,
+            "rx_mib": 515.6725225448608,
+            "tx_mib": 244.8980302810669
+          },
+          "search": {
+            "samples": 169,
+            "seconds": 168.0173888206482,
+            "cpu_seconds": 159.074986,
+            "cpu_mean_percent": 94.67769206305553,
+            "cpu_max_percent": 323.9347976664545,
+            "working_mean_mib": 1574.0308801775147,
+            "working_max_mib": 1763.6953125,
+            "memory_max_mib": 2486.04296875,
+            "read_mib": 30.375,
+            "write_mib": 932.734375,
+            "rx_mib": 409.1943941116333,
+            "tx_mib": 2.0642032623291016
+          },
+          "redis": {
+            "samples": 169,
+            "seconds": 168.01471590995789,
+            "cpu_seconds": 1.539666,
+            "cpu_mean_percent": 0.9163875864451866,
+            "cpu_max_percent": 1.6616877601935116,
+            "working_mean_mib": 4.958741678994083,
+            "working_max_mib": 5.32421875,
+            "memory_max_mib": 5.328125,
+            "read_mib": 0.2421875,
+            "write_mib": 0.6171875,
+            "rx_mib": 0.7820768356323242,
+            "tx_mib": 0.4745054244995117
+          },
+          "projection": {
+            "samples": 169,
+            "seconds": 167.79399704933167,
+            "cpu_seconds": 113.188218,
+            "cpu_mean_percent": 67.45665517862508,
+            "cpu_max_percent": 109.78010346165237,
+            "working_mean_mib": 196.38819803994082,
+            "working_max_mib": 261.21875,
+            "memory_max_mib": 262.09765625,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 218.71238231658936,
+            "tx_mib": 754.2706995010376
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 10.92,
+          "rss_peak_bytes": 176476160
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 56.96,
+          "rss_peak_bytes": 653000704
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.5,
+          "rss_peak_bytes": 58765312
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.88,
+          "rss_peak_bytes": 27312128
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.23,
+          "rss_peak_bytes": 43401216
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.76,
+          "rss_peak_bytes": 26603520
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 27525120
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.8,
+          "rss_peak_bytes": 26861568
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 28057600
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.18,
+          "rss_peak_bytes": 61296640
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 26996736
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.85,
+          "rss_peak_bytes": 26435584
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.67,
+          "rss_peak_bytes": 26853376
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.72,
+          "rss_peak_bytes": 27770880
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.78,
+          "rss_peak_bytes": 42848256
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.71,
+          "rss_peak_bytes": 26636288
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.09,
+          "rss_peak_bytes": 61083648
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.07,
+          "rss_peak_bytes": 26611712
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.94,
+          "rss_peak_bytes": 28131328
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.96,
+          "rss_peak_bytes": 27652096
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.95,
+          "rss_peak_bytes": 27213824
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.07,
+          "rss_peak_bytes": 28594176
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.97,
+          "rss_peak_bytes": 27021312
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.85,
+          "rss_peak_bytes": 57057280
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.81,
+          "rss_peak_bytes": 28319744
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 27279360
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 27045888
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.9,
+          "rss_peak_bytes": 27181056
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.74,
+          "rss_peak_bytes": 27529216
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 26152960
+        }
+      ],
+      "max_python_processes_sampled": 7,
+      "staging_peak_sampled_bytes": 545991137,
+      "staging_allocated_peak_sampled_bytes": 546025472,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787397",
+          "packs": "55",
+          "database_bytes": "433925267"
+        },
+        "physical": {
+          "records": 107060,
+          "unique_hashes": 107054,
+          "duplicates": 6,
+          "duplicate_record_bytes": 2449,
+          "pack_sizes": [
+            388,
+            37285,
+            63782,
+            112924,
+            2508995,
+            2838902,
+            2839183,
+            3017316,
+            3169144,
+            3229523,
+            3856476,
+            4085005,
+            4562676,
+            4672653,
+            4807121,
+            4812008,
+            4856309,
+            5063131,
+            5109920,
+            5155318,
+            5211592,
+            5293499,
+            5300881,
+            5316492,
+            5318121,
+            5417198,
+            5530395,
+            5608912,
+            5652085,
+            5668941,
+            5677713,
+            5681448,
+            5702241,
+            5708853,
+            5712158,
+            5857337,
+            5876020,
+            5890004,
+            5913403,
+            6158703,
+            6240247,
+            6246870,
+            6254132,
+            6344679,
+            6444955,
+            7023984,
+            7504407,
+            8006412,
+            8084885,
+            8173226,
+            8195845,
+            8253589,
+            8332903,
+            8638709,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "e7cfd6678f7883f6ad40088efd5f23f9",
+          "historical": "eb7d95afcad76ce87286be7c2b7f7b5b"
+        },
+        "search_content_sha256": "4e60d0d3c9b1df1db965bc1fbc1d8ee0035da09bacc5f82930fa83dae54f76d7",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "6ab76ff84359561a74dd724d6db3b21f"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290790286,
+          "allocated": 290906112,
+          "files": 55
+        },
+        "packs": {
+          "apparent": 290790286,
+          "allocated": 290906112,
+          "files": 55
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "bytes_per_work": 26358.80039883974,
+        "source_to_canonical_ratio": 0.7865895733532172
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 8.465449278,
+        "verified_at": 1794208472634,
+        "monotonic_ns": "544892726438504"
+      },
+      "image_id": "sha256:28c6bff2256292a88a674c709684888956dc3043c6a40404638c4f1c491c34f2",
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1722,
+            "seconds": 1.0991716929996793,
+            "max_seconds": 0.03243862399999853,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1677,
+            "seconds": 1.5238476669999912,
+            "max_seconds": 0.029469842000000426,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 573,
+            "seconds": 1.2194321360001545,
+            "max_seconds": 0.056433053000000656,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8850,
+            "seconds": 36.03584319499913,
+            "max_seconds": 2.3637146470000006,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 573,
+            "seconds": 84.81970996299994,
+            "max_seconds": 2.7154584039999974,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6114,
+            "seconds": 10.532728193999871,
+            "max_seconds": 0.15312454399999842,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 573,
+            "seconds": 52.260632539999875,
+            "max_seconds": 0.3823371619999998,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.706056651999598,
+            "max_seconds": 0.25945568099999217,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.478736605000242,
+            "max_seconds": 0.04844050900000002,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.590577392999973,
+            "max_seconds": 0.03524845800000185,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4488559060000605,
+            "max_seconds": 0.028899745999995504,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.743058951999984,
+            "max_seconds": 0.24936811199999648,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.882837073000044,
+            "max_seconds": 0.18751605299999938,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.471284239000287,
+            "max_seconds": 0.05728465800000413,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.870787303000084,
+            "max_seconds": 0.025603977999999188,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4697196619999071,
+            "max_seconds": 0.03893098100000498,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 17.409673350999718,
+            "max_seconds": 0.13557263399999647,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.0537669920000394,
+            "max_seconds": 0.0326097660000014,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1722,
+            "seconds": 1.0926872249999118,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12714,
+            "seconds": 60.23166108199945,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8874,
+            "seconds": 28.359398906000358,
+            "commits": 573
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290790286,
+          "allocated_bytes": 290906112,
+          "files": 55
+        },
+        "postgres": {
+          "apparent_bytes": 1211025200,
+          "allocated_bytes": 1211129856,
+          "files": 1897
+        },
+        "search": {
+          "apparent_bytes": 474120492,
+          "allocated_bytes": 474562560,
+          "files": 139
+        },
+        "redis": {
+          "apparent_bytes": 398033,
+          "allocated_bytes": 413696,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 1976334011,
+      "persistent_bytes_per_work": 179145.57750181292,
+      "source_to_persistent_ratio": 0.1157358046397553,
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "opensearch_primary_bytes": 473918436
+    },
+    "1-repeat": {
+      "canonical_seconds": 51.040768,
+      "canonical_works_per_second": 216.14094834936654,
+      "source_gib_per_hour": 15.024966427211705,
+      "decompressed_mib_per_second": 11.188336169114974,
+      "chapters_per_second": 449.20954167460803,
+      "objects_per_second": 2097.421418110323,
+      "end_to_end_seconds": 164.66661303710939,
+      "end_to_end_works_per_second": 66.99597323662582,
+      "drain_and_visibility_seconds": 113.62584503710939,
+      "catalog_done_seconds_from_batch_creation": 153.15406335,
+      "all_queues_empty_seconds_from_batch_creation": 154.159717898,
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 8552,
+          "mean_residence_seconds_estimate": 55.656467429361456
+        },
+        "historical": {
+          "max_sampled": 8552,
+          "mean_residence_seconds_estimate": 55.656467429361456
+        },
+        "text": {
+          "max_sampled": 820,
+          "mean_residence_seconds_estimate": 1.7985116846872717
+        }
+      },
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.05455088615417,
+            "cpu_seconds": 134.368678,
+            "cpu_mean_percent": 77.64527272582151,
+            "cpu_max_percent": 445.0419451392562,
+            "working_mean_mib": 717.4804911997127,
+            "working_max_mib": 861.53515625,
+            "memory_max_mib": 1374.00390625,
+            "read_mib": 1.125,
+            "write_mib": 818.56640625,
+            "rx_mib": 28.759748458862305,
+            "tx_mib": 171.4367380142212
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.05316376686096,
+            "cpu_seconds": 142.469766,
+            "cpu_mean_percent": 82.32716634521445,
+            "cpu_max_percent": 261.5106583755253,
+            "working_mean_mib": 314.9472880747126,
+            "working_max_mib": 435.67578125,
+            "memory_max_mib": 1272.02734375,
+            "read_mib": 6.14453125,
+            "write_mib": 2257.203125,
+            "rx_mib": 516.5509815216064,
+            "tx_mib": 245.31939029693604
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.0576114654541,
+            "cpu_seconds": 163.104349,
+            "cpu_mean_percent": 94.24858439847301,
+            "cpu_max_percent": 368.14130093327094,
+            "working_mean_mib": 1617.9555944683907,
+            "working_max_mib": 1801.77734375,
+            "memory_max_mib": 2521.98046875,
+            "read_mib": 26.07421875,
+            "write_mib": 956.17578125,
+            "rx_mib": 409.3496513366699,
+            "tx_mib": 2.238433837890625
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.0556938648224,
+            "cpu_seconds": 1.614241,
+            "cpu_mean_percent": 0.9327869912566524,
+            "cpu_max_percent": 2.4279892951178756,
+            "working_mean_mib": 8.132677801724139,
+            "working_max_mib": 8.47265625,
+            "memory_max_mib": 8.8046875,
+            "read_mib": 0.234375,
+            "write_mib": 0.609375,
+            "rx_mib": 0.7681970596313477,
+            "tx_mib": 0.48095130920410156
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 172.77044939994812,
+            "cpu_seconds": 125.44495,
+            "cpu_mean_percent": 72.60787387871301,
+            "cpu_max_percent": 120.15995550245206,
+            "working_mean_mib": 194.25949622844828,
+            "working_max_mib": 288.14453125,
+            "memory_max_mib": 289.171875,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.2819299697876,
+            "tx_mib": 755.231086730957
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 11.05,
+          "rss_peak_bytes": 179048448
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 58.08,
+          "rss_peak_bytes": 600514560
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.56,
+          "rss_peak_bytes": 60092416
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.75,
+          "rss_peak_bytes": 27074560
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.81,
+          "rss_peak_bytes": 27410432
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.84,
+          "rss_peak_bytes": 27631616
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.31,
+          "rss_peak_bytes": 29982720
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.76,
+          "rss_peak_bytes": 27684864
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.82,
+          "rss_peak_bytes": 27406336
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.46,
+          "rss_peak_bytes": 75194368
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.93,
+          "rss_peak_bytes": 26763264
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.89,
+          "rss_peak_bytes": 42373120
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.92,
+          "rss_peak_bytes": 26800128
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.8,
+          "rss_peak_bytes": 26112000
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 25686016
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 26484736
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.13,
+          "rss_peak_bytes": 62631936
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.99,
+          "rss_peak_bytes": 28323840
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.92,
+          "rss_peak_bytes": 27553792
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.97,
+          "rss_peak_bytes": 27394048
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.89,
+          "rss_peak_bytes": 27496448
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.94,
+          "rss_peak_bytes": 28123136
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.92,
+          "rss_peak_bytes": 27295744
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.81,
+          "rss_peak_bytes": 53145600
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.68,
+          "rss_peak_bytes": 27189248
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 26841088
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.72,
+          "rss_peak_bytes": 27205632
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 27901952
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.76,
+          "rss_peak_bytes": 26488832
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.81,
+          "rss_peak_bytes": 27258880
+        }
+      ],
+      "max_python_processes_sampled": 7,
+      "staging_peak_sampled_bytes": 545991137,
+      "staging_allocated_peak_sampled_bytes": 546021376,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290787717",
+          "packs": "56",
+          "database_bytes": "430247059"
+        },
+        "physical": {
+          "records": 107062,
+          "unique_hashes": 107054,
+          "duplicates": 8,
+          "duplicate_record_bytes": 3213,
+          "pack_sizes": [
+            388,
+            63782,
+            95144,
+            112924,
+            456545,
+            2508943,
+            2786035,
+            3271107,
+            3442689,
+            3711014,
+            3884897,
+            3916157,
+            4085005,
+            4385534,
+            4728205,
+            4812016,
+            4856306,
+            5108860,
+            5155323,
+            5211561,
+            5232700,
+            5300900,
+            5316531,
+            5318053,
+            5321015,
+            5337995,
+            5417303,
+            5424211,
+            5530281,
+            5608846,
+            5652105,
+            5677683,
+            5681436,
+            5702308,
+            5708844,
+            5723723,
+            5846731,
+            5857266,
+            5876014,
+            5890025,
+            5891226,
+            5956522,
+            5981910,
+            6039189,
+            6086505,
+            6254080,
+            6528584,
+            7504315,
+            7947754,
+            8025254,
+            8079672,
+            8079742,
+            8195937,
+            8198416,
+            8254479,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "983499d88134e6b924fbf900d8cdd33d",
+          "historical": "d48fff9ef6ae73e7fc6c762e1c6f5353"
+        },
+        "search_content_sha256": "7cd04c3bbe9df32a2100683ca134c7ddeddc9fe4b7d6a559b6437ec2a5138b1e",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "1596066ee9e474d60c3504488ef06dda"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290791378,
+          "allocated": 290914304,
+          "files": 56
+        },
+        "packs": {
+          "apparent": 290791378,
+          "allocated": 290914304,
+          "files": 56
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "bytes_per_work": 26358.89938361131,
+        "source_to_canonical_ratio": 0.7865866194973635
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.815066192,
+        "verified_at": 1794208678127,
+        "monotonic_ns": "545098219010797"
+      },
+      "image_id": "sha256:b13020da767678eb108523e1ec7084159fed68aa6cfed111ea5c34431bc176f5",
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1731,
+            "seconds": 1.1886820889999647,
+            "max_seconds": 0.08010566300000027,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1680,
+            "seconds": 1.6879945899996076,
+            "max_seconds": 0.08011374100000103,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 576,
+            "seconds": 1.3366722199997674,
+            "max_seconds": 0.10634583000000021,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8856,
+            "seconds": 35.68124393500086,
+            "max_seconds": 2.2811859910000023,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 576,
+            "seconds": 85.06688080699996,
+            "max_seconds": 2.4666774530000004,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6120,
+            "seconds": 10.978205252999377,
+            "max_seconds": 0.0939556539999976,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 576,
+            "seconds": 54.427721124000065,
+            "max_seconds": 0.47124192000000037,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.223309465999863,
+            "max_seconds": 0.22764786499999173,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.127043836000137,
+            "max_seconds": 0.0583843060000072,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.871610666999994,
+            "max_seconds": 0.0637256180000004,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.453882829000198,
+            "max_seconds": 0.026455014999984997,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.986455019999981,
+            "max_seconds": 0.312868441999999,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 14.391578859000164,
+            "max_seconds": 0.2604118370000069,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.015966235000068,
+            "max_seconds": 0.04959399200000916,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.970608433000165,
+            "max_seconds": 0.04604416599999968,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.3519612529999603,
+            "max_seconds": 0.023226613999984692,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 17.080630366000012,
+            "max_seconds": 0.10505253099999755,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.2204373920000564,
+            "max_seconds": 0.03230401899999925,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1731,
+            "seconds": 1.1819531219999488,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12720,
+            "seconds": 60.04481178500105,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8880,
+            "seconds": 28.499153109000527,
+            "commits": 576
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290791378,
+          "allocated_bytes": 290914304,
+          "files": 56
+        },
+        "postgres": {
+          "apparent_bytes": 1207429526,
+          "allocated_bytes": 1207554048,
+          "files": 1897
+        },
+        "search": {
+          "apparent_bytes": 474447519,
+          "allocated_bytes": 474869760,
+          "files": 135
+        },
+        "redis": {
+          "apparent_bytes": 391905,
+          "allocated_bytes": 409600,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 1973060328,
+      "persistent_bytes_per_work": 178848.83321247282,
+      "source_to_persistent_ratio": 0.11592783239013055,
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 3,
+        "max_transactions_including_pool_acquisition": 3,
+        "max_sources_in_commit": 1
+      },
+      "opensearch_primary_bytes": 474242657,
+      "readers": {
+        "concurrency": 3,
+        "requests": 30,
+        "errors": 0,
+        "p95_ms": 221.8910460000002,
+        "max_ms": 237.6227219999996,
+        "condition": "Post-drain, authenticated search and sample reader; internal HTTP"
+      }
+    },
+    "mode2": {
+      "canonical_seconds": 44.420483,
+      "canonical_works_per_second": 248.35389565665014,
+      "source_gib_per_hour": 17.26423878864851,
+      "decompressed_mib_per_second": 12.855809575816773,
+      "chapters_per_second": 516.1582777026535,
+      "objects_per_second": 2410.0143170437836,
+      "end_to_end_seconds": 163.45068408203124,
+      "end_to_end_works_per_second": 67.49436419894917,
+      "drain_and_visibility_seconds": 119.03020108203125,
+      "catalog_done_seconds_from_batch_creation": 151.241825078,
+      "all_queues_empty_seconds_from_batch_creation": 154.267549484,
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 9012,
+          "mean_residence_seconds_estimate": 57.38973614164154
+        },
+        "historical": {
+          "max_sampled": 9012,
+          "mean_residence_seconds_estimate": 57.38973614164154
+        },
+        "text": {
+          "max_sampled": 824,
+          "mean_residence_seconds_estimate": 2.585582137108411
+        }
+      },
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.0197627544403,
+            "cpu_seconds": 134.654588,
+            "cpu_mean_percent": 77.82613145245702,
+            "cpu_max_percent": 565.8249979071193,
+            "working_mean_mib": 798.2037535919541,
+            "working_max_mib": 1000.01953125,
+            "memory_max_mib": 1580.328125,
+            "read_mib": 44.33984375,
+            "write_mib": 679.2734375,
+            "rx_mib": 29.489928245544434,
+            "tx_mib": 171.61526489257812
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.01645398139954,
+            "cpu_seconds": 145.000981,
+            "cpu_mean_percent": 83.8076250340841,
+            "cpu_max_percent": 339.4736754501363,
+            "working_mean_mib": 338.3973599137931,
+            "working_max_mib": 472.37109375,
+            "memory_max_mib": 1300.453125,
+            "read_mib": 7.41796875,
+            "write_mib": 2286.96875,
+            "rx_mib": 516.3681774139404,
+            "tx_mib": 246.05815505981445
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.01300477981567,
+            "cpu_seconds": 170.255276,
+            "cpu_mean_percent": 98.40605694160085,
+            "cpu_max_percent": 443.516379864514,
+            "working_mean_mib": 1595.4704112787356,
+            "working_max_mib": 1774.671875,
+            "memory_max_mib": 2502.12890625,
+            "read_mib": 19.03125,
+            "write_mib": 899.00390625,
+            "rx_mib": 409.2879686355591,
+            "tx_mib": 2.1651687622070312
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.00742077827454,
+            "cpu_seconds": 1.571777,
+            "cpu_mean_percent": 0.9085026485738907,
+            "cpu_max_percent": 1.8046523280577302,
+            "working_mean_mib": 4.784639906609195,
+            "working_max_mib": 5.1640625,
+            "memory_max_mib": 5.171875,
+            "read_mib": 0.21484375,
+            "write_mib": 0.5859375,
+            "rx_mib": 0.7553291320800781,
+            "tx_mib": 0.48207569122314453
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 173.0075249671936,
+            "cpu_seconds": 116.303275,
+            "cpu_mean_percent": 67.22440253512319,
+            "cpu_max_percent": 110.0279171876281,
+            "working_mean_mib": 182.86337104885058,
+            "working_max_mib": 257.6171875,
+            "memory_max_mib": 258.4609375,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.21761512756348,
+            "tx_mib": 754.7940130233765
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 10.91,
+          "rss_peak_bytes": 176001024
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 60.05,
+          "rss_peak_bytes": 596508672
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.04,
+          "rss_peak_bytes": 83980288
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.98,
+          "rss_peak_bytes": 77656064
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.25,
+          "rss_peak_bytes": 27860992
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.33,
+          "rss_peak_bytes": 27586560
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.16,
+          "rss_peak_bytes": 28135424
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.37,
+          "rss_peak_bytes": 43921408
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.86,
+          "rss_peak_bytes": 44056576
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.34,
+          "rss_peak_bytes": 27856896
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.45,
+          "rss_peak_bytes": 57053184
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.24,
+          "rss_peak_bytes": 58310656
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.59,
+          "rss_peak_bytes": 27164672
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.62,
+          "rss_peak_bytes": 27795456
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.69,
+          "rss_peak_bytes": 29368320
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.43,
+          "rss_peak_bytes": 27099136
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.47,
+          "rss_peak_bytes": 26890240
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.31,
+          "rss_peak_bytes": 27435008
+        }
+      ],
+      "max_python_processes_sampled": 8,
+      "staging_peak_sampled_bytes": 856303223,
+      "staging_allocated_peak_sampled_bytes": 856350720,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290786952",
+          "packs": "57",
+          "database_bytes": "433769619"
+        },
+        "physical": {
+          "records": 107066,
+          "unique_hashes": 107054,
+          "duplicates": 12,
+          "duplicate_record_bytes": 5631,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            1078417,
+            1713852,
+            1787043,
+            2617692,
+            2839145,
+            2988136,
+            3502392,
+            3630368,
+            3842167,
+            3944521,
+            4063773,
+            4085005,
+            4117233,
+            4297975,
+            4856677,
+            5109951,
+            5156269,
+            5212290,
+            5231780,
+            5240560,
+            5289657,
+            5316119,
+            5318031,
+            5380446,
+            5381150,
+            5485365,
+            5489590,
+            5567360,
+            5607997,
+            5637559,
+            5651790,
+            5677397,
+            5681068,
+            5701861,
+            5876035,
+            5890038,
+            5933675,
+            5971142,
+            6158255,
+            6185476,
+            6254030,
+            6325662,
+            6345805,
+            6365929,
+            6412661,
+            6444914,
+            6963672,
+            7230446,
+            7599518,
+            8067053,
+            8079582,
+            8080910,
+            8179118,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "5802707dc1e981a3ba74c79eb129a526",
+          "historical": "c9c92761fb44506662847906e4fa03be"
+        },
+        "search_content_sha256": "cf5cd9c66eec613493c8573f50fb110e2e3f573bc600df45b2bc6856a782e2fa",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "96a18a1a75acb50b57410e42fff2ca20"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290793039,
+          "allocated": 290926592,
+          "files": 57
+        },
+        "packs": {
+          "apparent": 290793039,
+          "allocated": 290926592,
+          "files": 57
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "bytes_per_work": 26359.04994561276,
+        "source_to_canonical_ratio": 0.7865821265412065
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.220482228000002,
+        "verified_at": 1794208050270,
+        "monotonic_ns": "544470362443280"
+      },
+      "image_id": "sha256:b13020da767678eb108523e1ec7084159fed68aa6cfed111ea5c34431bc176f5",
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1737,
+            "seconds": 1.0152446300001654,
+            "max_seconds": 0.01977887600000031,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1682,
+            "seconds": 1.572988064000433,
+            "max_seconds": 0.031313258000009225,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 578,
+            "seconds": 1.1379812020001798,
+            "max_seconds": 0.03488229100000172,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8858,
+            "seconds": 36.65742051600001,
+            "max_seconds": 1.9104330050000007,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 578,
+            "seconds": 86.92220740999997,
+            "max_seconds": 2.072225041,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6124,
+            "seconds": 10.99429490199994,
+            "max_seconds": 0.5135685379999996,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 578,
+            "seconds": 51.366288957000066,
+            "max_seconds": 0.5830414039999996,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.824659005000024,
+            "max_seconds": 0.18781413900002372,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.126996672999658,
+            "max_seconds": 0.04567858600000181,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 6.2966361120002325,
+            "max_seconds": 0.059526625999998944,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.5375313659998466,
+            "max_seconds": 0.028074341999999888,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.759292864999717,
+            "max_seconds": 0.27478567899999323,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.082891178000272,
+            "max_seconds": 0.18897217300000194,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 10.955377613999907,
+            "max_seconds": 0.04731286,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.8422041720003326,
+            "max_seconds": 0.02319732400000794,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4794941950002627,
+            "max_seconds": 0.023324648000008892,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 16.90182728900021,
+            "max_seconds": 0.10632544899999993,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.2288483250001327,
+            "max_seconds": 0.08717246000000159,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1737,
+            "seconds": 1.009323152999812,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12722,
+            "seconds": 61.318661643000475,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8884,
+            "seconds": 28.460691504999527,
+            "commits": 578
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290793039,
+          "allocated_bytes": 290926592,
+          "files": 57
+        },
+        "postgres": {
+          "apparent_bytes": 1193931271,
+          "allocated_bytes": 1194049536,
+          "files": 1895
+        },
+        "search": {
+          "apparent_bytes": 473639175,
+          "allocated_bytes": 474071040,
+          "files": 139
+        },
+        "redis": {
+          "apparent_bytes": 386824,
+          "allocated_bytes": 405504,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 1958750309,
+      "persistent_bytes_per_work": 177551.69588469906,
+      "source_to_persistent_ratio": 0.11677476498613791,
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 4,
+        "max_transactions_including_pool_acquisition": 4,
+        "max_sources_in_commit": 2
+      },
+      "opensearch_primary_bytes": 473476586,
+      "readers": {
+        "concurrency": 3,
+        "requests": 30,
+        "errors": 0,
+        "p95_ms": 180.47395600000027,
+        "max_ms": 211.12206100000003,
+        "condition": "Post-drain, authenticated search and sample reader; internal HTTP"
+      }
+    },
+    "mode4": {
+      "canonical_seconds": 42.13147,
+      "canonical_works_per_second": 261.8470231397101,
+      "source_gib_per_hour": 18.202209075997146,
+      "decompressed_mib_per_second": 13.554268833102812,
+      "chapters_per_second": 544.2012823193684,
+      "objects_per_second": 2540.950980347944,
+      "end_to_end_seconds": 166.102462890625,
+      "end_to_end_works_per_second": 66.41683577722952,
+      "drain_and_visibility_seconds": 123.97099289062498,
+      "catalog_done_seconds_from_batch_creation": 155.54557218300002,
+      "all_queues_empty_seconds_from_batch_creation": 156.55093781,
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 9152,
+          "mean_residence_seconds_estimate": 59.976677098158504
+        },
+        "historical": {
+          "max_sampled": 9152,
+          "mean_residence_seconds_estimate": 59.976677098158504
+        },
+        "text": {
+          "max_sampled": 784,
+          "mean_residence_seconds_estimate": 2.689065821196156
+        }
+      },
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.03932666778564,
+            "cpu_seconds": 131.469199,
+            "cpu_mean_percent": 75.9764855375361,
+            "cpu_max_percent": 733.981468883485,
+            "working_mean_mib": 816.1372126436781,
+            "working_max_mib": 1089.515625,
+            "memory_max_mib": 1852.1484375,
+            "read_mib": 6.8515625,
+            "write_mib": 1435.0,
+            "rx_mib": 30.19567584991455,
+            "tx_mib": 170.8615550994873
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.0345151424408,
+            "cpu_seconds": 147.212921,
+            "cpu_mean_percent": 85.07720027927107,
+            "cpu_max_percent": 302.51848978125184,
+            "working_mean_mib": 324.18058548850576,
+            "working_max_mib": 471.984375,
+            "memory_max_mib": 1257.0546875,
+            "read_mib": 5.5625,
+            "write_mib": 2315.328125,
+            "rx_mib": 515.5049448013306,
+            "tx_mib": 246.6826934814453
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.0326898097992,
+            "cpu_seconds": 168.830997,
+            "cpu_mean_percent": 97.57173467370947,
+            "cpu_max_percent": 438.6208530625561,
+            "working_mean_mib": 1598.5195536997126,
+            "working_max_mib": 1770.7109375,
+            "memory_max_mib": 2474.671875,
+            "read_mib": 24.0546875,
+            "write_mib": 881.15625,
+            "rx_mib": 409.2565908432007,
+            "tx_mib": 2.1414756774902344
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.03118205070496,
+            "cpu_seconds": 1.625109,
+            "cpu_mean_percent": 0.9392000798583107,
+            "cpu_max_percent": 4.912728355867992,
+            "working_mean_mib": 8.213496767241379,
+            "working_max_mib": 8.578125,
+            "memory_max_mib": 9.078125,
+            "read_mib": 0.203125,
+            "write_mib": 0.578125,
+            "rx_mib": 0.7552022933959961,
+            "tx_mib": 0.4634990692138672
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 172.79893398284912,
+            "cpu_seconds": 114.933837,
+            "cpu_mean_percent": 66.51304747713755,
+            "cpu_max_percent": 109.44314648556214,
+            "working_mean_mib": 192.99016702586206,
+            "working_max_mib": 252.76953125,
+            "memory_max_mib": 253.78515625,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.09339237213135,
+            "tx_mib": 754.6540613174438
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 11.1,
+          "rss_peak_bytes": 242475008
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 59.93,
+          "rss_peak_bytes": 641896448
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.08,
+          "rss_peak_bytes": 79134720
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.46,
+          "rss_peak_bytes": 75448320
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.27,
+          "rss_peak_bytes": 45953024
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.3,
+          "rss_peak_bytes": 56819712
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.78,
+          "rss_peak_bytes": 27484160
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 6.1,
+          "rss_peak_bytes": 43700224
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 8.63,
+          "rss_peak_bytes": 28278784
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.85,
+          "rss_peak_bytes": 28893184
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 5.52,
+          "rss_peak_bytes": 34365440
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 9.2,
+          "rss_peak_bytes": 29831168
+        }
+      ],
+      "max_python_processes_sampled": 10,
+      "staging_peak_sampled_bytes": 865742087,
+      "staging_allocated_peak_sampled_bytes": 865783808,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290786928",
+          "packs": "59",
+          "database_bytes": "440282259"
+        },
+        "physical": {
+          "records": 107058,
+          "unique_hashes": 107054,
+          "duplicates": 4,
+          "duplicate_record_bytes": 1646,
+          "pack_sizes": [
+            388,
+            63782,
+            112924,
+            1591313,
+            1807295,
+            1898855,
+            1899173,
+            2800675,
+            2896078,
+            3333580,
+            3457120,
+            3537123,
+            3622009,
+            4042095,
+            4085005,
+            4122393,
+            4173259,
+            4266373,
+            4303597,
+            4318991,
+            4612779,
+            4731506,
+            4857795,
+            5112131,
+            5176497,
+            5243421,
+            5280721,
+            5298887,
+            5351202,
+            5374604,
+            5482446,
+            5498124,
+            5567438,
+            5608859,
+            5679023,
+            5683359,
+            5841467,
+            5846782,
+            5888986,
+            5894268,
+            5903293,
+            5909431,
+            6003451,
+            6047687,
+            6089499,
+            6181479,
+            6254601,
+            6336439,
+            6447053,
+            6453750,
+            6559651,
+            6567772,
+            6612294,
+            6711292,
+            6906739,
+            7186107,
+            7215506,
+            7289291,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "f6de78ea3496dd0b721c1a46b5a42f65",
+          "historical": "e7f5aea932071e77bb7d749a1d48ab6d"
+        },
+        "search_content_sha256": "de08edcc15905b11a7a693271ae22175c5e1071d4d22f424cdb0ee533ef9b6b1",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "b2b0c3f1ac22f163327e493caf1072bb"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290789046,
+          "allocated": 290918400,
+          "files": 59
+        },
+        "packs": {
+          "apparent": 290789046,
+          "allocated": 290918400,
+          "files": 59
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "bytes_per_work": 26358.687998549674,
+        "source_to_canonical_ratio": 0.786592927575408
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 9.769514549,
+        "verified_at": 1794208259516,
+        "monotonic_ns": "544679607905301"
+      },
+      "image_id": "sha256:b13020da767678eb108523e1ec7084159fed68aa6cfed111ea5c34431bc176f5",
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1722,
+            "seconds": 0.9529627559996846,
+            "max_seconds": 0.017994023999999626,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1677,
+            "seconds": 1.4334466799996426,
+            "max_seconds": 0.024202895000000352,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 573,
+            "seconds": 1.105258771999948,
+            "max_seconds": 0.040486682999995534,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8849,
+            "seconds": 38.81966340200019,
+            "max_seconds": 2.5918566089999984,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 573,
+            "seconds": 88.5396289249999,
+            "max_seconds": 2.869440598000001,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6114,
+            "seconds": 11.060100501000692,
+            "max_seconds": 0.2529987710000023,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 573,
+            "seconds": 53.174029387999894,
+            "max_seconds": 0.7630320100000008,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.913037319000098,
+            "max_seconds": 0.1591603790000081,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.431599363999814,
+            "max_seconds": 0.041915257000000566,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.565600625000036,
+            "max_seconds": 0.04778441999999995,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.6268717860000375,
+            "max_seconds": 0.032542331000000556,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 6.109798676999754,
+            "max_seconds": 0.28515221200000085,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 12.389686602000358,
+            "max_seconds": 0.2477047730000013,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.215066896999517,
+            "max_seconds": 0.057544763999998395,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 1.858319476000132,
+            "max_seconds": 0.06698168199999964,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.3044363619997579,
+            "max_seconds": 0.027133946999994805,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 16.87296212099998,
+            "max_seconds": 0.10672555999999167,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.212031750999818,
+            "max_seconds": 0.04810428400000091,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1722,
+            "seconds": 0.9462806329996941,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12713,
+            "seconds": 63.486549806999705,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8874,
+            "seconds": 28.60044844699939,
+            "commits": 573
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290789046,
+          "allocated_bytes": 290918400,
+          "files": 59
+        },
+        "postgres": {
+          "apparent_bytes": 1200483056,
+          "allocated_bytes": 1200664576,
+          "files": 1896
+        },
+        "search": {
+          "apparent_bytes": 473456755,
+          "allocated_bytes": 473903104,
+          "files": 140
+        },
+        "redis": {
+          "apparent_bytes": 388869,
+          "allocated_bytes": 405504,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 1965117726,
+      "persistent_bytes_per_work": 178128.87291515592,
+      "source_to_persistent_ratio": 0.11639638886449086,
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "retry": {
+        "before": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "after": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054"
+        },
+        "max_groups": 4,
+        "max_transactions_including_pool_acquisition": 4,
+        "max_sources_in_commit": 4
+      },
+      "opensearch_primary_bytes": 489952430,
+      "readers": {
+        "concurrency": 3,
+        "requests": 30,
+        "errors": 0,
+        "p95_ms": 178.95214399999986,
+        "max_ms": 192.74438099999998,
+        "condition": "Post-drain, authenticated search and sample reader; internal HTTP"
+      }
+    },
+    "mode1": {
+      "canonical_seconds": 49.796544,
+      "canonical_works_per_second": 221.54147886246886,
+      "source_gib_per_hour": 15.400382516889154,
+      "decompressed_mib_per_second": 11.467889633340944,
+      "chapters_per_second": 460.4335594052471,
+      "objects_per_second": 2149.8279077359266,
+      "end_to_end_seconds": 164.74764306640625,
+      "end_to_end_works_per_second": 66.96302171408448,
+      "drain_and_visibility_seconds": 114.95109906640626,
+      "catalog_done_seconds_from_batch_creation": 155.248365973,
+      "all_queues_empty_seconds_from_batch_creation": 156.263262474,
+      "queue_samples": {
+        "catalog": {
+          "max_sampled": 8372,
+          "mean_residence_seconds_estimate": 54.622976829139766
+        },
+        "historical": {
+          "max_sampled": 8372,
+          "mean_residence_seconds_estimate": 54.622976829139766
+        },
+        "text": {
+          "max_sampled": 700,
+          "mean_residence_seconds_estimate": 1.515786517442712
+        }
+      },
+      "resources": {
+        "operational-resources": {
+          "worker": {
+            "samples": 174,
+            "seconds": 173.04207921028137,
+            "cpu_seconds": 135.093482,
+            "cpu_mean_percent": 78.06972882927158,
+            "cpu_max_percent": 459.16290347394386,
+            "working_mean_mib": 730.8110856681035,
+            "working_max_mib": 895.52734375,
+            "memory_max_mib": 1405.6015625,
+            "read_mib": 1.93359375,
+            "write_mib": 537.546875,
+            "rx_mib": 29.009498596191406,
+            "tx_mib": 171.5480079650879
+          },
+          "pg": {
+            "samples": 174,
+            "seconds": 173.04093384742737,
+            "cpu_seconds": 144.564852,
+            "cpu_mean_percent": 83.54373083045476,
+            "cpu_max_percent": 307.5464263362806,
+            "working_mean_mib": 329.3429867097701,
+            "working_max_mib": 471.6484375,
+            "memory_max_mib": 1269.15625,
+            "read_mib": 9.8828125,
+            "write_mib": 2279.0625,
+            "rx_mib": 516.6756219863892,
+            "tx_mib": 245.60436534881592
+          },
+          "search": {
+            "samples": 174,
+            "seconds": 173.03938913345337,
+            "cpu_seconds": 164.091306,
+            "cpu_mean_percent": 94.82887498721327,
+            "cpu_max_percent": 417.1004305996038,
+            "working_mean_mib": 1596.2969647988505,
+            "working_max_mib": 1742.6953125,
+            "memory_max_mib": 2489.44921875,
+            "read_mib": 28.55859375,
+            "write_mib": 952.49609375,
+            "rx_mib": 409.37471866607666,
+            "tx_mib": 2.260256767272949
+          },
+          "redis": {
+            "samples": 174,
+            "seconds": 173.03828978538513,
+            "cpu_seconds": 1.561962,
+            "cpu_mean_percent": 0.9026684220800267,
+            "cpu_max_percent": 2.25726550247448,
+            "working_mean_mib": 8.022853807471265,
+            "working_max_mib": 8.375,
+            "memory_max_mib": 10.1875,
+            "read_mib": 0.234375,
+            "write_mib": 0.6015625,
+            "rx_mib": 0.7680330276489258,
+            "tx_mib": 0.4727439880371094
+          },
+          "projection": {
+            "samples": 174,
+            "seconds": 172.8081021308899,
+            "cpu_seconds": 116.438139,
+            "cpu_mean_percent": 67.38002302218814,
+            "cpu_max_percent": 113.15441502051651,
+            "working_mean_mib": 203.87800826149424,
+            "working_max_mib": 260.61328125,
+            "memory_max_mib": 262.01953125,
+            "read_mib": null,
+            "write_mib": null,
+            "rx_mib": 219.32909965515137,
+            "tx_mib": 755.2692441940308
+          }
+        }
+      },
+      "process_samples": [
+        {
+          "kind": "api",
+          "cpu_seconds": 11.11,
+          "rss_peak_bytes": 181809152
+        },
+        {
+          "kind": "ingest",
+          "cpu_seconds": 58.37,
+          "rss_peak_bytes": 563740672
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.62,
+          "rss_peak_bytes": 62885888
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.82,
+          "rss_peak_bytes": 27594752
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.77,
+          "rss_peak_bytes": 27897856
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.84,
+          "rss_peak_bytes": 27549696
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.73,
+          "rss_peak_bytes": 27463680
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.29,
+          "rss_peak_bytes": 33087488
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.87,
+          "rss_peak_bytes": 29024256
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 4.55,
+          "rss_peak_bytes": 93184000
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.74,
+          "rss_peak_bytes": 26771456
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.8,
+          "rss_peak_bytes": 27205632
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.63,
+          "rss_peak_bytes": 26210304
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.67,
+          "rss_peak_bytes": 27852800
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 27099136
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.69,
+          "rss_peak_bytes": 43028480
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 3.16,
+          "rss_peak_bytes": 55013376
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.85,
+          "rss_peak_bytes": 27422720
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.99,
+          "rss_peak_bytes": 26968064
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.96,
+          "rss_peak_bytes": 27443200
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.94,
+          "rss_peak_bytes": 29093888
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.96,
+          "rss_peak_bytes": 26877952
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.96,
+          "rss_peak_bytes": 29208576
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 2.93,
+          "rss_peak_bytes": 57901056
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.7,
+          "rss_peak_bytes": 27144192
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.82,
+          "rss_peak_bytes": 27344896
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.7,
+          "rss_peak_bytes": 28090368
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.73,
+          "rss_peak_bytes": 27410432
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.82,
+          "rss_peak_bytes": 27312128
+        },
+        {
+          "kind": "python",
+          "cpu_seconds": 1.79,
+          "rss_peak_bytes": 27926528
+        }
+      ],
+      "max_python_processes_sampled": 7,
+      "staging_peak_sampled_bytes": 534598315,
+      "staging_allocated_peak_sampled_bytes": 534601728,
+      "storage": {
+        "counts": {
+          "works": "11032",
+          "snapshots": "11032",
+          "revisions": "22928",
+          "objects": "107054",
+          "raw_bytes": "972518432",
+          "referenced_record_bytes": "290788206",
+          "packs": "56",
+          "database_bytes": "431287443"
+        },
+        "physical": {
+          "records": 107060,
+          "unique_hashes": 107054,
+          "duplicates": 6,
+          "duplicate_record_bytes": 2353,
+          "pack_sizes": [
+            388,
+            63782,
+            95153,
+            112924,
+            295821,
+            1046370,
+            2839158,
+            3190955,
+            3502343,
+            3710921,
+            3916042,
+            4085005,
+            4096745,
+            4126391,
+            4633929,
+            4660995,
+            4856314,
+            5090518,
+            5109915,
+            5111756,
+            5145728,
+            5194699,
+            5211566,
+            5295176,
+            5318152,
+            5320252,
+            5334914,
+            5353266,
+            5417380,
+            5507599,
+            5566936,
+            5608804,
+            5637588,
+            5652249,
+            5681442,
+            5702170,
+            5777840,
+            5786000,
+            5890044,
+            5925358,
+            6107146,
+            6158705,
+            6254137,
+            6326006,
+            6412794,
+            6444989,
+            7504441,
+            7947714,
+            8025247,
+            8079567,
+            8079694,
+            8177811,
+            8195896,
+            8198324,
+            8254560,
+            9751388
+          ]
+        },
+        "cache": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "normalized_manifest_sha256": "e210cb6a2870e2051a01c0394e9b34131ecba02c56082aca8e1aa49b6233b441",
+        "metadata": {
+          "current": "c23a047e7e163fe270b958476ed1cdbd",
+          "historical": "049cf415ffa466755d3b7abd309e1faf"
+        },
+        "search_content_sha256": "ad964d1774c8e60fe8116359f41b996dd31804814586fed674532b94093804a4",
+        "search_documents": 11032,
+        "content": [
+          {
+            "name": "asset",
+            "objects": "11032",
+            "bytes": "10423626",
+            "hash_set": "b45a628ac7733f0b76e1c7cfb71639c3"
+          },
+          {
+            "name": "chapter_html",
+            "objects": "22928",
+            "bytes": "418600632",
+            "hash_set": "86aa423512c63936b2c197eb4e51ba22"
+          },
+          {
+            "name": "chunk_manifest",
+            "objects": "2",
+            "bytes": "4547",
+            "hash_set": "6b0d6279100d6338bd338c2bfdaecd95"
+          },
+          {
+            "name": "css",
+            "objects": "1",
+            "bytes": "584",
+            "hash_set": "c5ec7bf1bd93920646e7b5ebe7d0c61d"
+          },
+          {
+            "name": "document_html",
+            "objects": "11032",
+            "bytes": "20111477",
+            "hash_set": "f31c1ee0245ab22be55264159011a5ee"
+          },
+          {
+            "name": "metadata",
+            "objects": "11032",
+            "bytes": "20548552",
+            "hash_set": "1343bc4dc20a530bd26211ab28108dd8"
+          },
+          {
+            "name": "notes_html",
+            "objects": "17880",
+            "bytes": "8160830",
+            "hash_set": "84bb9f7404bbfbf3c53d6d8e7fdd5a4f"
+          },
+          {
+            "name": "observation",
+            "objects": "11032",
+            "bytes": "29498765",
+            "hash_set": "d2e1891f09dbe72fe006cd0911631b0e"
+          },
+          {
+            "name": "package_metadata",
+            "objects": "11033",
+            "bytes": "31442793",
+            "hash_set": "97f815426da9c14e33e99623d9323659"
+          },
+          {
+            "name": "source_auxiliary",
+            "objects": "50",
+            "bytes": "388829509",
+            "hash_set": "c21baa3e2610566b5a7bd773c8acd5e3"
+          }
+        ],
+        "logical": {
+          "snapshot_chapters": "22928",
+          "acquisitions": "11032",
+          "historical_views": "11032",
+          "documents": "11032"
+        },
+        "sources": [
+          {
+            "path": "part0.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part1.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part2.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          },
+          {
+            "path": "part3.zip",
+            "state": "ingested",
+            "checkpoint": "2760",
+            "imported": "2758",
+            "duplicates": "0",
+            "gaps": "0"
+          }
+        ],
+        "verified_objects": 107054,
+        "storage": {
+          "apparent": 290791007,
+          "allocated": 290910208,
+          "files": 56
+        },
+        "packs": {
+          "apparent": 290791007,
+          "allocated": 290910208,
+          "files": 56
+        },
+        "staging": {
+          "apparent": 0,
+          "allocated": 0,
+          "files": 0
+        },
+        "bytes_per_work": 26358.86575416969,
+        "source_to_canonical_ratio": 0.7865876230484665
+      },
+      "verification": {
+        "sql": {
+          "works": 11032,
+          "snapshots": 11032,
+          "documents": 11032,
+          "historical_views": 11032,
+          "pending": 0,
+          "historical_pending": 0,
+          "text_pending": 0
+        },
+        "search_count": 11032,
+        "api_count": 11032,
+        "reader_verified": true,
+        "all_search_ids_verified": 11032,
+        "all_search_generations_verified": 11032,
+        "refresh_and_verify_seconds": 8.483894357,
+        "verified_at": 1794207843929,
+        "monotonic_ns": "544264020936296"
+      },
+      "image_id": "sha256:b13020da767678eb108523e1ec7084159fed68aa6cfed111ea5c34431bc176f5",
+      "bibliography": {
+        "totals": {
+          "coordination.sql_other": {
+            "calls": 1725,
+            "seconds": 1.0071780240004007,
+            "max_seconds": 0.022902742999998737,
+            "rows": 0
+          },
+          "bibliography_lock": {
+            "calls": 1678,
+            "seconds": 1.642144762999979,
+            "max_seconds": 0.032025751999997736,
+            "rows": 0
+          },
+          "coordination_slice": {
+            "calls": 574,
+            "seconds": 1.1337252339999333,
+            "max_seconds": 0.04724268299998948,
+            "rows": 0
+          },
+          "current.sql_other": {
+            "calls": 8855,
+            "seconds": 35.561185085000965,
+            "max_seconds": 1.6158435150000006,
+            "rows": 0
+          },
+          "current_slice": {
+            "calls": 574,
+            "seconds": 86.31516452699988,
+            "max_seconds": 1.7198400130000009,
+            "rows": 0
+          },
+          "historical.sql_other": {
+            "calls": 6116,
+            "seconds": 11.095207372999964,
+            "max_seconds": 0.11960975799999869,
+            "rows": 0
+          },
+          "historical_slice": {
+            "calls": 574,
+            "seconds": 55.190867231000105,
+            "max_seconds": 0.46770522100000017,
+            "rows": 0
+          },
+          "current.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 11.981352980000224,
+            "max_seconds": 0.19444215899999837,
+            "rows": 0
+          },
+          "current.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.326998752999614,
+            "max_seconds": 0.0565967899999996,
+            "rows": 0
+          },
+          "current.sql_entities": {
+            "calls": 1656,
+            "seconds": 5.720159204999985,
+            "max_seconds": 0.028871140999995985,
+            "rows": 0
+          },
+          "current.sql_closure": {
+            "calls": 552,
+            "seconds": 1.655029543999984,
+            "max_seconds": 0.053418397000001276,
+            "rows": 0
+          },
+          "current.sql_documents": {
+            "calls": 552,
+            "seconds": 5.973903699000198,
+            "max_seconds": 0.27330857600001035,
+            "rows": 0
+          },
+          "historical.enrichBibliographyBatch": {
+            "calls": 552,
+            "seconds": 13.832651394999996,
+            "max_seconds": 0.180588036000001,
+            "rows": 0
+          },
+          "historical.sql_tags": {
+            "calls": 1104,
+            "seconds": 11.228659218999873,
+            "max_seconds": 0.046660657000000355,
+            "rows": 0
+          },
+          "historical.sql_entities": {
+            "calls": 552,
+            "seconds": 2.002881824999852,
+            "max_seconds": 0.0623045409999977,
+            "rows": 0
+          },
+          "historical.sql_closure": {
+            "calls": 552,
+            "seconds": 1.4904773629999755,
+            "max_seconds": 0.022641273999994153,
+            "rows": 0
+          },
+          "historical.projectHistoricalBibliographies": {
+            "calls": 552,
+            "seconds": 17.34684538300021,
+            "max_seconds": 0.12375559400000202,
+            "rows": 0
+          },
+          "historical.sql_views": {
+            "calls": 552,
+            "seconds": 3.1367331679999535,
+            "max_seconds": 0.04758294000000023,
+            "rows": 0
+          }
+        },
+        "sql": {
+          "coordination": {
+            "calls": 1725,
+            "seconds": 1.001170423000442,
+            "commits": 0
+          },
+          "current": {
+            "calls": 12719,
+            "seconds": 60.172295156000715,
+            "commits": 0
+          },
+          "historical": {
+            "calls": 8876,
+            "seconds": 28.90515312300132,
+            "commits": 574
+          }
+        },
+        "departures": {
+          "catalog_pending": 11032,
+          "catalog_snapshot_pending": 11032
+        }
+      },
+      "filesystem": {
+        "storage": {
+          "apparent_bytes": 290791007,
+          "allocated_bytes": 290910208,
+          "files": 56
+        },
+        "postgres": {
+          "apparent_bytes": 1191645357,
+          "allocated_bytes": 1191772160,
+          "files": 1895
+        },
+        "search": {
+          "apparent_bytes": 474445160,
+          "allocated_bytes": 474886144,
+          "files": 143
+        },
+        "redis": {
+          "apparent_bytes": 387852,
+          "allocated_bytes": 405504,
+          "files": 4
+        }
+      },
+      "persistent_total_bytes": 1957269376,
+      "persistent_bytes_per_work": 177417.4561276287,
+      "source_to_persistent_ratio": 0.116863120531448,
+      "normalized_catalog": {
+        "sorted_tag_fields": [
+          "fandom",
+          "rating",
+          "warnings",
+          "category",
+          "characters",
+          "relationships",
+          "freeform",
+          "unclassified",
+          "media"
+        ],
+        "works": 11032,
+        "historical_views": 11032,
+        "documents": 11032,
+        "replaced_work_scoped_entity_ids": 4041,
+        "current_sha256": "6d3a4090fbc1e4058eef45a55c2a71ed24d72bed7d64fee71c6e11325db1242d",
+        "historical_sha256": "260d3f298453fc3904642134ff8f8e9f2127140e4962adb61d9f281f49d8c276",
+        "search_sha256": "c807ccde8df4770cdf0ca7a477596421eca57d9330393022289c91ddf9715c5f"
+      },
+      "normalized_observations": {
+        "observations": 11032,
+        "sha256": "7a0211f98a06d04f2e39b842168e0d0d45e3f363c0f8c17d8f9f7fe4accf5475"
+      },
+      "opensearch_primary_bytes": 465363840
+    }
+  },
+  "notes": [
+    "One measured run per configuration; mode1 is an exploratory run with incomplete staging sampling and overlapping small integration tests; 1-repeat is the comparison run.",
+    "End-to-end starts at persisted batch started_at and includes refresh, all IDs/generations and authenticated sample reader verification.",
+    "Queue residence is a trapezoidal estimate from ~1 s samples, not individual enqueue/dequeue tracing.",
+    "Per-process CPU is sampled, so exited processes may lose their final unsampled interval. Container CPU/I/O covers the full campaign including verification.",
+    "Benchmark image predates final guard preventing concurrent failures from overwriting paused/blocked batch state; successful ingest path is unchanged.",
+    "Entity IDs scoped to a local work UUID are verified against the production key function, then normalized to external-work scope for comparison. OpenSearch excludes local id/snapshot/generation/epoch and ingestion archived_at only. Keyword tag arrays are sorted as sets, preserving duplicates; text and bibliographic values are retained. Raw hashes are also retained.",
+    "65,536-entry backpressure threshold is implemented but not reached by this 11,032-work campaign. No full-dump capacity claim.",
+    "Parser process sample includes adapter parents and pool children, but not Python resource trackers; configured absolute bound is parsers + 2 * effective source lanes.",
+    "Observation objects retain their source/evidence fields; work UUIDs and snapshot/manifest references are validated and normalized before comparison.",
+    "Full corpus replay is a separate untimed check; transaction concurrency includes pool acquisition."
+  ],
+  "verification": {
+    "canonical_objects_per_run": 107054,
+    "canonical_manifests_equivalent": true,
+    "source_object_hash_sets_equivalent": true,
+    "normalized_observations_equivalent": true,
+    "current_catalog_equivalent": true,
+    "historical_catalog_equivalent": true,
+    "search_documents_equivalent": true,
+    "targeted_tests_passed": 10,
+    "targeted_tests_skipped": 0,
+    "recovery": [
+      "overlapping ZIPs with explicit chapter identities and conflicting metadata: 20 acquisitions, 15 works, 17 snapshots; conflicts preserved",
+      "checkpoint replay without new snapshots/revisions/objects",
+      "SIGTERM and SIGKILL with two sources",
+      "SIGKILL inside a PostgreSQL archive transaction: checkpoint remains zero",
+      "multi-source pause/resume",
+      "missing, .part, corrupt and unsupported sources",
+      "out-of-order ACK, slow/fast source and fatal scheduler drain",
+      "staging empty after resumed completion"
+    ]
+  },
+  "recommended_source_concurrency": 1
+}

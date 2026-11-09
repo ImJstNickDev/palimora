@@ -246,3 +246,34 @@ Riferimento semantico upstream: [template capitolo](https://github.com/otwcode/o
 [prefazione](https://github.com/otwcode/otwarchive/blob/master/app/views/downloads/_download_preface.html.erb)
 e [generatore download](https://github.com/otwcode/otwarchive/blob/master/app/models/download_writer.rb).
 Adapter scritti per i byte osservati nel dump; nessun codice Rails/GPL incorporato.
+
+## Coordinamento multi-sorgente P3A
+
+`INGEST_SOURCE_CONCURRENCY` accetta interi 1–4, default **1**. Il worker conserva
+il leader PostgreSQL per tutto il tick, fino al drenaggio di tutte le corsie.
+Le corsie effettive sono `min(sorgenti configurate, parser, commit)`; i budget
+`INGEST_PARSER_WORKERS` e `INGEST_COMMIT_CONCURRENCY` vengono ripartiti fra esse,
+non moltiplicati. Ogni corsia libera prende il prossimo ZIP. Un sorgente non-ZIP
+costituisce una barriera: attende i ZIP precedenti e usa il budget intero, evitando
+concorrenza sul percorso SQLite/cache metadata. L'ordine di ammissione non è
+un ordine cronologico delle revisioni.
+
+Ogni ZIP ha adapter, pipeline FIFO, lease identità su connessione dedicata,
+contatori, errori e staging `staging/source-<id>` propri. Al termine si attende
+l'uscita dell'adapter prima di eliminare lo staging della sorgente. Un retry I/O
+aggiorna soltanto la sorgente; parser strutturale e guasti globali sospendono il
+batch. Ricevute, checkpoint contigui, lock per identità, transazioni e PackStore
+restano quelli esistenti. Le corsie non condividono connessioni transazionali.
+
+Massimo quattro commit e quattro connessioni lease, più il leader, nel pool
+esistente da 12. La somma dei parser figli non supera il budget configurato;
+si aggiungono un adapter padre e il resource tracker multiprocessing per corsia
+(totale Python ≤ parser + 2 × corsie). Gruppi core in-flight ≤ budget
+commit; prefetch adapter totale ≤ commit + corsie, più una finestra di parsing
+per corsia. Rimangono soglia gruppo 16 MiB e gestione integrale dei singoli
+record grandi: non è un limite assoluto di RAM per opere arbitrariamente grandi.
+Una verifica condivisa, al massimo una al secondo, ferma l'alimentazione quando
+catalogo corrente, storico o full-text raggiungono 65.536 elementi ciascuno.
+I gruppi già ammessi possono ancora committare; le proiezioni devono essere attive
+per proseguire oltre questa soglia. Pause e arresto continuano a essere osservati
+durante l'attesa. Nessuna nuova coda persistente o modifica del formato canonico.
